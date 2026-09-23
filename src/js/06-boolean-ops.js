@@ -38,10 +38,13 @@ function combineShapes(op, list) {
     }
     acc.translate(new paper.Point(-bn.x, -bn.y));
     const base = list[0], d = acc.pathData;
-    return newShape('path', {
+    const res = newShape('path', {
       name: BOOL_NAME[op], x: bn.x, y: bn.y, w: bn.width, h: bn.height, nat: { d, w: bn.width, h: bn.height },
       fill: base.fill, stroke: base.stroke, sw: base.sw, opacity: base.opacity, join: base.join, dash: base.dash
     });
+    // The bottom shape's gradient comes along, stretched over the combined shape's box
+    if (hasGrad(base)) res.grad = cloneGrad(base.grad);
+    return res;
   } catch (err) {
     console.error(err);
     toast('Those shapes could not be combined. Try simplifying them first.');

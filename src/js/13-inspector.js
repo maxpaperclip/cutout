@@ -62,7 +62,17 @@ function updateInspector() {
   }
   if (n) {
     const a = sel.find(x => x.kind !== 'image') || sel[0], onlyLines = sel.every(x => x.kind === 'line'), onlyPhotos = sel.every(x => x.kind === 'image');
-    $('#row-fill').hidden = onlyLines || onlyPhotos; $('#palette').hidden = onlyLines || onlyPhotos;
+    const noFill = onlyLines || onlyPhotos, g = hasGrad(a) ? a.grad : null;
+    $('#row-filltype').hidden = noFill; $('#row-fill').hidden = noFill || !!g; $('#palette').hidden = noFill || !!g;
+    $('#grad-controls').hidden = noFill || !g;
+    $$('#fill-type button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ft === (g ? g.type : 'solid') ? 'true' : 'false'));
+    if (g) {
+      showColor('#gs-from', g.stops[0].c); showColor('#gs-to', g.stops[g.stops.length - 1].c);
+      $('#grad-bar').style.background = 'linear-gradient(90deg,' + g.stops.map(st => cssRgba(st.c, st.a) + ' ' + rnd(st.at * 100, 2) + '%').join(',') + ')';
+      const lin = g.type === 'linear';
+      $('#lb-grad-angle').textContent = lin ? 'Angle' : ''; $('#grad-angle').hidden = !lin;
+      if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
+    }
     ['#row-stroke', '#row-weight', '#row-corners'].forEach(s => { $(s).hidden = onlyPhotos; });
     const fill = a.fill && a.fill !== 'none' ? a.fill : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
     if (document.activeElement !== $('#fill-hex')) $('#fill-hex').value = fill ? toHex6(fill) : '';
@@ -77,14 +87,25 @@ function updateInspector() {
   }
 }
 
+function showColor(prefix, c) {
+  const h = $(prefix + '-hex');
+  if (document.activeElement !== h) h.value = toHex6(c);
+  $(prefix + '-color').value = toHex6(c);
+}
+function cssRgba(hex, a) {
+  const n = parseInt(toHex6(hex).slice(1), 16);
+  return a < 1 ? 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + rnd(a, 3) + ')' : toHex6(hex);
+}
+
 function forSel(fn) { selObjs().forEach(fn); }
 function rememberStyle(o) {
   if (!o) return;
-  if (o.kind !== 'line' && o.kind !== 'text') S.style.fill = o.fill;
+  if (o.kind !== 'line' && o.kind !== 'text') { S.style.fill = o.fill; S.style.grad = hasGrad(o) ? cloneGrad(o.grad) : null; }
   S.style.stroke = o.stroke === 'none' && o.kind === 'line' ? S.style.stroke : o.stroke;
   S.style.sw = o.sw || S.style.sw; S.style.join = o.join; S.style.dash = o.dash;
 }
-function styleSet(k, v) { forSel(o => { if (o.kind === 'image' && k !== 'opacity') return; o[k] = v; }); rememberStyle(selObjs().find(o => o.kind !== 'image')); render(); }
+// Choosing a plain fill color (or None) turns a gradient fill back into a solid one
+function styleSet(k, v) { forSel(o => { if (o.kind === 'image' && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(o => o.kind !== 'image')); render(); }
 
 // Geometry fields
 function onNum(inp, fn, resizes) {
@@ -164,6 +185,48 @@ function wireColor(colorId, hexId, noneId, key, fallback) {
   });
 }
 wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
+
+// Gradient fills. Gradient edits apply to every selected shape that has a gradient.
+const gradTargets = () => selObjs().filter(hasGrad);
+function setFillType(ft) {
+  const list = selObjs().filter(o => o.kind !== 'line' && o.kind !== 'image');
+  if (!list.length) return;
+  list.forEach(o => {
+    if (ft === 'solid') { delete o.grad; return; }   // o.fill already holds the first gradient color
+    if (hasGrad(o)) {
+      if (o.grad.type === ft) return;
+      const stops = o.grad.stops; o.grad = makeGrad(ft); o.grad.stops = stops;   // same colors, new shape
+    } else o.grad = makeGrad(ft, o.fill !== 'none' ? o.fill : null);
+    syncGradFill(o);
+  });
+  rememberStyle(list[0]); commit();
+}
+$$('#fill-type button').forEach(b => b.addEventListener('click', () => setFillType(b.dataset.ft)));
+function wireStop(prefix, last) {
+  const c = $(prefix + '-color'), h = $(prefix + '-hex');
+  const apply = v => {
+    const list = gradTargets();
+    list.forEach(o => { const st = o.grad.stops; st[last ? st.length - 1 : 0].c = v; syncGradFill(o); });
+    rememberStyle(list[0]);
+  };
+  c.addEventListener('input', () => { apply(c.value.toLowerCase()); render(); });
+  c.addEventListener('change', () => commit());
+  h.addEventListener('change', () => { const v = normHex(h.value.trim()); if (v) { apply(v); commit(); } else updateInspector(); });
+  h.addEventListener('keydown', e => { if (e.key === 'Enter') h.blur(); });
+}
+wireStop('#gs-from', false);
+wireStop('#gs-to', true);
+$('#grad-angle').addEventListener('change', e => {
+  const v = parseFloat(e.target.value), list = gradTargets().filter(o => o.grad.type === 'linear');
+  if (!isFinite(v) || !list.length) { updateInspector(); return; }
+  list.forEach(o => setGradAngle(o, normDeg(v)));
+  rememberStyle(list[0]); commit();
+});
+$('#grad-reverse').addEventListener('click', () => {
+  const list = gradTargets(); if (!list.length) return;
+  list.forEach(o => { reverseGrad(o.grad); syncGradFill(o); });
+  rememberStyle(list[0]); commit();
+});
 wireColor('#stroke-color', '#stroke-hex', '#stroke-none', 'stroke', '#151936');
 $('#stroke-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return updateInspector(); styleSet('sw', clamp(v, 0, 300)); commit(); });
 $('#stroke-dash').addEventListener('change', e => { styleSet('dash', e.target.value); commit(); });

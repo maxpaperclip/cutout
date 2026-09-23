@@ -172,6 +172,9 @@ input:disabled,select:disabled{opacity:.45}
 .row .hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 .chip{flex:none;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.seg.grow{flex:1}
+#grad-controls{margin-bottom:8px}
+.grad-bar{height:14px;margin:0 0 10px 66px;border:1px solid var(--line);border-radius:7px}
 .palette{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin:2px 0 12px 66px}
 .sw{aspect-ratio:1;border-radius:50%;border:1px solid var(--line);box-shadow:inset 0 0 0 1px rgba(128,128,140,.28);cursor:pointer;padding:0}
 .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--field)}

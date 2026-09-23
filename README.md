@@ -1,12 +1,12 @@
 # Cutout
 
 - Cutout is an in-browser vector and bitmap graphics editor for classroom use.
-- Current functionality includes drawing shapes, editing text, combining shapes (unite, subtract, intersect, exclude), mirror, import photos and use shapes or text as photo masks, then export PNG, JPG, WebP or SVG.
+- Current functionality includes drawing shapes, editing text, solid, linear and radial gradient fills, combining shapes (unite, subtract, intersect, exclude), mirror, import photos and use shapes or text as photo masks, then export PNG, JPG, WebP or SVG.
 - Privacy is a design goal (COPPA/FERPA-conscious): no accounts, no servers, no analytics, no uploads. Drawings and photos live only in the student's browser (IndexedDB).
 
 ## Using Cutout
 
-Download `Cutout-v1.5.html` from this repo and open it in a browser, or host
+Download `Cutout-v1.6.html` from this repo and open it in a browser, or host
 it anywhere that can serve a static file. That's it — no install, no
 accounts, no server-side component.
 

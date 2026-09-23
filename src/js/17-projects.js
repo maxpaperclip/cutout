@@ -26,6 +26,7 @@ function sanitizeDoc(d) {
       if (typeof r.pic.id === 'string' && images.has(r.pic.id)) o.pic = { id: r.pic.id, dx: num(r.pic.dx, 0, -1e5, 1e5), dy: num(r.pic.dy, 0, -1e5, 1e5), s: num(r.pic.s, 1, 0.001, 100) };
       else missingPhoto = true;
     }
+    if (o.kind !== 'line' && o.kind !== 'image' && r.grad) { const g = sanitizeGrad(r.grad); if (g) { o.grad = g; o.fill = g.stops[0].c; } }
     if (o.kind === 'rect') o.r = num(r.r, 0, 0, 1e5);
     if (o.kind === 'polygon') { o.sides = Math.round(num(r.sides, 5, 3, 24)); o.star = !!r.star; o.inner = num(r.inner, 0.45, 0.1, 0.95); }
     if (o.kind === 'line') { o.x1 = num(r.x1, 0, -1e6, 1e6); o.y1 = num(r.y1, 0, -1e6, 1e6); o.x2 = num(r.x2, 0, -1e6, 1e6); o.y2 = num(r.y2, 0, -1e6, 1e6); }

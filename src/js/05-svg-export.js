@@ -13,9 +13,11 @@ function strokeAttrs(o) {
   }
   return a;
 }
-function styleAttrs(o) {
+// gradId: the id of this object's gradient definition, when it has one (see gradSpec)
+function styleAttrs(o, gradId) {
   if (o.kind === 'image') return o.opacity < 1 ? { opacity: rnd(o.opacity, 3) } : {};
-  const a = Object.assign({ fill: o.fill && o.fill !== 'none' ? o.fill : 'none' }, strokeAttrs(o));
+  const fill = gradId && hasGrad(o) ? 'url(#' + gradId + ')' : o.fill && o.fill !== 'none' ? o.fill : 'none';
+  const a = Object.assign({ fill }, strokeAttrs(o));
   if (o.opacity < 1) a.opacity = rnd(o.opacity, 3);
   return a;
 }
@@ -53,6 +55,34 @@ function geomSpec(o) {
   s.a = Object.assign({}, s.a, { transform: objXf(o) });
   return s;
 }
+/* ---------- gradient fills ----------
+   The gradient is defined in the same coordinates the shape is drawn in (userSpaceOnUse), and the
+   shape's own transform is applied on top of both, so the gradient turns and flips with the shape.
+   Linear gradients are laid out in real box units, which keeps the color bands at right angles to
+   the gradient line on any box. Radial gradients are drawn as a unit circle scaled to the box,
+   so they stretch into an ellipse that fits the shape. */
+function gradSpec(o) {
+  const g = o.grad, org = drawOrigin(o), w = o.w, h = o.h;
+  const stops = g.stops.map(s => ({ offset: rnd(s.at, 4), 'stop-color': s.c, 'stop-opacity': s.a < 1 ? rnd(s.a, 3) : null }));
+  if (g.type === 'radial') {
+    const sx = Math.max(g.r * w, 1e-3), sy = Math.max(g.r * h, 1e-3), focal = g.fx !== undefined && g.fy !== undefined;
+    return { tag: 'radialGradient', stops, a: {
+      gradientUnits: 'userSpaceOnUse', cx: 0, cy: 0, r: 1,
+      fx: focal ? rnd((g.fx - g.cx) / g.r, 4) : null, fy: focal ? rnd((g.fy - g.cy) / g.r, 4) : null,
+      gradientTransform: 'translate(' + rnd(org.x + g.cx * w, 3) + ' ' + rnd(org.y + g.cy * h, 3) + ') scale(' + rnd(sx, 4) + ' ' + rnd(sy, 4) + ')'
+    } };
+  }
+  return { tag: 'linearGradient', stops, a: {
+    gradientUnits: 'userSpaceOnUse',
+    x1: rnd(org.x + g.x1 * w, 3), y1: rnd(org.y + g.y1 * h, 3), x2: rnd(org.x + g.x2 * w, 3), y2: rnd(org.y + g.y2 * h, 3)
+  } };
+}
+// The gradient as SVG markup, wrapped in <defs>, for export
+function gradToSVG(o, id) {
+  const g = gradSpec(o);
+  return '<defs>' + serOpen(g.tag, Object.assign({ id }, g.a)) + g.stops.map(s => ser('stop', s)).join('') + '</' + g.tag + '></defs>';
+}
+
 /* ---------- photo fills ---------- */
 // Where the photo sits inside a shape, in the shape's own box coordinates (0,0 = top-left of the box)
 function picGeom(o) {
@@ -67,30 +97,32 @@ const coverScale = (o, rec) => Math.max(o.w / rec.w, o.h / rec.h);
 // Scale the photo along with its shape when the shape is resized
 function rescalePic(o, pic0, sx, sy) { o.pic = { id: pic0.id, dx: pic0.dx * sx, dy: pic0.dy * sy, s: pic0.s * Math.max(sx, sy) }; }
 
-function ser(tag, attrs) {
+function serOpen(tag, attrs) {
   let s = '<' + tag;
   for (const k in attrs) { const v = attrs[k]; if (v !== null && v !== undefined && v !== '') s += ' ' + k + '="' + esc(v) + '"'; }
-  return s + '/>';
+  return s + '>';
 }
-function picToSVG(o, spec, clipId) {
-  const st = styleAttrs(o), pg = picGeom(o), org = drawOrigin(o), sa = strokeAttrs(o);
+function ser(tag, attrs) { return serOpen(tag, attrs).slice(0, -1) + '/>'; }
+function picToSVG(o, spec, clipId, gradId) {
+  const st = styleAttrs(o, gradId), pg = picGeom(o), org = drawOrigin(o), sa = strokeAttrs(o);
   let s = '<g' + (st.opacity !== undefined ? ' opacity="' + st.opacity + '"' : '') + '>';
-  if (st.fill !== 'none' && !picCovers(o)) s += ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
+  if (st.fill !== 'none' && !picCovers(o)) s += (hasGrad(o) && gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
   s += '<clipPath id="' + clipId + '">' + ser(spec.tag, spec.a) + '</clipPath>';
   s += '<g clip-path="url(#' + clipId + ')">' + ser('image', { x: rnd(org.x + pg.x, 3), y: rnd(org.y + pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform }) + '</g>';
   if (sa.stroke !== 'none') s += ser(spec.tag, Object.assign({}, spec.a, { fill: 'none' }, sa));
   return s + '</g>';
 }
-function objToSVG(o, clipId) {
+function objToSVG(o, clipId, gradId) {
   const spec = geomSpec(o);
-  if (hasPic(o)) return picToSVG(o, spec, clipId || ('pc' + o.id));
-  return ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o)));
+  gradId = hasGrad(o) ? (gradId || ('gr' + o.id)) : null;
+  if (hasPic(o)) return picToSVG(o, spec, clipId || ('pc' + o.id), gradId);
+  return (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
   if (bg) parts.push('<rect x="' + rnd(box.x, 3) + '" y="' + rnd(box.y, 3) + '" width="' + rnd(box.w, 3) + '" height="' + rnd(box.h, 3) + '" fill="' + esc(bg) + '"/>');
   let n = 0;
-  objs.forEach(o => { if (!o.hidden) parts.push(objToSVG(o, 'pc' + (++n))); });
+  objs.forEach(o => { if (!o.hidden) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });
   parts.push('</svg>');
   return parts.join('');
 }
