@@ -36,6 +36,7 @@ src/
     16-export.js
     17-projects.js
     18-photos.js
+    18b-svg-import.js   Imports SVG files as editable shapes (made safe first)
     19-ui-wiring.js
     20-boot.js
 build.js              The build script (plain Node, no required dependencies)

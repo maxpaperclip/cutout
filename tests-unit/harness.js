@@ -36,6 +36,7 @@ const MODULE_FILES = [
   '04b-groups.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
+  '18b-svg-import.js',
 ];
 
 // Names we want pulled out of the loaded scripts' top-level scope so tests
@@ -55,6 +56,7 @@ const EXPORT_NAMES = [
   'groupById', 'ancestorsOf', 'effHidden', 'effLocked', 'groupLeaves', 'topGroupOf', 'buildTree',
   'flattenTree', 'normalizeGroups', 'selectionUnits', 'clickUnit', 'groupObjects', 'ungroupObjects',
   'reorderUnits', 'copyWithGroups', 'groupsFilledBy', 'scaleAbout', 'rotateAbout', 'groupLabel', 'moveUnitsTo',
+  'svgConvert', 'svgGradient', 'svgColor', 'svgPictureBox', 'SVG_LIMITS', 'SVG_IMG_MARK',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',

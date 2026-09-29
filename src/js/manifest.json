@@ -19,6 +19,7 @@
   "js/16-export.js",
   "js/17-projects.js",
   "js/18-photos.js",
+  "js/18b-svg-import.js",
   "js/19-ui-wiring.js",
   "js/20-boot.js"
 ]

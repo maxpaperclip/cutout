@@ -40,15 +40,31 @@ async function processPhoto(file) {
   }
   return { id: uid(), blob, dataUrl: await readDataUrl(blob), w: tw, h: th, mime: blob.type, bytes: blob.size, name, stored: false };
 }
+const isSVGFile = f => /^image\/svg\+xml$/i.test(f.type) || /\.svg$/i.test(f.name || '');
+// What to tell the student after an SVG comes in
+function svgMessage(r) {
+  const c = r.counts, n = r.ids.length;
+  let t = 'Added ' + n + (n === 1 ? ' object' : ' objects') + (r.top ? ' as the group \u201c' + r.top.name + '\u201d' : '') + '.';
+  if (r.scaled) t += ' It was shrunk to fit the page.';
+  if (c.text) t += ' Text uses Cutout\u2019s own font.';
+  if (c.tooMany) t += ' The file had more than ' + SVG_LIMITS.objects + ' parts, so only the first ones were added.';
+  else if (c.skipped) t += ' A few parts Cutout can\u2019t show were left out.';
+  return t;
+}
 let persistAsked = false;
 async function importFiles(list) {
   const files = Array.from(list || []);
   if (!files.length) return;
   importing++;
-  const problems = [];
+  const problems = [], svgDone = [];
   let added = 0, off = 0;
   try {
     for (const f of files) {
+      if (isSVGFile(f)) {   // an SVG comes in as editable shapes (see SVG import)
+        try { const r = await importSVGFile(f); svgDone.push(r); S.sel = new Set(r.ids); added++; }
+        catch (err) { problems.push(err.message); }
+        continue;
+      }
       if (docImageIds(doc).size >= LIMITS.photos) { problems.push('This drawing already has the most photos it can hold (' + LIMITS.photos + '). Delete one to add another.'); break; }
       let rec;
       try { rec = await processPhoto(f); } catch (err) { problems.push(err.message); continue; }
@@ -63,8 +79,10 @@ async function importFiles(list) {
     setTool('select'); commit();
     if (!persistAsked && navigator.storage && navigator.storage.persist) { persistAsked = true; navigator.storage.persist().catch(() => {}); }
   }
+  svgDone.forEach(r => { if (r.photoProblem) problems.push(r.photoProblem); });
   if (problems.length) toast(problems[0] + (problems.length > 1 ? ' (' + (problems.length - 1) + ' more could not be added.)' : ''));
-  else if (added) toast(added === 1 ? 'Photo added. Select a shape too, then choose Use shapes as mask.' : added + ' photos added.');
+  else if (svgDone.length && svgDone.length === added) toast(svgMessage(svgDone[svgDone.length - 1]));
+  else if (added) toast(added === 1 ? 'Photo added. Select a shape too, then choose Use shapes as mask.' : added + ' photos and drawings added.');
 }
 async function updatePhotoInfo() {
   const el = $('#photo-info'); if (!el) return;

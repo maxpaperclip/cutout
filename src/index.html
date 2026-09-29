@@ -22,7 +22,7 @@
       <button class="btn" id="btn-file" aria-haspopup="true" aria-expanded="false">File</button>
       <div class="menu" id="menu-file" hidden>
         <button data-act="new">New drawing</button>
-        <button data-act="import">Import photo…</button>
+        <button data-act="import">Import photo or SVG…</button>
         <button data-act="open">Open project…</button>
         <button data-act="save">Save project…</button>
         <button data-act="example">Load example</button>
@@ -61,7 +61,7 @@
     <div class="tool-sep"></div>
     <button class="tool" data-tool="perspective" title="Perspective (D)" aria-label="Perspective tool"><span class="ico" data-icon="perspective"></span></button>
     <div class="tool-sep"></div>
-    <button class="tool" data-act="import" title="Import a photo" aria-label="Import a photo"><span class="ico" data-icon="image"></span></button>
+    <button class="tool" data-act="import" title="Import a photo or an SVG drawing" aria-label="Import a photo or an SVG drawing"><span class="ico" data-icon="image"></span></button>
   </nav>
 
   <main id="stagewrap">
@@ -88,7 +88,7 @@
       <p>Choose a shape or the text tool on the left, then click or drag on the page. Select two shapes to combine them, or import a photo and use a shape as its mask.</p>
       <div class="btns">
         <button class="btn primary" data-act="example">Try an example</button>
-        <button class="btn line" data-act="import">Import a photo</button>
+        <button class="btn line" data-act="import">Import a photo or SVG</button>
         <button class="btn line" data-act="open">Open a project</button>
       </div>
     </div>
@@ -374,7 +374,7 @@
 <div id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="file-project" accept=".json,application/json" hidden>
 <input type="file" id="file-font" accept=".ttf,.otf,.woff" hidden>
-<input type="file" id="file-photo" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+<input type="file" id="file-photo" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml,.svg" multiple hidden>
 
 <!--SCRIPTS-->
 </body>
