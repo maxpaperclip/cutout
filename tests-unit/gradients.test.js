@@ -283,3 +283,80 @@ test('gradients: document behavior', async (t) => {
     assert.match(after, /transform="translate\(100 50\)"/);
   });
 });
+
+test('gradients: editing colors along the gradient', async (t) => {
+  const three = (m) => { const g = m.makeGrad('linear', '#000000', '#ffffff'); g.stops.splice(1, 0, { at: 0.5, c: '#ff0000', a: 1 }); return g; };
+
+  await t.test('gradColorAt blends between the stops on either side', () => {
+    const m = loadCutoutModules();
+    const g = m.makeGrad('linear', '#000000', '#ffffff');
+    assert.deepEqual(plain(m.gradColorAt(g.stops, 0.5)), { c: '#808080', a: 1 });
+    assert.deepEqual(plain(m.gradColorAt(g.stops, 0)), { c: '#000000', a: 1 });
+    assert.deepEqual(plain(m.gradColorAt(g.stops, 1)), { c: '#ffffff', a: 1 });
+  });
+
+  await t.test('gradColorAt blends opacity too, and holds the end colors past the ends', () => {
+    const m = loadCutoutModules();
+    const g = m.makeGrad('linear', '#ff0000', '#ff0000');
+    g.stops[0].at = 0.2; g.stops[1].at = 0.6; g.stops[1].a = 0;
+    assert.equal(m.gradColorAt(g.stops, 0.4).a, 0.5);
+    assert.equal(m.gradColorAt(g.stops, 0.1).a, 1);
+    assert.equal(m.gradColorAt(g.stops, 0.9).a, 0);
+  });
+
+  await t.test('addGradStop inserts in order, matching the color already shown there', () => {
+    const m = loadCutoutModules();
+    const g = m.makeGrad('linear', '#000000', '#ffffff');
+    const i = m.addGradStop(g, 0.25);
+    assert.equal(i, 1);
+    assert.deepEqual(plain(g.stops[1]), { at: 0.25, c: '#404040', a: 1 });
+  });
+
+  await t.test('addGradStop clamps the position and stops at the maximum', () => {
+    const m = loadCutoutModules();
+    const g = m.makeGrad('linear', '#000000', '#ffffff');
+    assert.equal(g.stops[m.addGradStop(g, 1.7)].at, 1);
+    while (g.stops.length < m.GRAD_MAX_STOPS) m.addGradStop(g, 0.5);
+    assert.equal(m.addGradStop(g, 0.5), -1);
+    assert.equal(g.stops.length, m.GRAD_MAX_STOPS);
+  });
+
+  await t.test('removeGradStop keeps at least two colors and says what to select next', () => {
+    const m = loadCutoutModules();
+    const g = three(m);
+    assert.equal(m.removeGradStop(g, 2), 1);   // removing the last selects the new last
+    assert.deepEqual(plain(g.stops.map((s) => s.c)), ['#000000', '#ff0000']);
+    assert.equal(m.removeGradStop(g, 0), -1);
+    assert.equal(g.stops.length, 2);
+    assert.equal(m.removeGradStop(three(m), 7), -1);
+  });
+
+  await t.test('moveGradStop lets a color pass its neighbours and reports where it ended up', () => {
+    const m = loadCutoutModules();
+    const g = three(m);
+    const i = m.moveGradStop(g, 0, 0.75);   // black slides past red
+    assert.equal(i, 1);
+    assert.deepEqual(plain(g.stops.map((s) => [s.at, s.c])), [[0.5, '#ff0000'], [0.75, '#000000'], [1, '#ffffff']]);
+    assert.equal(m.moveGradStop(g, 0, -3), 0);
+    assert.equal(g.stops[0].at, 0);
+    assert.equal(m.moveGradStop(g, 9, 0.5), -1);
+  });
+
+  await t.test('many colors and see-through colors export in order', () => {
+    const m = loadCutoutModules();
+    const g = m.makeGrad('linear', '#000000', '#ffffff');
+    g.stops[m.addGradStop(g, 0.7)].c = '#00ff00';
+    g.stops[m.addGradStop(g, 0.3)].a = 0.25;   // blends black toward the green at 0.7
+    const o = m.newShape('rect', { fill: '#000000', grad: g });
+    const svg = m.objToSVG(o, 'p', 'gr1');
+    const offsets = [...svg.matchAll(/<stop offset="([^"]+)"/g)].map((x) => +x[1]);
+    assert.deepEqual(offsets, [0, 0.3, 0.7, 1]);
+    assert.match(svg, /<stop offset="0.3" stop-color="#006d00" stop-opacity="0.25"\/>/);
+  });
+
+  await t.test('a saved gradient with many see-through colors opens unchanged', () => {
+    const m = loadCutoutModules();
+    const g = three(m); g.stops[1].a = 0; g.stops[2].a = 0.4;
+    assert.deepEqual(plain(m.sanitizeGrad(plain(g))), plain(g));
+  });
+});
