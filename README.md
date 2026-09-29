@@ -6,7 +6,7 @@
 
 ## Using Cutout
 
-Download `Cutout-v1.6.html` from this repo and open it in a browser, or host
+Download `Cutout.html` from this repo and open it in a browser, or host
 it anywhere that can serve a static file. That's it — no install, no
 accounts, no server-side component.
 
@@ -19,6 +19,6 @@ the full layout, the available `npm run ...` commands, and the release
 checklist.
 
 ```
-npm run build   # produces dist/Cutout-v<version>.html from src/
+npm run build   # produces dist/Cutout.html from src/
 npm run dev     # rebuilds automatically as you edit src/
 ```
