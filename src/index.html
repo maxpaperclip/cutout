@@ -202,16 +202,23 @@
           <button class="chip" id="fill-none" aria-pressed="false">None</button>
         </div>
         <div id="grad-controls" hidden>
-          <div class="grad-bar" id="grad-bar" aria-hidden="true"></div>
+          <div class="grad-edit">
+            <div class="grad-bar" id="grad-bar" title="Click to add a color here"><div class="grad-fill" id="grad-fill"></div></div>
+            <div class="grad-stops" id="grad-stops" role="group" aria-label="Gradient colors. Use the arrow keys to move the selected color and Delete to remove it."></div>
+          </div>
+          <p class="help grad-help" id="grad-help">Click the bar to add a color. Drag a marker to move it.</p>
+          <div class="gsel-box" role="group" aria-label="Selected gradient color">
           <div class="row">
-            <span class="lbl">From</span>
-            <input type="color" id="gs-from-color" aria-label="Gradient start color">
-            <input type="text" class="hex" id="gs-from-hex" maxlength="7" spellcheck="false" aria-label="Gradient start hex code">
+            <span class="lbl">Color</span>
+            <input type="color" id="gs-color" aria-label="Selected gradient color">
+            <input type="text" class="hex" id="gs-hex" maxlength="7" spellcheck="false" aria-label="Selected gradient color hex code">
+            <button class="chip" id="gs-remove" title="Remove the selected color (Delete)">Remove</button>
           </div>
           <div class="row">
-            <span class="lbl">To</span>
-            <input type="color" id="gs-to-color" aria-label="Gradient end color">
-            <input type="text" class="hex" id="gs-to-hex" maxlength="7" spellcheck="false" aria-label="Gradient end hex code">
+            <span class="lbl">Opacity</span>
+            <input type="range" id="gs-alpha" min="0" max="100" aria-label="Selected gradient color opacity">
+            <output id="gs-alpha-out" style="width:40px;text-align:right;color:var(--ink-2)">100%</output>
+          </div>
           </div>
           <div class="row">
             <span class="lbl" id="lb-grad-angle">Angle</span>

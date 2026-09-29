@@ -174,7 +174,27 @@ input:disabled,select:disabled{opacity:.45}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .seg.grow{flex:1}
 #grad-controls{margin-bottom:8px}
-.grad-bar{height:14px;margin:0 0 10px 66px;border:1px solid var(--line);border-radius:7px}
+/* Gradient editor: the bar shows the gradient over a checkerboard (so see-through colors show),
+   with one marker per color underneath. */
+.grad-edit{position:relative;margin:2px 7px 0 73px;padding-bottom:28px}
+.grad-bar{position:relative;height:22px;border:1px solid var(--line);border-radius:6px;cursor:copy;overflow:hidden;
+  background:repeating-conic-gradient(#c9ccd8 0 25%,#ffffff 0 50%) 0 0/10px 10px}
+.grad-fill{position:absolute;inset:0}
+.grad-bar.full{cursor:default}
+.grad-stops{position:absolute;left:0;right:0;top:24px;height:20px}
+.gstop{position:absolute;top:0;width:16px;height:20px;margin-left:-8px;padding:0;border:0;background:none;cursor:ew-resize;touch-action:none}
+.gstop::before{content:"";position:absolute;left:4px;top:0;border:4px solid transparent;border-bottom-color:var(--ink-2);border-top:0}
+.gstop i{position:absolute;left:1px;top:4px;width:14px;height:14px;border-radius:4px;border:2px solid var(--field);box-shadow:0 0 0 1px var(--ink-3);
+  background:repeating-conic-gradient(#c9ccd8 0 25%,#ffffff 0 50%) 0 0/6px 6px}
+.gstop i::after{content:"";position:absolute;inset:0;border-radius:2px;background:var(--c)}
+.gstop[aria-pressed="true"] i{box-shadow:0 0 0 2px var(--accent)}
+.gstop[aria-pressed="true"]::before{border-bottom-color:var(--accent)}
+.gstop:focus-visible{outline:none}
+.gstop:focus-visible i{box-shadow:0 0 0 2px var(--accent),0 0 0 4px var(--accent-soft)}
+#grad-controls .grad-help{margin:0 0 8px 66px}
+/* The selected color's own controls, set apart from the shape-wide Opacity further down */
+.gsel-box{margin:0 0 8px;padding:8px 8px 8px 0;border-radius:8px;background:var(--chrome-2)}
+.gsel-box .row>.lbl{width:58px;padding-left:8px;box-sizing:border-box}
 .palette{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin:2px 0 12px 66px}
 .sw{aspect-ratio:1;border-radius:50%;border:1px solid var(--line);box-shadow:inset 0 0 0 1px rgba(128,128,140,.28);cursor:pointer;padding:0}
 .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--field)}

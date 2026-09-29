@@ -108,6 +108,43 @@ function setGradAngle(o, deg) {
   g.x1 = r5(0.5 - half * c / w); g.y1 = r5(0.5 - half * s / h);
   g.x2 = r5(0.5 + half * c / w); g.y2 = r5(0.5 + half * s / h);
 }
+/* Editing the colors along a gradient. Stops are always kept in order from start (at 0) to end
+   (at 1). Each helper returns the index of the stop it touched, so the editor can keep it selected. */
+const GRAD_MIN_STOPS = 2;
+const sortStops = g => { g.stops.sort((p, q) => p.at - q.at); };
+// The color (and opacity) the gradient shows at a position, blending between the stops on either side
+function gradColorAt(stops, t) {
+  if (t <= stops[0].at) return { c: stops[0].c, a: stops[0].a };
+  const last = stops[stops.length - 1];
+  if (t >= last.at) return { c: last.c, a: last.a };
+  let i = 1;
+  while (stops[i].at < t) i++;
+  const p = stops[i - 1], q = stops[i], k = q.at > p.at ? (t - p.at) / (q.at - p.at) : 0;
+  const ch = (h, s) => parseInt(h.slice(s, s + 2), 16);
+  const mix = s => Math.round(ch(p.c, s) + (ch(q.c, s) - ch(p.c, s)) * k).toString(16).padStart(2, '0');
+  return { c: '#' + mix(1) + mix(3) + mix(5), a: rnd(p.a + (q.a - p.a) * k, 3) };
+}
+// Add a color at a position, matching what the gradient already shows there, so adding a stop
+// never changes how the shape looks until the new color is edited. Returns -1 when full.
+function addGradStop(g, at) {
+  if (g.stops.length >= GRAD_MAX_STOPS) return -1;
+  at = rnd(clamp(at, 0, 1), 4);
+  const s = Object.assign({ at }, gradColorAt(g.stops, at));
+  g.stops.push(s); sortStops(g);
+  return g.stops.indexOf(s);
+}
+// Remove a color. A gradient always keeps at least two. Returns the index to select next, or -1.
+function removeGradStop(g, i) {
+  if (g.stops.length <= GRAD_MIN_STOPS || i < 0 || i >= g.stops.length) return -1;
+  g.stops.splice(i, 1);
+  return Math.min(i, g.stops.length - 1);
+}
+// Slide a color along the gradient. It can pass its neighbours; returns its new index.
+function moveGradStop(g, i, at) {
+  const s = g.stops[i]; if (!s) return -1;
+  s.at = rnd(clamp(at, 0, 1), 4); sortStops(g);
+  return g.stops.indexOf(s);
+}
 // Swap the gradient's colors end for end
 function reverseGrad(g) { g.stops = g.stops.map(s => ({ at: rnd(1 - s.at, 5), c: s.c, a: s.a })).reverse(); }
 // Check a gradient read from a file. Returns a clean copy, or null when it can't be used.

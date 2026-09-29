@@ -49,6 +49,7 @@ const EXPORT_NAMES = [
   'KIND_LABEL', 'byId', 'selObjs', 'one', 'hasPic', 'docImageIds',
   'hasGrad', 'makeGrad', 'cloneGrad', 'syncGradFill', 'gradAngle', 'setGradAngle',
   'reverseGrad', 'sanitizeGrad', 'shiftHue', 'normHex',
+  'gradColorAt', 'addGradStop', 'removeGradStop', 'moveGradStop', 'GRAD_MAX_STOPS',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',
