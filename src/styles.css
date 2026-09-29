@@ -240,6 +240,15 @@ input:disabled,select:disabled{opacity:.45}
 .layer .twisty[aria-expanded="true"] .ico{transform:rotate(90deg)}
 .layer .twisty svg{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
 .layer.grp .lname{font-weight:600}
+/* Dragging rows: a line shows where the row will land; a folder lights up to take it inside */
+.layer{touch-action:pan-y;user-select:none;-webkit-user-select:none}
+.layer .lname-in{user-select:text;-webkit-user-select:text}
+#layers.dragging,#layers.dragging .lname{cursor:grabbing}
+.layer.dragged{opacity:.4}
+.layer.drop-above{box-shadow:inset 0 3px 0 var(--accent)}
+.layer.drop-below{box-shadow:inset 0 -3px 0 var(--accent)}
+.layer.drop-into{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+#layers .layer-tip{margin:0;padding:10px 14px 14px}
 .layer .lcount{margin-left:6px;color:var(--ink-3);font-weight:400;font-size:11px}
 .layer.part{background:linear-gradient(90deg,var(--accent-soft) 3px,transparent 3px)}
 
