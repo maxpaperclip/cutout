@@ -3,7 +3,7 @@
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '__APP_VERSION__';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));

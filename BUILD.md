@@ -66,7 +66,7 @@ behavior change and a structural change never land in the same commit.
 
 ```
 npm install       # only needed once, and only for the optional --minify flag
-npm run build     # builds dist/Cutout-v<version>.html
+npm run build     # builds dist/Cutout.html
 npm run dev       # builds once, then rebuilds on any change under src/
 npm run build:min # same, but minifies JS and CSS with esbuild (~10% smaller)
 npm run serve     # build once, then serve dist/ on localhost so you can test in a browser
@@ -103,16 +103,19 @@ rebuild automatically as you save.
 ## Releasing an update
 
 1. Make your changes under `src/`.
-2. `npm run build` and open `dist/Cutout-v<version>.html` in a browser.
+2. `npm run build` and open `dist/Cutout.html` in a browser.
    Run `npm test` first, then actually click through it — draw a shape, add text, combine two shapes,
    import a photo and mask it, export a PNG. The unit tests cover
    geometry, SVG export and boolean ops, but not the canvas/editor UI, so this manual pass is the real
    safety net right now.
-3. If you're bumping the version, update `cutoutVersion` in `package.json`
-   first (this controls the output filename, matching the existing
-   `Cutout-v1.5.html` convention).
-4. `npm run release` — this rebuilds and copies the result to the repo
-   root under its versioned name.
+3. If this is a new version, run `npm version 1.7.0 --no-git-tag-version`
+   (with the real number). That updates `package.json` and
+   `package-lock.json` together. `package.json` is the only place the version
+   is written: the build stamps it into the page title and the About box,
+   and the output file is always named `Cutout.html`, so download links never
+   change. A unit test fails if a version number is hard-coded anywhere else.
+4. `npm run release` — this rebuilds and copies `Cutout.html` to the repo
+   root.
 5. Commit both your `src/` changes and the updated root HTML file together.
    CI (`.github/workflows/build.yml`) will fail the build if the root file
    and a fresh build of `src/` ever drift apart, which mostly protects
@@ -121,8 +124,8 @@ rebuild automatically as you save.
 ## What CI actually checks
 
 `.github/workflows/build.yml` runs `npm run build` on every push and pull
-request, runs `npm test`, then diffs the build result against whatever `Cutout-v<version>.html`
-is currently committed at the repo root. It is **not** a functional test —
+request, runs `npm test`, then diffs the build result against the `Cutout.html`
+committed at the repo root. It is **not** a functional test —
 it can't click buttons or draw shapes — it only proves the build still
 produces valid, reproducible output and that nobody forgot to re-run the
 release step. The manual browser pass in step 2 above is still what catches

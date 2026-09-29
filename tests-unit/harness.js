@@ -108,7 +108,10 @@ function loadCutoutModules({ recordToasts = false } = {}) {
   };
   vm.createContext(sandbox);
 
-  const source = MODULE_FILES.map(readSrc).join('\n;\n');
+  // build.js stamps the version from package.json into the source; do the same
+  // here so APP_VERSION in tests matches the real build.
+  const version = require('../package.json').version;
+  const source = MODULE_FILES.map(readSrc).join('\n;\n').split('__APP_VERSION__').join(version);
   vm.runInContext(source, sandbox, { filename: 'cutout-src-bundle.js' });
 
   // A second script in the SAME context can see the first script's

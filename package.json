@@ -1,7 +1,6 @@
 {
   "name": "cutout",
   "version": "1.6.0",
-  "cutoutVersion": "1.6",
   "private": true,
   "description": "In-browser vector and bitmap graphics editor for classroom use. Builds to a single self-contained HTML file.",
   "scripts": {
