@@ -9,7 +9,10 @@ function strokeAttrs(o) {
     a['stroke-linejoin'] = o.join || 'miter';
     if (o.dash === 'dashed') a['stroke-dasharray'] = rnd(Math.max(sw, 1) * 3, 2) + ' ' + rnd(Math.max(sw, 1) * 2, 2);
     else if (o.dash === 'dotted') a['stroke-dasharray'] = '0 ' + rnd(Math.max(sw, 1) * 2, 2);
-    a['stroke-linecap'] = o.dash === 'dotted' ? 'round' : ((o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt');
+    const auto = (o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt';
+    const cap = CAPS.indexOf(o.cap) >= 0 ? o.cap : auto;
+    // dots are drawn as zero-length dashes, which only show with round or square ends
+    a['stroke-linecap'] = o.dash === 'dotted' ? (cap === 'square' ? 'square' : 'round') : cap;
   }
   return a;
 }
@@ -115,8 +118,10 @@ function picToSVG(o, spec, clipId, gradId) {
 function objToSVG(o, clipId, gradId) {
   const spec = geomSpec(o);
   gradId = hasGrad(o) ? (gradId || ('gr' + o.id)) : null;
-  if (hasPic(o)) return picToSVG(o, spec, clipId || ('pc' + o.id), gradId);
-  return (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
+  const body = hasPic(o) ? picToSVG(o, spec, clipId || ('pc' + o.id), gradId)
+    : (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
+  const blend = blendOf(o);   // the whole object (fill, photo and outline) blends as one
+  return blend ? '<g style="mix-blend-mode:' + blend + '">' + body + '</g>' : body;
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];

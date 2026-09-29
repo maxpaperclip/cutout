@@ -68,7 +68,8 @@ function loadImage(url) {
   return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('The drawing could not be rasterized.')); im.src = url; });
 }
 async function rasterize(objs, box, w, h, fmt, quality, bg) {
-  const svg = buildSVG(objs, box, w, h, bg && fmt !== 'jpg' ? bg : null);
+  // The background goes inside the SVG (for JPG too) so blend modes mix with it, as they do on screen
+  const svg = buildSVG(objs, box, w, h, bg || null);
   const img = await loadImage(svgDataUrl(svg));
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');

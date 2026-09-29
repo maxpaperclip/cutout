@@ -243,10 +243,20 @@
           <span class="lbl">Corners</span>
           <select id="stroke-join" aria-label="Outline corners"><option value="miter">Sharp</option><option value="round">Round</option><option value="bevel">Bevel</option></select>
         </div>
+        <div class="row" id="row-ends">
+          <span class="lbl">Ends</span>
+          <select id="stroke-cap" aria-label="Outline ends" title="How the ends of lines and dashes look">
+            <option value="">Automatic</option><option value="butt">Flat</option><option value="round">Round</option><option value="square">Square</option>
+          </select>
+        </div>
         <div class="row">
           <span class="lbl">Opacity</span>
           <input type="range" id="opacity" min="0" max="100" aria-label="Opacity">
           <output id="opacity-out" style="width:40px;text-align:right;color:var(--ink-2)">100%</output>
+        </div>
+        <div class="row">
+          <span class="lbl">Blend</span>
+          <select id="blend" aria-label="Blend mode" title="How this mixes with what is under it. Try Multiply to mix colors like paint, or Screen to mix them like light."></select>
         </div>
       </section>
 

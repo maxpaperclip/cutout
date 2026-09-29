@@ -57,6 +57,7 @@ const EXPORT_NAMES = [
   'flattenTree', 'normalizeGroups', 'selectionUnits', 'clickUnit', 'groupObjects', 'ungroupObjects',
   'reorderUnits', 'copyWithGroups', 'groupsFilledBy', 'scaleAbout', 'rotateAbout', 'groupLabel', 'moveUnitsTo',
   'svgConvert', 'svgGradient', 'svgColor', 'svgPictureBox', 'SVG_LIMITS', 'SVG_IMG_MARK',
+  'BLENDS', 'BLEND_IDS', 'CAPS', 'blendOf',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',
