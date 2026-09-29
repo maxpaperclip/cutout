@@ -45,6 +45,18 @@ function labelOf(o) {
 }
 const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : (o.kind !== 'line' && o.kind !== 'image' && o.pic ? 'image' : o.kind);
 
+/* ---------- blend modes and line ends ----------
+   o.blend: how an object mixes with what's under it (absent = normal).
+   o.cap:   how open outline ends and dash ends are drawn (absent = automatic: round for lines
+            and drawn lines, flat for everything else, which is how Cutout has always drawn them). */
+const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'],
+  ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'],
+  ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'],
+  ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Color'], ['luminosity', 'Luminosity']];
+const BLEND_IDS = BLENDS.map(b => b[0]);
+const CAPS = ['butt', 'round', 'square'];
+const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blend) >= 0 ? o.blend : null;
+
 /* ---------- gradient fills ----------
    o.grad = { type: 'linear' | 'radial', stops: [{ at, c, a }, ...],
               x1, y1, x2, y2         (linear: the gradient line's two ends)

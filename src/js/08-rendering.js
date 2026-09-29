@@ -69,6 +69,7 @@ function syncObjects() {
       setA(g, 'opacity', null);
     }
     setA(g, 'display', isHidden(o) ? 'none' : null);   // hidden, or inside a hidden group
+    setA(g, 'style', blendOf(o) ? 'mix-blend-mode:' + blendOf(o) : null);
     // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
     const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));

@@ -552,7 +552,7 @@ function perspOverlay() {
   });
 }
 // Put the selection back the way it was when tilting began (text is editable text again)
-const PERSP_KEEP = ['fill', 'stroke', 'sw', 'opacity', 'join', 'dash', 'hidden', 'locked'];
+const PERSP_KEEP = ['fill', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend', 'hidden', 'locked'];
 function perspReset() {
   const P = perspState().P; if (!P) return;
   P.items.forEach(it => {

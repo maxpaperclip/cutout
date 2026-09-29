@@ -21,7 +21,7 @@ const SVG_IMG_MARK = '__cutimg_';
 // Presentation properties worth copying from <style> rules and style="" onto the shapes
 const SVG_PROPS = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linejoin', 'stroke-linecap',
   'stroke-dasharray', 'stroke-miterlimit', 'opacity', 'display', 'visibility', 'stop-color', 'stop-opacity', 'clip-rule',
-  'font-size', 'font-family', 'font-weight', 'text-anchor'];
+  'font-size', 'font-family', 'font-weight', 'text-anchor', 'mix-blend-mode'];
 const SAFE_PICTURE = /^data:image\/(png|jpe?g|webp|gif);base64,/i;
 function svgSafeParse(text) {
   const parsed = new DOMParser().parseFromString(text, 'image/svg+xml');
@@ -86,7 +86,7 @@ function svgSafeParse(text) {
     mark.setAttribute('id', SVG_IMG_MARK + pictures.length);
     mark.setAttribute('d', 'M' + x + ' ' + y + 'L' + (x + w) + ' ' + y + 'L' + (x + w) + ' ' + (y + h) + 'L' + x + ' ' + (y + h) + 'Z');
     mark.setAttribute('fill', '#000');
-    ['transform', 'opacity', 'display', 'visibility'].forEach(a => { if (im.hasAttribute(a)) mark.setAttribute(a, im.getAttribute(a)); });
+    ['transform', 'opacity', 'display', 'visibility', 'mix-blend-mode'].forEach(a => { if (im.hasAttribute(a)) mark.setAttribute(a, im.getAttribute(a)); });
     pictures.push({ href, fit: (im.getAttribute('preserveAspectRatio') || '').trim() !== 'none' });
     im.replaceWith(mark);
   });
@@ -204,9 +204,12 @@ function svgConvert(root) {
   const visibleKids = it => (it.children || []).filter(c => c.visible && !c.clipMask);
   // A plain shape (circle, rect...) as a path, placed the same way
   const asPath = it => { const p = it.toPath(false); return { src: p, mx: p.matrix }; };
-  function walk(item, acc, parent, op, clip, depth) {
+  // blend: the blend mode passed down from a group; Cutout groups have no blend of their own
+  function walk(item, acc, parent, op, clip, depth, blend) {
     if (!item.visible || !room()) return;
     const m = acc.appended(item.matrix), opacity = op * (item.opacity === undefined ? 1 : item.opacity), cls = item.className;
+    const bl = item.blendMode && item.blendMode !== 'normal' && BLEND_IDS.indexOf(item.blendMode) >= 0 ? item.blendMode : blend;
+    const mark = o => { if (bl) o.blend = bl; return o; };
     if (cls === 'Group' || cls === 'Layer') {
       let c = clip;
       if (item.clipped && item.children.length) {
@@ -223,24 +226,24 @@ function svgConvert(root) {
         const g = { id: doc.nextId++, name: svgNameOf(item), parent, hidden: false, locked: false };
         out.groups.push(g); gid = g.id;
       }
-      kids.forEach(k => walk(k, m, gid, opacity, c, depth + 1));
+      kids.forEach(k => walk(k, m, gid, opacity, c, depth + 1, bl));
     } else if (cls === 'SymbolItem') {
-      if (item.definition && item.definition.item) walk(item.definition.item, m, parent, opacity, clip, depth + 1);
+      if (item.definition && item.definition.item) walk(item.definition.item, m, parent, opacity, clip, depth + 1, bl);
     } else if (cls === 'Path' || cls === 'CompoundPath' || cls === 'Shape') {
-      if (item.name && item.name.indexOf(SVG_IMG_MARK) === 0) { pictureMark(item, m, parent); return; }
+      if (item.name && item.name.indexOf(SVG_IMG_MARK) === 0) { pictureMark(item, m, parent, bl); return; }
       // toPath() may already have placed the shape, so its own matrix is used rather than the Shape's
       const o = cls === 'Shape' ? (sp => svgShape(sp.src, acc.appended(sp.mx), opacity, clip, item))(asPath(item)) : svgShape(item, m, opacity, clip, item);
-      if (o) { put(o, parent); out.counts.shapes++; }
+      if (o) { put(mark(o), parent); out.counts.shapes++; }
     } else if (cls === 'PointText') {
       const o = svgText(item, m, opacity);
-      if (o) { put(o, parent); out.counts.text++; }
+      if (o) { put(mark(o), parent); out.counts.text++; }
     } else out.counts.skipped++;
   }
-  function pictureMark(item, m, parent) {
+  function pictureMark(item, m, parent, blend) {
     const segs = item.segments || (item.children && item.children[0] && item.children[0].segments) || [];
     if (segs.length < 4) return;
     const corners = [0, 1, 3].map(i => { const p = m.transform(segs[i].point); return { x: p.x, y: p.y }; });
-    out.pictures.push({ n: +item.name.slice(SVG_IMG_MARK.length), corners, parent });
+    out.pictures.push({ n: +item.name.slice(SVG_IMG_MARK.length), corners, parent, blend });
   }
   function svgShape(src, m, opacity, clip, styled) {
     let path = new paper.CompoundPath({ pathData: src.pathData, insert: false });
@@ -273,6 +276,7 @@ function svgConvert(root) {
       join: ['miter', 'round', 'bevel'].indexOf(styled.strokeJoin) >= 0 ? styled.strokeJoin : 'miter',
       dash: !dashes ? 'solid' : dashes[0] <= Math.max(sw, 1) * 0.5 ? 'dotted' : 'dashed'
     });
+    if (stroke && CAPS.indexOf(styled.strokeCap) >= 0) o.cap = styled.strokeCap;   // SVG's own ends (flat unless it says otherwise)
     if (grad) { o.grad = grad; o.fill = grad.stops[0].c; }
     return o;
   }
@@ -294,7 +298,7 @@ function svgConvert(root) {
     o.x = c.x - o.w / 2; o.y = c.y - o.h / 2; o.rot = rnd(rot, 2);
     return o;
   }
-  walk(root, new paper.Matrix(), null, 1, null, 0);
+  walk(root, new paper.Matrix(), null, 1, null, 0, null);
   return out;
 }
 // A picture's box from its marker's corners: top-left, top-right and bottom-left, in page coordinates
@@ -361,6 +365,7 @@ async function importSVGFile(file) {
     const cx = b.cx * k + dx, cy = b.cy * k + dy;
     const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: cx - w / 2, y: cy - h / 2, w, h, rot: b.rot, opacity: 1, hidden: false, locked: false };
     if (b.flip) im.fy = true;
+    if (p.blend) im.blend = p.blend;
     const parent = p.parent !== null ? p.parent : top ? top.id : null;
     if (parent !== null) im.parent = parent;
     doc.objects.push(im); picIds.push(im.id);

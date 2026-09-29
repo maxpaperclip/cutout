@@ -28,6 +28,8 @@ function sanitizeDoc(d) {
     };
     if (o.kind !== 'line') { if (r.fx) o.fx = true; if (r.fy) o.fy = true; }
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
+    if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
+    if (o.kind !== 'image' && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
     if (o.kind === 'image') {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }

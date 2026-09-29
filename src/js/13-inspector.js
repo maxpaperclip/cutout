@@ -75,7 +75,7 @@ function updateInspector() {
       $('#lb-grad-angle').textContent = lin ? 'Angle' : ''; $('#grad-angle').hidden = !lin;
       if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
     }
-    ['#row-stroke', '#row-weight', '#row-corners'].forEach(s => { $(s).hidden = onlyPhotos; });
+    ['#row-stroke', '#row-weight', '#row-corners', '#row-ends'].forEach(s => { $(s).hidden = onlyPhotos; });
     const fill = a.fill && a.fill !== 'none' ? a.fill : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
     if (document.activeElement !== $('#fill-hex')) $('#fill-hex').value = fill ? toHex6(fill) : '';
     $('#fill-color').value = fill ? toHex6(fill) : '#cccccc';
@@ -85,6 +85,8 @@ function updateInspector() {
     $('#stroke-none').setAttribute('aria-pressed', stroke ? 'false' : 'true');
     setNum($('#stroke-w'), a.sw != null ? a.sw : 0);
     $('#stroke-dash').value = a.dash || 'solid'; $('#stroke-join').value = a.join || 'miter';
+    $('#stroke-cap').value = CAPS.indexOf(a.cap) >= 0 ? a.cap : '';
+    $('#blend').value = blendOf(a) || 'normal';
     $('#opacity').value = Math.round(a.opacity * 100); $('#opacity-out').textContent = Math.round(a.opacity * 100) + '%';
   }
 }
@@ -340,6 +342,22 @@ wireColor('#stroke-color', '#stroke-hex', '#stroke-none', 'stroke', '#151936');
 $('#stroke-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return updateInspector(); styleSet('sw', clamp(v, 0, 300)); commit(); });
 $('#stroke-dash').addEventListener('change', e => { styleSet('dash', e.target.value); commit(); });
 $('#stroke-join').addEventListener('change', e => { styleSet('join', e.target.value); commit(); });
+// Line ends: Automatic is stored as no setting at all, so older drawings look exactly as before
+$('#stroke-cap').addEventListener('change', e => {
+  const v = e.target.value;
+  forSel(o => { if (o.kind === 'image') return; if (v) o.cap = v; else delete o.cap; });
+  commit();
+});
+// Blend mode (photos too); Normal is stored as no setting
+(function blendSelect() {
+  const sel = $('#blend');
+  BLENDS.forEach(([id, label]) => { const op = elt('option', '', label); op.value = id; sel.appendChild(op); });
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    forSel(o => { if (v === 'normal') delete o.blend; else o.blend = v; });
+    commit();
+  });
+})();
 $('#opacity').addEventListener('input', e => { styleSet('opacity', e.target.value / 100); });
 $('#opacity').addEventListener('change', () => commit());
 (function palette() {

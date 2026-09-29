@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.11.0</title>
+<title>Cutout v1.12.0</title>
 <style>
 
 :root{
@@ -531,10 +531,20 @@ input:disabled,select:disabled{opacity:.45}
           <span class="lbl">Corners</span>
           <select id="stroke-join" aria-label="Outline corners"><option value="miter">Sharp</option><option value="round">Round</option><option value="bevel">Bevel</option></select>
         </div>
+        <div class="row" id="row-ends">
+          <span class="lbl">Ends</span>
+          <select id="stroke-cap" aria-label="Outline ends" title="How the ends of lines and dashes look">
+            <option value="">Automatic</option><option value="butt">Flat</option><option value="round">Round</option><option value="square">Square</option>
+          </select>
+        </div>
         <div class="row">
           <span class="lbl">Opacity</span>
           <input type="range" id="opacity" min="0" max="100" aria-label="Opacity">
           <output id="opacity-out" style="width:40px;text-align:right;color:var(--ink-2)">100%</output>
+        </div>
+        <div class="row">
+          <span class="lbl">Blend</span>
+          <select id="blend" aria-label="Blend mode" title="How this mixes with what is under it. Try Multiply to mix colors like paint, or Screen to mix them like light."></select>
         </div>
       </section>
 
@@ -682,7 +692,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.11.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.12.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -839,6 +849,18 @@ function labelOf(o) {
   return KIND_LABEL[o.kind] || 'Object';
 }
 const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : (o.kind !== 'line' && o.kind !== 'image' && o.pic ? 'image' : o.kind);
+
+/* ---------- blend modes and line ends ----------
+   o.blend: how an object mixes with what's under it (absent = normal).
+   o.cap:   how open outline ends and dash ends are drawn (absent = automatic: round for lines
+            and drawn lines, flat for everything else, which is how Cutout has always drawn them). */
+const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'],
+  ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'],
+  ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'],
+  ['hue', 'Hue'], ['saturation', 'Saturation'], ['color', 'Color'], ['luminosity', 'Luminosity']];
+const BLEND_IDS = BLENDS.map(b => b[0]);
+const CAPS = ['butt', 'round', 'square'];
+const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blend) >= 0 ? o.blend : null;
 
 /* ---------- gradient fills ----------
    o.grad = { type: 'linear' | 'radial', stops: [{ at, c, a }, ...],
@@ -1352,7 +1374,10 @@ function strokeAttrs(o) {
     a['stroke-linejoin'] = o.join || 'miter';
     if (o.dash === 'dashed') a['stroke-dasharray'] = rnd(Math.max(sw, 1) * 3, 2) + ' ' + rnd(Math.max(sw, 1) * 2, 2);
     else if (o.dash === 'dotted') a['stroke-dasharray'] = '0 ' + rnd(Math.max(sw, 1) * 2, 2);
-    a['stroke-linecap'] = o.dash === 'dotted' ? 'round' : ((o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt');
+    const auto = (o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt';
+    const cap = CAPS.indexOf(o.cap) >= 0 ? o.cap : auto;
+    // dots are drawn as zero-length dashes, which only show with round or square ends
+    a['stroke-linecap'] = o.dash === 'dotted' ? (cap === 'square' ? 'square' : 'round') : cap;
   }
   return a;
 }
@@ -1458,8 +1483,10 @@ function picToSVG(o, spec, clipId, gradId) {
 function objToSVG(o, clipId, gradId) {
   const spec = geomSpec(o);
   gradId = hasGrad(o) ? (gradId || ('gr' + o.id)) : null;
-  if (hasPic(o)) return picToSVG(o, spec, clipId || ('pc' + o.id), gradId);
-  return (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
+  const body = hasPic(o) ? picToSVG(o, spec, clipId || ('pc' + o.id), gradId)
+    : (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
+  const blend = blendOf(o);   // the whole object (fill, photo and outline) blends as one
+  return blend ? '<g style="mix-blend-mode:' + blend + '">' + body + '</g>' : body;
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
@@ -1516,6 +1543,8 @@ function combineShapes(op, list) {
     });
     // The bottom shape's gradient comes along, stretched over the combined shape's box
     if (hasGrad(base)) res.grad = cloneGrad(base.grad);
+    if (blendOf(base)) res.blend = base.blend;
+    if (base.cap) res.cap = base.cap;
     return res;
   } catch (err) {
     console.error(err);
@@ -1837,6 +1866,7 @@ function syncObjects() {
       setA(g, 'opacity', null);
     }
     setA(g, 'display', isHidden(o) ? 'none' : null);   // hidden, or inside a hidden group
+    setA(g, 'style', blendOf(o) ? 'mix-blend-mode:' + blendOf(o) : null);
     // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
     const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
@@ -2869,7 +2899,7 @@ function perspOverlay() {
   });
 }
 // Put the selection back the way it was when tilting began (text is editable text again)
-const PERSP_KEEP = ['fill', 'stroke', 'sw', 'opacity', 'join', 'dash', 'hidden', 'locked'];
+const PERSP_KEEP = ['fill', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend', 'hidden', 'locked'];
 function perspReset() {
   const P = perspState().P; if (!P) return;
   P.items.forEach(it => {
@@ -3062,7 +3092,7 @@ function updateInspector() {
       $('#lb-grad-angle').textContent = lin ? 'Angle' : ''; $('#grad-angle').hidden = !lin;
       if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
     }
-    ['#row-stroke', '#row-weight', '#row-corners'].forEach(s => { $(s).hidden = onlyPhotos; });
+    ['#row-stroke', '#row-weight', '#row-corners', '#row-ends'].forEach(s => { $(s).hidden = onlyPhotos; });
     const fill = a.fill && a.fill !== 'none' ? a.fill : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
     if (document.activeElement !== $('#fill-hex')) $('#fill-hex').value = fill ? toHex6(fill) : '';
     $('#fill-color').value = fill ? toHex6(fill) : '#cccccc';
@@ -3072,6 +3102,8 @@ function updateInspector() {
     $('#stroke-none').setAttribute('aria-pressed', stroke ? 'false' : 'true');
     setNum($('#stroke-w'), a.sw != null ? a.sw : 0);
     $('#stroke-dash').value = a.dash || 'solid'; $('#stroke-join').value = a.join || 'miter';
+    $('#stroke-cap').value = CAPS.indexOf(a.cap) >= 0 ? a.cap : '';
+    $('#blend').value = blendOf(a) || 'normal';
     $('#opacity').value = Math.round(a.opacity * 100); $('#opacity-out').textContent = Math.round(a.opacity * 100) + '%';
   }
 }
@@ -3327,6 +3359,22 @@ wireColor('#stroke-color', '#stroke-hex', '#stroke-none', 'stroke', '#151936');
 $('#stroke-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return updateInspector(); styleSet('sw', clamp(v, 0, 300)); commit(); });
 $('#stroke-dash').addEventListener('change', e => { styleSet('dash', e.target.value); commit(); });
 $('#stroke-join').addEventListener('change', e => { styleSet('join', e.target.value); commit(); });
+// Line ends: Automatic is stored as no setting at all, so older drawings look exactly as before
+$('#stroke-cap').addEventListener('change', e => {
+  const v = e.target.value;
+  forSel(o => { if (o.kind === 'image') return; if (v) o.cap = v; else delete o.cap; });
+  commit();
+});
+// Blend mode (photos too); Normal is stored as no setting
+(function blendSelect() {
+  const sel = $('#blend');
+  BLENDS.forEach(([id, label]) => { const op = elt('option', '', label); op.value = id; sel.appendChild(op); });
+  sel.addEventListener('change', () => {
+    const v = sel.value;
+    forSel(o => { if (v === 'normal') delete o.blend; else o.blend = v; });
+    commit();
+  });
+})();
 $('#opacity').addEventListener('input', e => { styleSet('opacity', e.target.value / 100); });
 $('#opacity').addEventListener('change', () => commit());
 (function palette() {
@@ -3669,7 +3717,8 @@ function loadImage(url) {
   return new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('The drawing could not be rasterized.')); im.src = url; });
 }
 async function rasterize(objs, box, w, h, fmt, quality, bg) {
-  const svg = buildSVG(objs, box, w, h, bg && fmt !== 'jpg' ? bg : null);
+  // The background goes inside the SVG (for JPG too) so blend modes mix with it, as they do on screen
+  const svg = buildSVG(objs, box, w, h, bg || null);
   const img = await loadImage(svgDataUrl(svg));
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const ctx = cv.getContext('2d');
@@ -3738,6 +3787,8 @@ function sanitizeDoc(d) {
     };
     if (o.kind !== 'line') { if (r.fx) o.fx = true; if (r.fy) o.fy = true; }
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
+    if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
+    if (o.kind !== 'image' && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
     if (o.kind === 'image') {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
@@ -3955,7 +4006,7 @@ const SVG_IMG_MARK = '__cutimg_';
 // Presentation properties worth copying from <style> rules and style="" onto the shapes
 const SVG_PROPS = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width', 'stroke-opacity', 'stroke-linejoin', 'stroke-linecap',
   'stroke-dasharray', 'stroke-miterlimit', 'opacity', 'display', 'visibility', 'stop-color', 'stop-opacity', 'clip-rule',
-  'font-size', 'font-family', 'font-weight', 'text-anchor'];
+  'font-size', 'font-family', 'font-weight', 'text-anchor', 'mix-blend-mode'];
 const SAFE_PICTURE = /^data:image\/(png|jpe?g|webp|gif);base64,/i;
 function svgSafeParse(text) {
   const parsed = new DOMParser().parseFromString(text, 'image/svg+xml');
@@ -4020,7 +4071,7 @@ function svgSafeParse(text) {
     mark.setAttribute('id', SVG_IMG_MARK + pictures.length);
     mark.setAttribute('d', 'M' + x + ' ' + y + 'L' + (x + w) + ' ' + y + 'L' + (x + w) + ' ' + (y + h) + 'L' + x + ' ' + (y + h) + 'Z');
     mark.setAttribute('fill', '#000');
-    ['transform', 'opacity', 'display', 'visibility'].forEach(a => { if (im.hasAttribute(a)) mark.setAttribute(a, im.getAttribute(a)); });
+    ['transform', 'opacity', 'display', 'visibility', 'mix-blend-mode'].forEach(a => { if (im.hasAttribute(a)) mark.setAttribute(a, im.getAttribute(a)); });
     pictures.push({ href, fit: (im.getAttribute('preserveAspectRatio') || '').trim() !== 'none' });
     im.replaceWith(mark);
   });
@@ -4138,9 +4189,12 @@ function svgConvert(root) {
   const visibleKids = it => (it.children || []).filter(c => c.visible && !c.clipMask);
   // A plain shape (circle, rect...) as a path, placed the same way
   const asPath = it => { const p = it.toPath(false); return { src: p, mx: p.matrix }; };
-  function walk(item, acc, parent, op, clip, depth) {
+  // blend: the blend mode passed down from a group; Cutout groups have no blend of their own
+  function walk(item, acc, parent, op, clip, depth, blend) {
     if (!item.visible || !room()) return;
     const m = acc.appended(item.matrix), opacity = op * (item.opacity === undefined ? 1 : item.opacity), cls = item.className;
+    const bl = item.blendMode && item.blendMode !== 'normal' && BLEND_IDS.indexOf(item.blendMode) >= 0 ? item.blendMode : blend;
+    const mark = o => { if (bl) o.blend = bl; return o; };
     if (cls === 'Group' || cls === 'Layer') {
       let c = clip;
       if (item.clipped && item.children.length) {
@@ -4157,24 +4211,24 @@ function svgConvert(root) {
         const g = { id: doc.nextId++, name: svgNameOf(item), parent, hidden: false, locked: false };
         out.groups.push(g); gid = g.id;
       }
-      kids.forEach(k => walk(k, m, gid, opacity, c, depth + 1));
+      kids.forEach(k => walk(k, m, gid, opacity, c, depth + 1, bl));
     } else if (cls === 'SymbolItem') {
-      if (item.definition && item.definition.item) walk(item.definition.item, m, parent, opacity, clip, depth + 1);
+      if (item.definition && item.definition.item) walk(item.definition.item, m, parent, opacity, clip, depth + 1, bl);
     } else if (cls === 'Path' || cls === 'CompoundPath' || cls === 'Shape') {
-      if (item.name && item.name.indexOf(SVG_IMG_MARK) === 0) { pictureMark(item, m, parent); return; }
+      if (item.name && item.name.indexOf(SVG_IMG_MARK) === 0) { pictureMark(item, m, parent, bl); return; }
       // toPath() may already have placed the shape, so its own matrix is used rather than the Shape's
       const o = cls === 'Shape' ? (sp => svgShape(sp.src, acc.appended(sp.mx), opacity, clip, item))(asPath(item)) : svgShape(item, m, opacity, clip, item);
-      if (o) { put(o, parent); out.counts.shapes++; }
+      if (o) { put(mark(o), parent); out.counts.shapes++; }
     } else if (cls === 'PointText') {
       const o = svgText(item, m, opacity);
-      if (o) { put(o, parent); out.counts.text++; }
+      if (o) { put(mark(o), parent); out.counts.text++; }
     } else out.counts.skipped++;
   }
-  function pictureMark(item, m, parent) {
+  function pictureMark(item, m, parent, blend) {
     const segs = item.segments || (item.children && item.children[0] && item.children[0].segments) || [];
     if (segs.length < 4) return;
     const corners = [0, 1, 3].map(i => { const p = m.transform(segs[i].point); return { x: p.x, y: p.y }; });
-    out.pictures.push({ n: +item.name.slice(SVG_IMG_MARK.length), corners, parent });
+    out.pictures.push({ n: +item.name.slice(SVG_IMG_MARK.length), corners, parent, blend });
   }
   function svgShape(src, m, opacity, clip, styled) {
     let path = new paper.CompoundPath({ pathData: src.pathData, insert: false });
@@ -4207,6 +4261,7 @@ function svgConvert(root) {
       join: ['miter', 'round', 'bevel'].indexOf(styled.strokeJoin) >= 0 ? styled.strokeJoin : 'miter',
       dash: !dashes ? 'solid' : dashes[0] <= Math.max(sw, 1) * 0.5 ? 'dotted' : 'dashed'
     });
+    if (stroke && CAPS.indexOf(styled.strokeCap) >= 0) o.cap = styled.strokeCap;   // SVG's own ends (flat unless it says otherwise)
     if (grad) { o.grad = grad; o.fill = grad.stops[0].c; }
     return o;
   }
@@ -4228,7 +4283,7 @@ function svgConvert(root) {
     o.x = c.x - o.w / 2; o.y = c.y - o.h / 2; o.rot = rnd(rot, 2);
     return o;
   }
-  walk(root, new paper.Matrix(), null, 1, null, 0);
+  walk(root, new paper.Matrix(), null, 1, null, 0, null);
   return out;
 }
 // A picture's box from its marker's corners: top-left, top-right and bottom-left, in page coordinates
@@ -4295,6 +4350,7 @@ async function importSVGFile(file) {
     const cx = b.cx * k + dx, cy = b.cy * k + dy;
     const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: cx - w / 2, y: cy - h / 2, w, h, rot: b.rot, opacity: 1, hidden: false, locked: false };
     if (b.flip) im.fy = true;
+    if (p.blend) im.blend = p.blend;
     const parent = p.parent !== null ? p.parent : top ? top.id : null;
     if (parent !== null) im.parent = parent;
     doc.objects.push(im); picIds.push(im.id);

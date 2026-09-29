@@ -44,6 +44,8 @@ function combineShapes(op, list) {
     });
     // The bottom shape's gradient comes along, stretched over the combined shape's box
     if (hasGrad(base)) res.grad = cloneGrad(base.grad);
+    if (blendOf(base)) res.blend = base.blend;
+    if (base.cap) res.cap = base.cap;
     return res;
   } catch (err) {
     console.error(err);
