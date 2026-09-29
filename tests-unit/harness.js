@@ -34,6 +34,7 @@ const MODULE_FILES = [
   '01-helpers.js',
   '04-document-model.js',
   '04b-groups.js',
+  '04c-path-edit.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '18b-svg-import.js',
@@ -58,6 +59,8 @@ const EXPORT_NAMES = [
   'reorderUnits', 'copyWithGroups', 'groupsFilledBy', 'scaleAbout', 'rotateAbout', 'groupLabel', 'moveUnitsTo',
   'svgConvert', 'svgGradient', 'svgColor', 'svgPictureBox', 'SVG_LIMITS', 'SVG_IMG_MARK',
   'BLENDS', 'BLEND_IDS', 'CAPS', 'blendOf',
+  'boxToWorld', 'worldToBox', 'editablePath', 'writePath', 'isSmoothPoint', 'setPointSmooth', 'moveHandle',
+  'segmentAt', 'removePoints', 'insertPointNear', 'penGeometry', 'snap45',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',

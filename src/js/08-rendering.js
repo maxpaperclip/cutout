@@ -124,7 +124,10 @@ function zoomCenter(f) { userView = true; const s = stageSize(); zoomAt(f, s.w /
 function drawOverlay() {
   if (S.tool === 'perspective') { perspOverlay(); return; }
   ov.textContent = '';
+  showPathBar();
   if (drag && drag.type === 'pencil') { pencilPreview(); return; }
+  if (S.tool === 'pen') { penOverlay(); return; }
+  if (pe && peOverlay()) return;
   const z = view.z;
   if (drag && drag.type === 'marquee' && drag.cur) {
     const r = drag.rect();

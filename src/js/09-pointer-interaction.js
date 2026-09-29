@@ -10,6 +10,8 @@ const snapPt = p => ({ x: snapV(p.x), y: snapV(p.y) });
 function toWorld(e) { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.z, y: (e.clientY - r.top - view.y) / view.z }; }
 
 function setTool(t) {
+  if (pen && t !== 'pen') penFinish(false);   // switching away finishes the line being drawn
+  if (pe) pe = null;
   S.tool = t;
   if (t !== 'perspective') psn = null;
   $$('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t ? 'true' : 'false'));
@@ -34,7 +36,9 @@ stage.addEventListener('pointerdown', e => {
   }
   const p = toWorld(e);
   if (S.tool === 'perspective') { perspDown(e, p); return; }
+  if (S.tool === 'pen') { penDown(e, p); return; }
   if (S.tool !== 'select') { beginDraw(e, p); return; }
+  if (pe && peDown(e, p)) return;
   const h = e.target.closest && e.target.closest('[data-h]');
   if (h) { beginHandle(h.dataset.h, p, e); return; }
   const g = e.target.closest && e.target.closest('[data-id]');
@@ -46,13 +50,16 @@ stage.addEventListener('pointerdown', e => {
 stage.addEventListener('pointermove', e => {
   if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pinch && pointers.size === 2) { updatePinch(); return; }
-  if (!drag) return;
+  if (!drag) { if (S.tool === 'pen' && pen) penHover(toWorld(e), e); return; }
   const p = toWorld(e);
   switch (drag.type) {
     case 'pan': userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); break;
     case 'move': updateMove(p, e); break;
     case 'draw': updateDraw(p, e); break;
     case 'pencil': updatePencil(p); break;
+    case 'pen': updatePenDrag(p, e); break;
+    case 'pepoint': updatePePoint(p, e); break;
+    case 'pehandle': updatePeHandle(p, e); break;
     case 'resize': updateResize(p, e); break;
     case 'rotate': updateRotate(p, e); break;
     case 'lineend': updateLineEnd(p, e); break;
@@ -77,6 +84,8 @@ function endPointer(e) {
       break;
     case 'draw': finishDraw(d, e); break;
     case 'pencil': finishPencil(d); break;
+    case 'pen': drawOverlay(); break;
+    case 'pepoint': case 'pehandle': if (d.moved) commit(); else drawOverlay(); break;
     case 'resize': case 'rotate': case 'lineend': case 'mscale': case 'mrotate': commit(); break;
     case 'persp': perspRelease(d); break;
     case 'marquee': refreshAll(); break;
@@ -94,15 +103,27 @@ stage.addEventListener('wheel', e => {
   else { view.x -= e.deltaX; view.y -= e.deltaY; applyView(); }
 }, { passive: false });
 stage.addEventListener('dblclick', e => {
-  if (S.tool !== 'select') return;
   // The stage holds on to the pointer during a click (for dragging), so the browser reports the
   // double-click as coming from the stage itself. Ask what is actually under the pointer instead.
   const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
+  if (S.tool === 'pen') {
+    // a double-click finishes an open line; its second click placed a point on top of the last one
+    if (pen && pen.pts.length >= 2) {
+      const a = pen.pts[pen.pts.length - 1], b = pen.pts[pen.pts.length - 2];
+      if (Math.hypot(a.x - b.x, a.y - b.y) * view.z < 4) pen.pts.pop();
+      penFinish(false);
+    }
+    return;
+  }
+  if (S.tool !== 'select') return;
+  if (pe) return;   // double-clicking a point is handled in peDown (see there)
   const g = under.closest && under.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
   if (!o || isLocked(o) || isHidden(o)) return;
-  // Double-click picks just this object, even inside a group; for text it also opens the editor
+  // Double-click picks just this object, even inside a group; for text it also opens the editor,
+  // and for a plain shape it shows its points for editing
   if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+  else if (o.kind === 'path') { revealInLayers(o); enterPointEdit(o); }
   else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
 });
 

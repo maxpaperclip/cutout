@@ -195,13 +195,7 @@ function perspEligible() {
   if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
   return { objs: sel };
 }
-// Box coordinates (0,0 = top-left of the object's box) to page coordinates, through flip and turn
-function boxToWorld(o, lx, ly) {
-  if (o.fx) lx = o.w - lx;
-  if (o.fy) ly = o.h - ly;
-  const r = rotPt(lx, ly, o.w / 2, o.h / 2, o.rot || 0);
-  return [o.x + r.x, o.y + r.y];
-}
+// (boxToWorld, box coordinates to page coordinates, is in 04c-path-edit.js)
 // Where a photo sits on the page, as a 3x3 matrix from photo pixels to page coordinates
 function perspPhotoInfo(o) {
   const masked = o.kind !== 'image', rec = images.get(masked ? o.pic.id : o.img);

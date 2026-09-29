@@ -10,6 +10,7 @@ function render() { syncObjects(); drawOverlay(); updateInspector(); }
 $$('.tool[data-tool]').forEach(b => b.addEventListener('click', () => setTool(b.dataset.tool)));
 $$('.tabs button').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
 $('#persp-done').addEventListener('click', () => { setTool('select'); refreshAll(); });
+$('#path-done').addEventListener('click', () => { if (pe) exitPointEdit(); else if (pen && pen.pts.length >= 2) penFinish(false); });
 $('#persp-reset').addEventListener('click', perspReset);
 $('#btn-undo').addEventListener('click', undo);
 $('#btn-redo').addEventListener('click', redo);
@@ -40,6 +41,7 @@ window.addEventListener('keydown', e => {
   if (psnBusy) { e.preventDefault(); return; }
   if (!$('#export-overlay').hidden) { if (e.key === 'Escape') closeExport(); return; }
   if (isTyping(e)) return;
+  if (pathKeys(e)) return;   // the pen and point editing use Enter, Esc, Delete and the arrows
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (e.code === 'Space' && !e.target.closest('button')) { if (!spaceDown) { spaceDown = true; stage.classList.add('panning'); } e.preventDefault(); return; }
   if (mod) {
@@ -53,9 +55,10 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.shiftKey && (k === 'h' || k === 'v')) { e.preventDefault(); mirrorSelected(k); return; }
-  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', n: 'pencil', t: 'text', d: 'perspective' };
+  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', n: 'pencil', b: 'pen', t: 'text', d: 'perspective' };
   if (map[k]) { setTool(map[k]); e.preventDefault(); return; }
   if (k === 'enter' && S.tool === 'perspective' && !e.target.closest('button')) { e.preventDefault(); setTool('select'); refreshAll(); }
+  else if (k === 'enter' && S.tool === 'select' && one() && one().kind === 'path' && !e.target.closest('button')) { e.preventDefault(); enterPointEdit(one()); }
   else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
   else if (k === 'escape') { S.sel = new Set(); setTool('select'); refreshAll(); }
   else if (k.startsWith('arrow')) {

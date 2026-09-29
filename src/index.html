@@ -55,6 +55,7 @@
     <button class="tool" data-tool="polygon" title="Polygon (P)" aria-label="Polygon tool"><span class="ico" data-icon="polygon"></span></button>
     <button class="tool" data-tool="star" title="Star (S)" aria-label="Star tool"><span class="ico" data-icon="star"></span></button>
     <button class="tool" data-tool="line" title="Line (L)" aria-label="Line tool"><span class="ico" data-icon="line"></span></button>
+    <button class="tool" data-tool="pen" title="Pen (B). Click for corners, drag for curves; click the first point to close." aria-label="Pen tool"><span class="ico" data-icon="pen"></span></button>
     <button class="tool" data-tool="pencil" title="Pencil (N). Draw freely; end where you started to make a filled shape." aria-label="Pencil tool"><span class="ico" data-icon="pencil"></span></button>
     <div class="tool-sep"></div>
     <button class="tool" data-tool="text" title="Text (T)" aria-label="Text tool"><span class="ico" data-icon="text"></span></button>
@@ -91,6 +92,10 @@
         <button class="btn line" data-act="import">Import a photo or SVG</button>
         <button class="btn line" data-act="open">Open a project</button>
       </div>
+    </div>
+    <div id="path-bar" role="group" aria-label="Pen and points" hidden>
+      <span id="path-hint"></span>
+      <button class="btn primary" id="path-done">Done</button>
     </div>
     <div id="persp-bar" role="group" aria-label="Perspective" hidden>
       <span id="persp-hint"></span>
@@ -182,6 +187,7 @@
         </div>
         <p class="help" id="combine-help">Select two or more shapes. The bottom shape keeps its color, and Subtract cuts the shapes in front of it out of it.</p>
         <div class="stack" style="margin-top:10px">
+          <button class="btn line" id="btn-points" disabled title="Drag the points and curves of the outline (or double-click the shape). Shapes and text become plain shapes first, and text stops being editable.">Edit points</button>
           <button class="btn line" id="btn-flatten" disabled title="Turn the selected object into a plain shape. Text stops being editable.">Convert to plain shape</button>
         </div>
       </section>
@@ -332,7 +338,7 @@
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
-        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · N pencil · T text · D perspective.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
+        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · B pen · N pencil · T text · D perspective.<br>With the pen, click for corners and drag for curves; click the first point to close, or press Enter to finish. Double-click a shape (or press Enter) to edit its points.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
