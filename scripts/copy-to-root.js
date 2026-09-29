@@ -1,24 +1,17 @@
 #!/usr/bin/env node
 /**
- * Copies dist/Cutout-vX.Y.html to the repo root, so the download link
- * teachers already use (github.com/.../blob/main/Cutout-v1.5.html) keeps
- * working exactly the same way it always has. Run via `npm run release`
- * — that runs the build first, then this copy step.
- *
- * If you bump "cutoutVersion" in package.json, the old root file is left
- * in place; delete it by hand and update your README's link if you want
- * the version number in the filename to move forward (matching how this
- * repo has done it up to now: Cutout-v1.5.html).
+ * Copies dist/Cutout.html to the repo root, so the download link teachers use
+ * (github.com/strawberrykoala/cutout/blob/main/Cutout.html) always points at
+ * the latest release. The filename never changes; the version number shown
+ * inside the app comes from "version" in package.json. Run via
+ * `npm run release`, which runs the build first, then this copy step.
  */
 const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const DIST = path.join(ROOT, 'dist');
-const PKG = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
-const FILENAME = `Cutout-v${PKG.cutoutVersion}.html`;
-
-const src = path.join(DIST, FILENAME);
+const FILENAME = 'Cutout.html';
+const src = path.join(ROOT, 'dist', FILENAME);
 const dest = path.join(ROOT, FILENAME);
 
 if (!fs.existsSync(src)) {
@@ -27,4 +20,5 @@ if (!fs.existsSync(src)) {
 }
 
 fs.copyFileSync(src, dest);
-console.log(`[release] copied ${FILENAME} to the repo root. Review the diff, then commit it alongside your src/ changes.`);
+const version = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version;
+console.log(`[release] copied ${FILENAME} (v${version}) to the repo root. Review the diff, then commit it alongside your src/ changes.`);

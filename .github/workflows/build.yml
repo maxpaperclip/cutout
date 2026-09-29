@@ -24,8 +24,7 @@ jobs:
 
       - name: Verify the committed root HTML matches a fresh build
         run: |
-          if ! diff -q "dist/Cutout-v$(node -p "require('./package.json').cutoutVersion").html" \
-                       "Cutout-v$(node -p "require('./package.json').cutoutVersion").html"; then
+          if ! diff -q dist/Cutout.html Cutout.html; then
             echo "::error::The committed root HTML file is out of date. Run 'npm run release' and commit the result."
             exit 1
           fi

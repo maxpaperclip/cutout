@@ -28,10 +28,18 @@ const path = require('path');
 const SRC = path.join(__dirname, 'src');
 const OUT_DIR = path.join(__dirname, 'dist');
 const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
-// Matches the existing repo convention (Cutout-v1.5.html): the version
-// lives in package.json ("cutoutVersion"), so cutting a release is a
-// one-line change.
-const OUT_FILE = path.join(OUT_DIR, `Cutout-v${PKG.cutoutVersion}.html`);
+// The output always has the same name, so download links never change.
+// The version lives in exactly one place, "version" in package.json. The
+// build stamps it into the page wherever src/ says __APP_VERSION__ (the page
+// title, and APP_VERSION in src/js/01-helpers.js). To release a new version:
+//   npm version 1.7.0 --no-git-tag-version
+// which updates package.json and package-lock.json together.
+const OUT_FILE = path.join(OUT_DIR, 'Cutout.html');
+const VERSION_TOKEN = '__APP_VERSION__';
+function stampVersion(text, where) {
+  if (!text.includes(VERSION_TOKEN)) throw new Error(`[build] ${where} no longer contains ${VERSION_TOKEN}; the version would not be stamped in.`);
+  return text.split(VERSION_TOKEN).join(PKG.version);
+}
 
 function readManifest() {
   const manifestPath = path.join(SRC, 'js', 'manifest.json');
@@ -100,7 +108,7 @@ function buildStyles(minify) {
 function build({ minify = false } = {}) {
   const start = Date.now();
 
-  const html = fs.readFileSync(path.join(SRC, 'index.html'), 'utf8');
+  const html = stampVersion(fs.readFileSync(path.join(SRC, 'index.html'), 'utf8'), 'src/index.html');
   const css = buildStyles(minify);
   const fontDataScript = buildFontData();
   const appScript = buildAppScript(minify);
@@ -109,7 +117,7 @@ function build({ minify = false } = {}) {
     '<script src="https://cdn.jsdelivr.net/npm/paper@0.12.18/dist/paper-core.min.js"></script>',
     '<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>',
     `<script>${fontDataScript}</script>`,
-    `<script>${appScript}</script>`,
+    `<script>${stampVersion(appScript, 'src/js')}</script>`,
   ].join('\n');
 
   // NOTE: replacement uses a function, not a string, because the app code

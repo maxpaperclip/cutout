@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.5.0</title>
+<title>Cutout v1.6.0</title>
 <style>
 
 :root{
@@ -180,6 +180,9 @@ input:disabled,select:disabled{opacity:.45}
 .row .hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
 .chip{flex:none;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.seg.grow{flex:1}
+#grad-controls{margin-bottom:8px}
+.grad-bar{height:14px;margin:0 0 10px 66px;border:1px solid var(--line);border-radius:7px}
 .palette{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin:2px 0 12px 66px}
 .sw{aspect-ratio:1;border-radius:50%;border:1px solid var(--line);box-shadow:inset 0 0 0 1px rgba(128,128,140,.28);cursor:pointer;padding:0}
 .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;background:var(--field)}
@@ -432,11 +435,37 @@ input:disabled,select:disabled{opacity:.45}
 
       <section class="sec" id="sec-app" hidden>
         <h3>Appearance</h3>
-        <div class="row" id="row-fill">
+        <div class="row" id="row-filltype">
           <span class="lbl">Fill</span>
+          <div class="seg txt grow" id="fill-type" role="group" aria-label="Fill type">
+            <button data-ft="solid" aria-pressed="true" title="One color">Solid</button>
+            <button data-ft="linear" aria-pressed="false" title="Colors blend along a line">Linear</button>
+            <button data-ft="radial" aria-pressed="false" title="Colors blend out from the middle">Radial</button>
+          </div>
+        </div>
+        <div class="row" id="row-fill">
+          <span class="lbl">Color</span>
           <input type="color" id="fill-color" aria-label="Fill color">
           <input type="text" class="hex" id="fill-hex" maxlength="7" spellcheck="false" aria-label="Fill hex code">
           <button class="chip" id="fill-none" aria-pressed="false">None</button>
+        </div>
+        <div id="grad-controls" hidden>
+          <div class="grad-bar" id="grad-bar" aria-hidden="true"></div>
+          <div class="row">
+            <span class="lbl">From</span>
+            <input type="color" id="gs-from-color" aria-label="Gradient start color">
+            <input type="text" class="hex" id="gs-from-hex" maxlength="7" spellcheck="false" aria-label="Gradient start hex code">
+          </div>
+          <div class="row">
+            <span class="lbl">To</span>
+            <input type="color" id="gs-to-color" aria-label="Gradient end color">
+            <input type="text" class="hex" id="gs-to-hex" maxlength="7" spellcheck="false" aria-label="Gradient end hex code">
+          </div>
+          <div class="row">
+            <span class="lbl" id="lb-grad-angle">Angle</span>
+            <input type="number" id="grad-angle" min="-360" max="360" step="15" aria-label="Gradient angle in degrees">
+            <button class="chip" id="grad-reverse" title="Swap the start and end colors">Reverse</button>
+          </div>
         </div>
         <div class="palette" id="palette" role="group" aria-label="Color swatches. Click to fill, Shift-click to stroke."></div>
         <div class="row" id="row-stroke">
@@ -601,7 +630,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.5.0';
+const APP_VERSION = '1.6.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -719,7 +748,7 @@ const blankDoc = () => ({ w: 800, h: 600, bg: '#ffffff', nextId: 1, objects: [] 
 let doc = blankDoc();
 const S = {
   tool: 'select', sel: new Set(), snap: true, showGrid: true, grid: 20, clip: null, pasteN: 0,
-  style: { fill: '#3b3bf5', stroke: 'none', sw: 2, join: 'miter', dash: 'solid' }
+  style: { fill: '#3b3bf5', grad: null, stroke: 'none', sw: 2, join: 'miter', dash: 'solid' }
 };
 const view = { x: 0, y: 0, z: 1 };
 
@@ -741,6 +770,8 @@ function docImageIds(d) {
 }
 // A shape (or text) whose fill is a photo
 const hasPic = o => !!(o.pic && o.kind !== 'line' && o.kind !== 'image' && images.has(o.pic.id));
+// A shape (or text) whose fill is a gradient (see "gradient fills" below)
+const hasGrad = o => !!(o && o.grad && o.kind !== 'line' && o.kind !== 'image');
 const byId = id => doc.objects.find(o => o.id === id);
 const selObjs = () => doc.objects.filter(o => S.sel.has(o.id));
 const one = () => { const s = selObjs(); return s.length === 1 ? s[0] : null; };
@@ -753,6 +784,87 @@ function labelOf(o) {
   return KIND_LABEL[o.kind] || 'Object';
 }
 const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : (o.kind !== 'line' && o.kind !== 'image' && o.pic ? 'image' : o.kind);
+
+/* ---------- gradient fills ----------
+   o.grad = { type: 'linear' | 'radial', stops: [{ at, c, a }, ...],
+              x1, y1, x2, y2         (linear: the gradient line's two ends)
+              cx, cy, r, [fx, fy] }  (radial: center, radius, optional focal point)
+   Every position is a fraction of the object's box (0,0 = top-left, 1,1 = bottom-right), so
+   resizing, flipping and turning the object carry the gradient along with no extra work.
+   A radial radius of 0.5 reaches the box edges; on a wide box the circle stretches into an ellipse.
+   o.fill stays a plain color (the first stop) so older versions of Cutout, which drop o.grad when
+   they open a drawing, still show a sensible solid color. */
+const GRAD_TYPES = ['linear', 'radial'];
+const GRAD_MAX_STOPS = 8;
+const GRAD_DEFAULT_FROM = '#3b3bf5';
+function hexToHsl(hex) {
+  const n = parseInt(hex.slice(1), 16), r = (n >> 16 & 255) / 255, g = (n >> 8 & 255) / 255, b = (n & 255) / 255;
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  if (!d) return [0, 0, l];
+  const s = d / (1 - Math.abs(2 * l - 1));
+  const h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return [h * 60, s, l];
+}
+function hslToHex(h, s, l) {
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const [r, g, b] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return '#' + [r, g, b].map(v => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+}
+// A partner color for a new gradient: the same color, turned around the color wheel.
+// Greys have no hue to turn, so they fade toward a lighter or darker grey instead.
+function shiftHue(hex, deg) {
+  const [h, s, l] = hexToHsl(hex);
+  if (s < 0.08) return hslToHex(0, 0, l > 0.5 ? l - 0.45 : l + 0.45);
+  return hslToHex(((h + deg) % 360 + 360) % 360, s, l);
+}
+const isHex6 = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+function normHex(c) {
+  if (typeof c !== 'string') return null;
+  if (isHex6(c)) return c.toLowerCase();
+  const m = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i.exec(c);
+  return m ? ('#' + m[1] + m[1] + m[2] + m[2] + m[3] + m[3]).toLowerCase() : null;
+}
+// A new gradient going from one color to another. Colors default to the given fill and a partner for it.
+function makeGrad(type, from, to) {
+  const c0 = normHex(from) || GRAD_DEFAULT_FROM, c1 = normHex(to) || shiftHue(c0, 60);
+  const stops = [{ at: 0, c: c0, a: 1 }, { at: 1, c: c1, a: 1 }];
+  return type === 'radial' ? { type: 'radial', stops, cx: 0.5, cy: 0.5, r: 0.5 }
+    : { type: 'linear', stops, x1: 0, y1: 0.5, x2: 1, y2: 0.5 };
+}
+const cloneGrad = g => g ? JSON.parse(JSON.stringify(g)) : null;
+// Keep the plain fill color in step with the gradient (it is what older versions show)
+function syncGradFill(o) { if (hasGrad(o)) o.fill = o.grad.stops[0].c; }
+// Direction of a linear gradient in degrees, measured on the page (0 = left to right, 90 = top to bottom)
+function gradAngle(o) {
+  const g = o.grad;
+  return normDeg(Math.atan2((g.y2 - g.y1) * o.h, (g.x2 - g.x1) * o.w) / D2R);
+}
+// Point a linear gradient in a direction. The line runs through the box center and is just long
+// enough to reach the far corners, so the first and last colors land exactly on the box edges.
+function setGradAngle(o, deg) {
+  const g = o.grad, a = deg * D2R, c = Math.cos(a), s = Math.sin(a);
+  const w = Math.max(o.w, 1e-6), h = Math.max(o.h, 1e-6), half = (w * Math.abs(c) + h * Math.abs(s)) / 2;
+  const r5 = v => rnd(v, 5) + 0;   // + 0 turns -0 into 0
+  g.x1 = r5(0.5 - half * c / w); g.y1 = r5(0.5 - half * s / h);
+  g.x2 = r5(0.5 + half * c / w); g.y2 = r5(0.5 + half * s / h);
+}
+// Swap the gradient's colors end for end
+function reverseGrad(g) { g.stops = g.stops.map(s => ({ at: rnd(1 - s.at, 5), c: s.c, a: s.a })).reverse(); }
+// Check a gradient read from a file. Returns a clean copy, or null when it can't be used.
+function sanitizeGrad(r) {
+  if (!r || typeof r !== 'object' || GRAD_TYPES.indexOf(r.type) < 0 || !Array.isArray(r.stops)) return null;
+  const num = (v, def, a, b) => { v = +v; return Number.isFinite(v) ? clamp(v, a, b) : def; };
+  const stops = r.stops.slice(0, GRAD_MAX_STOPS).map(s => {
+    const c = s && normHex(s.c);
+    return c ? { at: num(s.at, 0, 0, 1), c, a: num(s.a, 1, 0, 1) } : null;
+  }).filter(Boolean).sort((p, q) => p.at - q.at);
+  if (stops.length < 2) return null;
+  const P = 1e3;   // gradient ends may sit well outside the box, but not absurdly far
+  if (r.type === 'linear') return { type: 'linear', stops, x1: num(r.x1, 0, -P, P), y1: num(r.y1, 0.5, -P, P), x2: num(r.x2, 1, -P, P), y2: num(r.y2, 0.5, -P, P) };
+  const g = { type: 'radial', stops, cx: num(r.cx, 0.5, -P, P), cy: num(r.cy, 0.5, -P, P), r: num(r.r, 0.5, 0.001, P) };
+  if (r.fx !== undefined && r.fy !== undefined) { g.fx = num(r.fx, g.cx, -P, P); g.fy = num(r.fy, g.cy, -P, P); }
+  return g;
+}
 
 /* ---------- geometry builders ---------- */
 function buildText(o) {
@@ -815,6 +927,9 @@ function newShape(kind, props) {
     fill: st.fill, stroke: st.stroke, sw: st.sw, opacity: 1, join: st.join, dash: st.dash, hidden: false, locked: false
   }, props || {});
   const given = k => props && props[k] !== undefined;
+  // New shapes pick up the last gradient used, just as they pick up the last fill color.
+  // Each shape gets its own copy, so editing one shape's gradient never changes another's.
+  if (st.grad && !given('fill') && !given('grad') && kind !== 'line' && kind !== 'text' && kind !== 'image') { o.grad = cloneGrad(st.grad); o.fill = o.grad.stops[0].c; }
   if (kind === 'rect' && o.r === undefined) o.r = 0;
   if (kind === 'polygon') { o.sides = o.sides || 6; o.star = !!o.star; o.inner = o.inner || 0.45; }
   if (kind === 'line') {
@@ -868,9 +983,11 @@ function strokeAttrs(o) {
   }
   return a;
 }
-function styleAttrs(o) {
+// gradId: the id of this object's gradient definition, when it has one (see gradSpec)
+function styleAttrs(o, gradId) {
   if (o.kind === 'image') return o.opacity < 1 ? { opacity: rnd(o.opacity, 3) } : {};
-  const a = Object.assign({ fill: o.fill && o.fill !== 'none' ? o.fill : 'none' }, strokeAttrs(o));
+  const fill = gradId && hasGrad(o) ? 'url(#' + gradId + ')' : o.fill && o.fill !== 'none' ? o.fill : 'none';
+  const a = Object.assign({ fill }, strokeAttrs(o));
   if (o.opacity < 1) a.opacity = rnd(o.opacity, 3);
   return a;
 }
@@ -908,6 +1025,34 @@ function geomSpec(o) {
   s.a = Object.assign({}, s.a, { transform: objXf(o) });
   return s;
 }
+/* ---------- gradient fills ----------
+   The gradient is defined in the same coordinates the shape is drawn in (userSpaceOnUse), and the
+   shape's own transform is applied on top of both, so the gradient turns and flips with the shape.
+   Linear gradients are laid out in real box units, which keeps the color bands at right angles to
+   the gradient line on any box. Radial gradients are drawn as a unit circle scaled to the box,
+   so they stretch into an ellipse that fits the shape. */
+function gradSpec(o) {
+  const g = o.grad, org = drawOrigin(o), w = o.w, h = o.h;
+  const stops = g.stops.map(s => ({ offset: rnd(s.at, 4), 'stop-color': s.c, 'stop-opacity': s.a < 1 ? rnd(s.a, 3) : null }));
+  if (g.type === 'radial') {
+    const sx = Math.max(g.r * w, 1e-3), sy = Math.max(g.r * h, 1e-3), focal = g.fx !== undefined && g.fy !== undefined;
+    return { tag: 'radialGradient', stops, a: {
+      gradientUnits: 'userSpaceOnUse', cx: 0, cy: 0, r: 1,
+      fx: focal ? rnd((g.fx - g.cx) / g.r, 4) : null, fy: focal ? rnd((g.fy - g.cy) / g.r, 4) : null,
+      gradientTransform: 'translate(' + rnd(org.x + g.cx * w, 3) + ' ' + rnd(org.y + g.cy * h, 3) + ') scale(' + rnd(sx, 4) + ' ' + rnd(sy, 4) + ')'
+    } };
+  }
+  return { tag: 'linearGradient', stops, a: {
+    gradientUnits: 'userSpaceOnUse',
+    x1: rnd(org.x + g.x1 * w, 3), y1: rnd(org.y + g.y1 * h, 3), x2: rnd(org.x + g.x2 * w, 3), y2: rnd(org.y + g.y2 * h, 3)
+  } };
+}
+// The gradient as SVG markup, wrapped in <defs>, for export
+function gradToSVG(o, id) {
+  const g = gradSpec(o);
+  return '<defs>' + serOpen(g.tag, Object.assign({ id }, g.a)) + g.stops.map(s => ser('stop', s)).join('') + '</' + g.tag + '></defs>';
+}
+
 /* ---------- photo fills ---------- */
 // Where the photo sits inside a shape, in the shape's own box coordinates (0,0 = top-left of the box)
 function picGeom(o) {
@@ -922,30 +1067,32 @@ const coverScale = (o, rec) => Math.max(o.w / rec.w, o.h / rec.h);
 // Scale the photo along with its shape when the shape is resized
 function rescalePic(o, pic0, sx, sy) { o.pic = { id: pic0.id, dx: pic0.dx * sx, dy: pic0.dy * sy, s: pic0.s * Math.max(sx, sy) }; }
 
-function ser(tag, attrs) {
+function serOpen(tag, attrs) {
   let s = '<' + tag;
   for (const k in attrs) { const v = attrs[k]; if (v !== null && v !== undefined && v !== '') s += ' ' + k + '="' + esc(v) + '"'; }
-  return s + '/>';
+  return s + '>';
 }
-function picToSVG(o, spec, clipId) {
-  const st = styleAttrs(o), pg = picGeom(o), org = drawOrigin(o), sa = strokeAttrs(o);
+function ser(tag, attrs) { return serOpen(tag, attrs).slice(0, -1) + '/>'; }
+function picToSVG(o, spec, clipId, gradId) {
+  const st = styleAttrs(o, gradId), pg = picGeom(o), org = drawOrigin(o), sa = strokeAttrs(o);
   let s = '<g' + (st.opacity !== undefined ? ' opacity="' + st.opacity + '"' : '') + '>';
-  if (st.fill !== 'none' && !picCovers(o)) s += ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
+  if (st.fill !== 'none' && !picCovers(o)) s += (hasGrad(o) && gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
   s += '<clipPath id="' + clipId + '">' + ser(spec.tag, spec.a) + '</clipPath>';
   s += '<g clip-path="url(#' + clipId + ')">' + ser('image', { x: rnd(org.x + pg.x, 3), y: rnd(org.y + pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform }) + '</g>';
   if (sa.stroke !== 'none') s += ser(spec.tag, Object.assign({}, spec.a, { fill: 'none' }, sa));
   return s + '</g>';
 }
-function objToSVG(o, clipId) {
+function objToSVG(o, clipId, gradId) {
   const spec = geomSpec(o);
-  if (hasPic(o)) return picToSVG(o, spec, clipId || ('pc' + o.id));
-  return ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o)));
+  gradId = hasGrad(o) ? (gradId || ('gr' + o.id)) : null;
+  if (hasPic(o)) return picToSVG(o, spec, clipId || ('pc' + o.id), gradId);
+  return (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
   if (bg) parts.push('<rect x="' + rnd(box.x, 3) + '" y="' + rnd(box.y, 3) + '" width="' + rnd(box.w, 3) + '" height="' + rnd(box.h, 3) + '" fill="' + esc(bg) + '"/>');
   let n = 0;
-  objs.forEach(o => { if (!o.hidden) parts.push(objToSVG(o, 'pc' + (++n))); });
+  objs.forEach(o => { if (!o.hidden) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });
   parts.push('</svg>');
   return parts.join('');
 }
@@ -990,10 +1137,13 @@ function combineShapes(op, list) {
     }
     acc.translate(new paper.Point(-bn.x, -bn.y));
     const base = list[0], d = acc.pathData;
-    return newShape('path', {
+    const res = newShape('path', {
       name: BOOL_NAME[op], x: bn.x, y: bn.y, w: bn.width, h: bn.height, nat: { d, w: bn.width, h: bn.height },
       fill: base.fill, stroke: base.stroke, sw: base.sw, opacity: base.opacity, join: base.join, dash: base.dash
     });
+    // The bottom shape's gradient comes along, stretched over the combined shape's box
+    if (hasGrad(base)) res.grad = cloneGrad(base.grad);
+    return res;
   } catch (err) {
     console.error(err);
     toast('Those shapes could not be combined. Try simplifying them first.');
@@ -1242,20 +1392,40 @@ function resetHistory() { hist.stack = []; hist.ids = []; hist.idx = -1; commit(
    Rendering: canvas objects
    ===================================================================== */
 const stage = $('#stage'), world = $('#world'), layerG = $('#layer'), ov = $('#overlay');
-const els = new Map(), clipEls = new Map(), picDefs = $('#pic-defs');
+const els = new Map(), clipEls = new Map(), gradEls = new Map(), picDefs = $('#pic-defs');
 const ATTR_KEYS = ['fill', 'stroke', 'stroke-width', 'stroke-linejoin', 'stroke-dasharray', 'stroke-linecap', 'opacity', 'rx', 'transform', 'href', 'preserveAspectRatio'];
 function applyAttrs(e, attrs) {
   ATTR_KEYS.forEach(k => { if (!(k in attrs)) setA(e, k, null); });
   for (const k in attrs) setA(e, k, attrs[k]);
 }
 
+// Keep an object's gradient definition in <defs> up to date; returns its id
+const GRAD_ATTRS = ['gradientUnits', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'fx', 'fy', 'gradientTransform'];
+function syncGrad(o) {
+  const spec = gradSpec(o), id = 'gr-' + o.id;
+  let ge = gradEls.get(o.id);
+  if (!ge || ge.tagName !== spec.tag) {
+    if (ge) ge.remove();
+    ge = svgEl(spec.tag, { id }); picDefs.appendChild(ge); gradEls.set(o.id, ge);
+  }
+  GRAD_ATTRS.forEach(k => setA(ge, k, k in spec.a ? spec.a[k] : null));
+  const key = JSON.stringify(spec.stops);
+  if (ge._stops !== key) {
+    ge._stops = key; ge.textContent = '';
+    spec.stops.forEach(st => ge.appendChild(svgEl('stop', st)));
+  }
+  return id;
+}
+
 function syncObjects() {
-  const seen = new Set(), clipSeen = new Set();
+  const seen = new Set(), clipSeen = new Set(), gradSeen = new Set();
   doc.objects.forEach(o => {
     seen.add(o.id);
     let g = els.get(o.id);
     if (!g) { g = svgEl('g'); g.dataset.id = o.id; els.set(o.id, g); }
-    const spec = geomSpec(o), st = styleAttrs(o);
+    const gid = hasGrad(o) ? syncGrad(o) : null;
+    if (gid) gradSeen.add(o.id);
+    const spec = geomSpec(o), st = styleAttrs(o, gid);
     if (!g._main || g._main.tagName !== spec.tag) {
       if (g._main) g._main.remove();
       g._main = svgEl(spec.tag);
@@ -1297,6 +1467,7 @@ function syncObjects() {
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
   clipEls.forEach((cp, id) => { if (!clipSeen.has(id)) { cp.remove(); clipEls.delete(id); } });
+  gradEls.forEach((ge, id) => { if (!gradSeen.has(id)) { ge.remove(); gradEls.delete(id); } });
   let ref = layerG.firstChild;
   doc.objects.forEach(o => {
     const g = els.get(o.id);
@@ -1863,6 +2034,7 @@ function perspEligible() {
   if (sel.some(o => o.locked)) return { why: 'Unlock the selected objects first.' };
   if (sel.some(o => o.kind === 'image' && !images.has(o.img))) return { why: 'That photo is not available any more.' };
   if (sel.some(o => hasPic(o) && !picCovers(o) && o.fill && o.fill !== 'none')) return { why: 'The photo has to fill the shape before it can be tilted. Choose Fit photo first.' };
+  if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
   return { objs: sel };
 }
 // Box coordinates (0,0 = top-left of the object's box) to page coordinates, through flip and turn
@@ -2388,7 +2560,17 @@ function updateInspector() {
   }
   if (n) {
     const a = sel.find(x => x.kind !== 'image') || sel[0], onlyLines = sel.every(x => x.kind === 'line'), onlyPhotos = sel.every(x => x.kind === 'image');
-    $('#row-fill').hidden = onlyLines || onlyPhotos; $('#palette').hidden = onlyLines || onlyPhotos;
+    const noFill = onlyLines || onlyPhotos, g = hasGrad(a) ? a.grad : null;
+    $('#row-filltype').hidden = noFill; $('#row-fill').hidden = noFill || !!g; $('#palette').hidden = noFill || !!g;
+    $('#grad-controls').hidden = noFill || !g;
+    $$('#fill-type button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ft === (g ? g.type : 'solid') ? 'true' : 'false'));
+    if (g) {
+      showColor('#gs-from', g.stops[0].c); showColor('#gs-to', g.stops[g.stops.length - 1].c);
+      $('#grad-bar').style.background = 'linear-gradient(90deg,' + g.stops.map(st => cssRgba(st.c, st.a) + ' ' + rnd(st.at * 100, 2) + '%').join(',') + ')';
+      const lin = g.type === 'linear';
+      $('#lb-grad-angle').textContent = lin ? 'Angle' : ''; $('#grad-angle').hidden = !lin;
+      if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
+    }
     ['#row-stroke', '#row-weight', '#row-corners'].forEach(s => { $(s).hidden = onlyPhotos; });
     const fill = a.fill && a.fill !== 'none' ? a.fill : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
     if (document.activeElement !== $('#fill-hex')) $('#fill-hex').value = fill ? toHex6(fill) : '';
@@ -2403,14 +2585,25 @@ function updateInspector() {
   }
 }
 
+function showColor(prefix, c) {
+  const h = $(prefix + '-hex');
+  if (document.activeElement !== h) h.value = toHex6(c);
+  $(prefix + '-color').value = toHex6(c);
+}
+function cssRgba(hex, a) {
+  const n = parseInt(toHex6(hex).slice(1), 16);
+  return a < 1 ? 'rgba(' + (n >> 16 & 255) + ',' + (n >> 8 & 255) + ',' + (n & 255) + ',' + rnd(a, 3) + ')' : toHex6(hex);
+}
+
 function forSel(fn) { selObjs().forEach(fn); }
 function rememberStyle(o) {
   if (!o) return;
-  if (o.kind !== 'line' && o.kind !== 'text') S.style.fill = o.fill;
+  if (o.kind !== 'line' && o.kind !== 'text') { S.style.fill = o.fill; S.style.grad = hasGrad(o) ? cloneGrad(o.grad) : null; }
   S.style.stroke = o.stroke === 'none' && o.kind === 'line' ? S.style.stroke : o.stroke;
   S.style.sw = o.sw || S.style.sw; S.style.join = o.join; S.style.dash = o.dash;
 }
-function styleSet(k, v) { forSel(o => { if (o.kind === 'image' && k !== 'opacity') return; o[k] = v; }); rememberStyle(selObjs().find(o => o.kind !== 'image')); render(); }
+// Choosing a plain fill color (or None) turns a gradient fill back into a solid one
+function styleSet(k, v) { forSel(o => { if (o.kind === 'image' && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(o => o.kind !== 'image')); render(); }
 
 // Geometry fields
 function onNum(inp, fn, resizes) {
@@ -2490,6 +2683,48 @@ function wireColor(colorId, hexId, noneId, key, fallback) {
   });
 }
 wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
+
+// Gradient fills. Gradient edits apply to every selected shape that has a gradient.
+const gradTargets = () => selObjs().filter(hasGrad);
+function setFillType(ft) {
+  const list = selObjs().filter(o => o.kind !== 'line' && o.kind !== 'image');
+  if (!list.length) return;
+  list.forEach(o => {
+    if (ft === 'solid') { delete o.grad; return; }   // o.fill already holds the first gradient color
+    if (hasGrad(o)) {
+      if (o.grad.type === ft) return;
+      const stops = o.grad.stops; o.grad = makeGrad(ft); o.grad.stops = stops;   // same colors, new shape
+    } else o.grad = makeGrad(ft, o.fill !== 'none' ? o.fill : null);
+    syncGradFill(o);
+  });
+  rememberStyle(list[0]); commit();
+}
+$$('#fill-type button').forEach(b => b.addEventListener('click', () => setFillType(b.dataset.ft)));
+function wireStop(prefix, last) {
+  const c = $(prefix + '-color'), h = $(prefix + '-hex');
+  const apply = v => {
+    const list = gradTargets();
+    list.forEach(o => { const st = o.grad.stops; st[last ? st.length - 1 : 0].c = v; syncGradFill(o); });
+    rememberStyle(list[0]);
+  };
+  c.addEventListener('input', () => { apply(c.value.toLowerCase()); render(); });
+  c.addEventListener('change', () => commit());
+  h.addEventListener('change', () => { const v = normHex(h.value.trim()); if (v) { apply(v); commit(); } else updateInspector(); });
+  h.addEventListener('keydown', e => { if (e.key === 'Enter') h.blur(); });
+}
+wireStop('#gs-from', false);
+wireStop('#gs-to', true);
+$('#grad-angle').addEventListener('change', e => {
+  const v = parseFloat(e.target.value), list = gradTargets().filter(o => o.grad.type === 'linear');
+  if (!isFinite(v) || !list.length) { updateInspector(); return; }
+  list.forEach(o => setGradAngle(o, normDeg(v)));
+  rememberStyle(list[0]); commit();
+});
+$('#grad-reverse').addEventListener('click', () => {
+  const list = gradTargets(); if (!list.length) return;
+  list.forEach(o => { reverseGrad(o.grad); syncGradFill(o); });
+  rememberStyle(list[0]); commit();
+});
 wireColor('#stroke-color', '#stroke-hex', '#stroke-none', 'stroke', '#151936');
 $('#stroke-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (!isFinite(v)) return updateInspector(); styleSet('sw', clamp(v, 0, 300)); commit(); });
 $('#stroke-dash').addEventListener('change', e => { styleSet('dash', e.target.value); commit(); });
@@ -2751,6 +2986,7 @@ function sanitizeDoc(d) {
       if (typeof r.pic.id === 'string' && images.has(r.pic.id)) o.pic = { id: r.pic.id, dx: num(r.pic.dx, 0, -1e5, 1e5), dy: num(r.pic.dy, 0, -1e5, 1e5), s: num(r.pic.s, 1, 0.001, 100) };
       else missingPhoto = true;
     }
+    if (o.kind !== 'line' && o.kind !== 'image' && r.grad) { const g = sanitizeGrad(r.grad); if (g) { o.grad = g; o.fill = g.stops[0].c; } }
     if (o.kind === 'rect') o.r = num(r.r, 0, 0, 1e5);
     if (o.kind === 'polygon') { o.sides = Math.round(num(r.sides, 5, 3, 24)); o.star = !!r.star; o.inner = num(r.inner, 0.45, 0.1, 0.95); }
     if (o.kind === 'line') { o.x1 = num(r.x1, 0, -1e6, 1e6); o.y1 = num(r.y1, 0, -1e6, 1e6); o.x2 = num(r.x2, 0, -1e6, 1e6); o.y2 = num(r.y2, 0, -1e6, 1e6); }
