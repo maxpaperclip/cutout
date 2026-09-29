@@ -67,8 +67,7 @@ function updateInspector() {
     $('#grad-controls').hidden = noFill || !g;
     $$('#fill-type button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ft === (g ? g.type : 'solid') ? 'true' : 'false'));
     if (g) {
-      showColor('#gs-from', g.stops[0].c); showColor('#gs-to', g.stops[g.stops.length - 1].c);
-      $('#grad-bar').style.background = 'linear-gradient(90deg,' + g.stops.map(st => cssRgba(st.c, st.a) + ' ' + rnd(st.at * 100, 2) + '%').join(',') + ')';
+      renderGradEditor(g);
       const lin = g.type === 'linear';
       $('#lb-grad-angle').textContent = lin ? 'Angle' : ''; $('#grad-angle').hidden = !lin;
       if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
@@ -188,6 +187,126 @@ wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
 
 // Gradient fills. Gradient edits apply to every selected shape that has a gradient.
 const gradTargets = () => selObjs().filter(hasGrad);
+// The shape whose gradient the editor shows (the same one the rest of Appearance shows)
+const gradPrimary = () => { const a = selObjs().find(x => x.kind !== 'image'); return a && hasGrad(a) ? a : null; };
+
+/* ---------- gradient color editor ----------
+   A bar showing the gradient, with a marker under it for each color. Click the bar to add a color,
+   drag a marker to move one, and use the Color and Opacity rows to change the selected one.
+   With several shapes selected, editing the colors gives them all the same colors; each keeps its
+   own direction. gSel is the selected marker's index; it lives here, not in the drawing. */
+let gSel = 0;
+const gStopsBox = $('#grad-stops'), gBar = $('#grad-bar');
+function renderGradEditor(g) {
+  const n = g.stops.length;
+  gSel = clamp(gSel, 0, n - 1);
+  $('#grad-fill').style.background = 'linear-gradient(90deg,' + g.stops.map(st => cssRgba(st.c, st.a) + ' ' + rnd(st.at * 100, 2) + '%').join(',') + ')';
+  gBar.classList.toggle('full', n >= GRAD_MAX_STOPS);
+  gBar.title = n >= GRAD_MAX_STOPS ? 'A gradient can have up to ' + GRAD_MAX_STOPS + ' colors' : 'Click to add a color here';
+  // Reuse the marker buttons so a marker being dragged keeps hold of the pointer
+  while (gStopsBox.children.length < n) gStopsBox.appendChild(makeStopButton());
+  while (gStopsBox.children.length > n) gStopsBox.lastChild.remove();
+  g.stops.forEach((st, i) => {
+    const b = gStopsBox.children[i];
+    b.dataset.i = i;
+    b.style.left = rnd(st.at * 100, 3) + '%';
+    b.style.setProperty('--c', cssRgba(st.c, st.a));
+    b.setAttribute('aria-pressed', i === gSel ? 'true' : 'false');
+    b.setAttribute('aria-label', 'Color ' + (i + 1) + ' of ' + n + ', ' + toHex6(st.c) + ', at ' + Math.round(st.at * 100) + '%' + (st.a < 1 ? ', ' + Math.round(st.a * 100) + '% opacity' : ''));
+    b.tabIndex = i === gSel ? 0 : -1;
+  });
+  const cur = g.stops[gSel];
+  showColor('#gs', cur.c);
+  if (document.activeElement !== $('#gs-alpha')) $('#gs-alpha').value = Math.round(cur.a * 100);
+  $('#gs-alpha-out').textContent = Math.round(cur.a * 100) + '%';
+  $('#gs-remove').disabled = n <= GRAD_MIN_STOPS;
+}
+// Change the shown gradient with fn(grad) -> index to select, then copy its colors to the other selected gradient shapes
+function editStops(fn) {
+  const a = gradPrimary(); if (!a) return false;
+  const i = fn(a.grad);
+  if (i < 0) return false;
+  gSel = i;
+  gradTargets().forEach(o => { if (o !== a) o.grad.stops = cloneGrad(a.grad).stops; syncGradFill(o); });
+  rememberStyle(a);
+  return true;
+}
+const barPos = x => { const r = gBar.getBoundingClientRect(); return r.width ? (x - r.left) / r.width : 0; };
+// Drag the selected marker with the pointer until it is let go; one undo step for the whole drag
+function dragStop(e, target, added) {
+  target.setPointerCapture(e.pointerId);
+  const x0 = e.clientX;
+  let moved = false;
+  const move = ev => {
+    if (!moved && Math.abs(ev.clientX - x0) < 3) return;
+    moved = true;
+    const at = barPos(ev.clientX);
+    if (editStops(g => moveGradStop(g, gSel, at))) render();
+  };
+  const up = () => {
+    target.removeEventListener('pointermove', move); target.removeEventListener('pointerup', up); target.removeEventListener('pointercancel', up);
+    if (moved || added) commit(); else render();
+    const b = gStopsBox.children[gSel]; if (b) b.focus({ preventScroll: true });
+  };
+  target.addEventListener('pointermove', move); target.addEventListener('pointerup', up); target.addEventListener('pointercancel', up);
+}
+function makeStopButton() {
+  const b = elt('button', 'gstop'); b.appendChild(elt('i'));
+  b.addEventListener('pointerdown', e => {
+    if (e.button > 0) return;
+    e.preventDefault(); e.stopPropagation();
+    gSel = +b.dataset.i; render();
+    dragStop(e, b, false);
+  });
+  // Keyboard focus selects the marker, so the arrow keys and Delete act on the one that has focus
+  b.addEventListener('focus', () => { const i = +b.dataset.i; if (i !== gSel) { gSel = i; render(); } });
+  b.addEventListener('keydown', e => {
+    const k = e.key;
+    if (k === 'ArrowLeft' || k === 'ArrowRight') {
+      e.preventDefault(); e.stopPropagation();
+      const a = gradPrimary(); if (!a) return;
+      const step = (e.shiftKey ? 0.1 : 0.01) * (k === 'ArrowLeft' ? -1 : 1);
+      if (editStops(g => moveGradStop(g, gSel, g.stops[gSel].at + step))) { commit(); gStopsBox.children[gSel].focus(); }
+    } else if (k === 'ArrowUp' || k === 'ArrowDown') {
+      // Move between markers, like a toolbar
+      e.preventDefault(); e.stopPropagation();
+      const n = gStopsBox.children.length;
+      gSel = clamp(gSel + (k === 'ArrowUp' ? -1 : 1), 0, n - 1); render(); gStopsBox.children[gSel].focus();
+    } else if (k === 'Delete' || k === 'Backspace') {
+      e.preventDefault(); e.stopPropagation();   // don't delete the whole shape
+      removeSelectedStop();
+      const nb = gStopsBox.children[gSel]; if (nb) nb.focus();
+    }
+  });
+  return b;
+}
+gBar.addEventListener('pointerdown', e => {
+  if (e.button > 0) return;
+  e.preventDefault();
+  const at = barPos(e.clientX);
+  const a = gradPrimary(); if (!a) return;
+  if (a.grad.stops.length >= GRAD_MAX_STOPS) { toast('A gradient can have up to ' + GRAD_MAX_STOPS + ' colors. Remove one to add another.'); return; }
+  if (!editStops(g => addGradStop(g, at))) return;
+  render();
+  dragStop(e, gBar, true);   // keep dragging to place the new color
+});
+function removeSelectedStop() {
+  if (editStops(g => removeGradStop(g, gSel))) commit();
+  else toast('A gradient needs at least two colors. Choose Solid for a single color.');
+}
+$('#gs-remove').addEventListener('click', removeSelectedStop);
+(function wireStopColor() {
+  const c = $('#gs-color'), h = $('#gs-hex'), al = $('#gs-alpha');
+  const setColor = v => editStops(g => { g.stops[gSel].c = v; return gSel; });
+  c.addEventListener('input', () => { if (setColor(c.value.toLowerCase())) render(); });
+  c.addEventListener('change', () => commit());
+  h.addEventListener('change', () => { const v = normHex(h.value.trim()); if (v && setColor(v)) commit(); else updateInspector(); });
+  h.addEventListener('keydown', e => { if (e.key === 'Enter') h.blur(); });
+  al.addEventListener('input', () => { if (editStops(g => { g.stops[gSel].a = clamp(al.value / 100, 0, 1); return gSel; })) render(); });
+  al.addEventListener('change', () => commit());
+})();
+// Arrow keys on a slider move the slider, not the selected shape
+['#gs-alpha', '#opacity'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.stopPropagation(); }));
 function setFillType(ft) {
   const list = selObjs().filter(o => o.kind !== 'line' && o.kind !== 'image');
   if (!list.length) return;
@@ -202,20 +321,6 @@ function setFillType(ft) {
   rememberStyle(list[0]); commit();
 }
 $$('#fill-type button').forEach(b => b.addEventListener('click', () => setFillType(b.dataset.ft)));
-function wireStop(prefix, last) {
-  const c = $(prefix + '-color'), h = $(prefix + '-hex');
-  const apply = v => {
-    const list = gradTargets();
-    list.forEach(o => { const st = o.grad.stops; st[last ? st.length - 1 : 0].c = v; syncGradFill(o); });
-    rememberStyle(list[0]);
-  };
-  c.addEventListener('input', () => { apply(c.value.toLowerCase()); render(); });
-  c.addEventListener('change', () => commit());
-  h.addEventListener('change', () => { const v = normHex(h.value.trim()); if (v) { apply(v); commit(); } else updateInspector(); });
-  h.addEventListener('keydown', e => { if (e.key === 'Enter') h.blur(); });
-}
-wireStop('#gs-from', false);
-wireStop('#gs-to', true);
 $('#grad-angle').addEventListener('change', e => {
   const v = parseFloat(e.target.value), list = gradTargets().filter(o => o.grad.type === 'linear');
   if (!isFinite(v) || !list.length) { updateInspector(); return; }
@@ -225,6 +330,7 @@ $('#grad-angle').addEventListener('change', e => {
 $('#grad-reverse').addEventListener('click', () => {
   const list = gradTargets(); if (!list.length) return;
   list.forEach(o => { reverseGrad(o.grad); syncGradFill(o); });
+  const a = gradPrimary(); if (a) gSel = a.grad.stops.length - 1 - gSel;   // keep the same color selected
   rememberStyle(list[0]); commit();
 });
 wireColor('#stroke-color', '#stroke-hex', '#stroke-none', 'stroke', '#151936');
