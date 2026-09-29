@@ -201,3 +201,36 @@ const groupLabel = g => g.name || 'Group';
 // Short forms for the app, which always works on the current drawing
 const isHidden = o => effHidden(doc, o);
 const isLocked = o => effLocked(doc, o);
+
+/* ---------- moving rows in the Layers tab ----------
+   Move whole units (objects or groups) to a new place in the tree, as when dragging rows in the
+   Layers tab. place is 'above' or 'below' the target (in the list, which shows the top of the
+   drawing first), or 'into' a target group, where they go on top of what is already inside.
+   Moving a group into itself, or into a group inside it, is refused. Returns true if anything moved. */
+function moveUnitsTo(d, ids, targetId, place) {
+  const root = buildTree(d);
+  const idOf = n => n.o ? n.o.id : n.g.id;
+  const found = new Map();   // id -> { node, parent }
+  (function index(n, parent) { n.children.forEach(c => { found.set(idOf(c), { node: c, parent: n }); if (c.g) index(c, c); }); })(root, root);
+  const target = found.get(targetId);
+  if (!target || (place === 'into' && !target.node.g)) return false;
+  // keep only the outermost of the moved units, in list order, and never the target itself
+  const moving = [];
+  (function pick(n) { n.children.forEach(c => { if (ids.has(idOf(c)) && idOf(c) !== targetId) moving.push(c); else if (c.g) pick(c); }); })(root);
+  if (!moving.length) return false;
+  // refuse to put a group inside itself
+  const inside = (outer, n) => outer.g && (outer === n || outer.children.some(c => inside(c, n)));
+  if (moving.some(m => inside(m, target.node))) return false;
+  moving.forEach(m => { const p = found.get(idOf(m)).parent; p.children.splice(p.children.indexOf(m), 1); });
+  let list, at, pid;
+  if (place === 'into') { list = target.node.children; at = 0; pid = target.node.g.id; }
+  else {
+    list = target.parent.children; at = list.indexOf(target.node) + (place === 'below' ? 1 : 0);
+    pid = target.parent === root ? null : target.parent.g.id;
+  }
+  list.splice(at, 0, ...moving);
+  moving.forEach(m => setNodeParent(m, pid));
+  d.objects = flattenTree(root);
+  normalizeGroups(d);
+  return true;
+}

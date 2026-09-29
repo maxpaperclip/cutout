@@ -64,6 +64,7 @@ function renderLayers() {
       if (layerOpen.has(n.g.id)) add(n.children, depth + 1);
     });
   })(tree.children, 0);
+  layersBox.appendChild(elt('p', 'help layer-tip', 'Drag a row to change the order, or onto a folder to put it inside. On a touch screen, press and hold first.'));
   markLayerSelection();
 }
 layersBox.addEventListener('click', e => {
@@ -91,3 +92,110 @@ layersBox.addEventListener('dblclick', e => {
   inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') finish(true); else if (ev.key === 'Escape') finish(false); });
   inp.addEventListener('blur', () => finish(true));
 });
+
+/* ---------- dragging rows to change the order ----------
+   Drag a row up or down the list to move it in the stacking order. A line shows where it will
+   land; over the middle of a folder, the folder lights up and the row goes inside it (on top).
+   Dragging a selected row moves everything selected with it. With a mouse or pen the drag starts
+   as soon as the row moves; with a finger, press and hold first, so a normal swipe still scrolls
+   the list. Esc cancels. (The Up / Down / Front / Back buttons do the same job from the keyboard.) */
+let rowDrag = null, skipClick = false;
+const dropClasses = ['drop-above', 'drop-below', 'drop-into'];
+const layersScroller = () => layersBox.closest('.pane') || layersBox;
+function clearDropMarks() { $$('.layer', layersBox).forEach(r => r.classList.remove(...dropClasses)); }
+function endRowDrag() {
+  const d = rowDrag; rowDrag = null;
+  if (!d) return;
+  clearTimeout(d.timer); cancelAnimationFrame(d.raf);
+  layersBox.classList.remove('dragging');
+  $$('.layer.dragged', layersBox).forEach(r => r.classList.remove('dragged'));
+  clearDropMarks();
+  try { layersBox.releasePointerCapture(d.pid); } catch (_) { /* ignore */ }
+}
+function startRowDrag() {
+  const d = rowDrag;
+  d.active = true;
+  // Moving a selected row moves the whole selection; otherwise just this row
+  const item = d.kind === 'g' ? groupById(doc, d.id) : byId(d.id);
+  const leaves = d.kind === 'g' ? groupLeaves(doc, d.id) : [item];
+  const picked = leaves.length && leaves.every(o => S.sel.has(o.id));
+  d.ids = picked ? new Set(selectionUnits(doc, S.sel).map(u => u.o ? u.o.id : u.g.id)) : new Set([d.id]);
+  layersBox.classList.add('dragging');
+  $$('.layer', layersBox).forEach(r => { if (d.ids.has(+r.dataset.id)) r.classList.add('dragged'); });
+  try { layersBox.setPointerCapture(d.pid); } catch (_) { /* ignore */ }
+  if (navigator.vibrate && d.touch) navigator.vibrate(10);
+  autoScroll();
+}
+// Scroll the list while the pointer is held near its top or bottom edge
+function autoScroll() {
+  const d = rowDrag; if (!d || !d.active) return;
+  const sc = layersScroller(), r = sc.getBoundingClientRect(), edge = 36;
+  if (d.y !== undefined) {
+    const v = d.y < r.top + edge ? -(r.top + edge - d.y) / 3 : d.y > r.bottom - edge ? (d.y - (r.bottom - edge)) / 3 : 0;
+    if (v) { sc.scrollTop += clamp(v, -14, 14); markDrop(d.y); }
+  }
+  d.raf = requestAnimationFrame(autoScroll);
+}
+// Work out where a drop at height y would go, and show it
+function markDrop(y) {
+  const d = rowDrag, rows = $$('.layer', layersBox);
+  clearDropMarks(); d.drop = null;
+  if (!rows.length) return;
+  let row = rows.find(r => { const b = r.getBoundingClientRect(); return y >= b.top && y < b.bottom; });
+  let place;
+  if (!row) {
+    const first = rows[0].getBoundingClientRect();
+    row = y < first.top ? rows[0] : rows[rows.length - 1];
+    place = y < first.top ? 'above' : 'below';
+  } else {
+    const b = row.getBoundingClientRect(), rel = (y - b.top) / b.height, isGroup = row.dataset.kind === 'g';
+    place = isGroup ? (rel < 0.28 ? 'above' : rel > 0.72 ? 'below' : 'into') : (rel < 0.5 ? 'above' : 'below');
+    if (isGroup && place === 'below' && layerOpen.has(+row.dataset.id)) place = 'into';   // just under an open folder is its top
+  }
+  const tid = +row.dataset.id;
+  // nowhere inside what is being dragged
+  const blocked = d.ids.has(tid) || [...d.ids].some(id => {
+    const tgt = row.dataset.kind === 'g' ? groupById(doc, tid) : byId(tid);
+    return tgt && groupById(doc, id) && ancestorsOf(doc, tgt).some(g => g.id === id);
+  });
+  if (blocked) return;
+  row.classList.add('drop-' + place);
+  d.drop = { id: tid, place };
+}
+layersBox.addEventListener('pointerdown', e => {
+  if (e.button > 0 || rowDrag) return;
+  const row = e.target.closest('.layer');
+  if (!row || e.target.closest('button, input')) return;   // the arrow, tick box, eye, lock and rename field keep their own jobs
+  rowDrag = { id: +row.dataset.id, kind: row.dataset.kind, x0: e.clientX, y0: e.clientY, pid: e.pointerId, touch: e.pointerType === 'touch', active: false };
+  if (rowDrag.touch) rowDrag.timer = setTimeout(() => { if (rowDrag && !rowDrag.active) { startRowDrag(); markDrop(rowDrag.y0); } }, 380);
+});
+window.addEventListener('pointermove', e => {
+  const d = rowDrag; if (!d || e.pointerId !== d.pid) return;
+  if (!d.active) {
+    const dist = Math.hypot(e.clientX - d.x0, e.clientY - d.y0);
+    if (d.touch) { if (dist > 8) endRowDrag(); return; }   // a finger that moves first is scrolling the list
+    if (dist < 5) return;
+    startRowDrag();
+  }
+  d.y = e.clientY;
+  markDrop(e.clientY);
+});
+// While a finger is dragging a row, stop the list from scrolling under it
+layersBox.addEventListener('touchmove', e => { if (rowDrag && rowDrag.active) e.preventDefault(); }, { passive: false });
+function finishRowDrag(e) {
+  const d = rowDrag; if (!d || (e && e.pointerId !== d.pid)) return;
+  const drop = d.active && e && e.type === 'pointerup' ? d.drop : null, ids = d.ids, was = d.active;
+  endRowDrag();
+  if (was) { skipClick = true; setTimeout(() => { skipClick = false; }, 0); }
+  if (drop && moveUnitsTo(doc, ids, drop.id, drop.place)) {
+    if (drop.place === 'into') layerOpen.add(drop.id);
+    commit();
+  }
+}
+window.addEventListener('pointerup', finishRowDrag);
+window.addEventListener('pointercancel', finishRowDrag);
+window.addEventListener('keydown', e => {
+  if (rowDrag && rowDrag.active && e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); endRowDrag(); }
+});
+// A drag ends with a click on the row it started from; that click shouldn't change the selection
+layersBox.addEventListener('click', e => { if (skipClick) { e.stopImmediatePropagation(); skipClick = false; } }, true);

@@ -54,7 +54,7 @@ const EXPORT_NAMES = [
   'pencilGeometry', 'pathIsOpen', 'isOpenPath', 'PENCIL',
   'groupById', 'ancestorsOf', 'effHidden', 'effLocked', 'groupLeaves', 'topGroupOf', 'buildTree',
   'flattenTree', 'normalizeGroups', 'selectionUnits', 'clickUnit', 'groupObjects', 'ungroupObjects',
-  'reorderUnits', 'copyWithGroups', 'groupsFilledBy', 'scaleAbout', 'rotateAbout', 'groupLabel',
+  'reorderUnits', 'copyWithGroups', 'groupsFilledBy', 'scaleAbout', 'rotateAbout', 'groupLabel', 'moveUnitsTo',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',

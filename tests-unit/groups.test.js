@@ -250,3 +250,71 @@ test('groups: other commands', async (t) => {
     assert.equal(d.objects.length, 1);
   });
 });
+
+test('groups: moving rows in the Layers tab (moveUnitsTo)', async (t) => {
+  // In the list the top of the drawing comes first, so 'above' means higher in the stack.
+  await t.test('an object moves above or below another', () => {
+    const { m, byName, order } = setup();
+    assert.equal(m.moveUnitsTo(m.doc, new Set([byName('A').id]), byName('D').id, 'above'), true);
+    assert.equal(order(), 'BCDAEF');
+    m.moveUnitsTo(m.doc, new Set([byName('A').id]), byName('B').id, 'below');
+    assert.equal(order(), 'ABCDEF');
+  });
+
+  await t.test('an object dropped into a group joins it, on top of what is inside', () => {
+    const { m, sel, byName, order } = setup();
+    const g = m.groupObjects(m.doc, sel('BC')).group;
+    m.moveUnitsTo(m.doc, new Set([byName('F').id]), g.id, 'into');
+    assert.equal(byName('F').parent, g.id);
+    assert.equal(order(), 'ABCFDE');
+  });
+
+  await t.test('dropping a member next to something outside takes it out of its group', () => {
+    const { m, sel, byName, order } = setup();
+    const g = m.groupObjects(m.doc, sel('BCD')).group;
+    m.moveUnitsTo(m.doc, new Set([byName('C').id]), byName('F').id, 'above');
+    assert.equal(byName('C').parent, undefined);
+    assert.equal(order(), 'ABDEFC');
+    assert.deepEqual(plain(m.groupLeaves(m.doc, g.id).map((o) => o.name)), ['B', 'D']);
+  });
+
+  await t.test('moving every member out one by one leaves an empty group, which goes away', () => {
+    const { m, sel, byName } = setup(3);
+    m.groupObjects(m.doc, sel('AB'));
+    m.moveUnitsTo(m.doc, new Set([byName('A').id]), byName('C').id, 'above');
+    assert.equal(m.doc.groups.length, 1);
+    m.moveUnitsTo(m.doc, new Set([byName('B').id]), byName('C').id, 'above');
+    assert.equal(m.doc.groups.length, 0);
+  });
+
+  await t.test('a whole group moves as one piece', () => {
+    const { m, sel, byName, order } = setup();
+    const g = m.groupObjects(m.doc, sel('AB')).group;
+    m.moveUnitsTo(m.doc, new Set([g.id]), byName('E').id, 'above');
+    assert.equal(order(), 'CDEABF');
+    assert.equal(byName('A').parent, g.id);
+  });
+
+  await t.test('several rows move together, keeping their order', () => {
+    const { m, byName, order } = setup();
+    m.moveUnitsTo(m.doc, new Set([byName('A').id, byName('C').id]), byName('F').id, 'above');
+    assert.equal(order(), 'BDEFAC');
+  });
+
+  await t.test('a group can\'t go inside itself or a group inside it', () => {
+    const { m, sel, order } = setup();
+    const inner = m.groupObjects(m.doc, sel('BC')).group;
+    const outer = m.groupObjects(m.doc, sel('BCD')).group;
+    const before = order();
+    assert.equal(m.moveUnitsTo(m.doc, new Set([outer.id]), inner.id, 'into'), false);
+    assert.equal(m.moveUnitsTo(m.doc, new Set([outer.id]), outer.id, 'into'), false);
+    assert.equal(order(), before);
+    assert.equal(inner.parent, outer.id);
+  });
+
+  await t.test('only groups accept things dropped into them', () => {
+    const { m, byName } = setup(3);
+    assert.equal(m.moveUnitsTo(m.doc, new Set([byName('A').id]), byName('C').id, 'into'), false);
+    assert.equal(m.moveUnitsTo(m.doc, new Set([byName('A').id]), 999, 'above'), false);
+  });
+});
