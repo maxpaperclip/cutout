@@ -62,6 +62,7 @@ function runBoolean(op) {
   const list = doc.objects.filter(o => S.sel.has(o.id));
   if (list.length < 2) { toast('Select two or more shapes first.'); return; }
   if (list.some(o => o.kind === 'image')) { toast('Photos can\u2019t be combined like shapes. Use \u201cUse shapes as mask\u201d to put a photo inside a shape.'); return; }
+  if (list.some(isOpenPath)) { toast('A drawn line that doesn\u2019t join up has no inside, so it can\u2019t be combined. To draw a shape, end the line where it started.'); return; }
   const res = combineShapes(op, list);
   if (!res) return;
   const hadPhoto = list.some(hasPic);
@@ -88,7 +89,7 @@ function useAsMask() {
   const sel = doc.objects.filter(o => S.sel.has(o.id));
   const pics = sel.filter(o => o.kind === 'image'), shapes = sel.filter(o => o.kind !== 'image');
   if (pics.length !== 1 || !shapes.length) { toast('Select one photo and the shape or text you want to use as the mask.'); return; }
-  if (shapes.some(o => o.kind === 'line')) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
+  if (shapes.some(o => o.kind === 'line' || isOpenPath(o))) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
   const im = pics[0], rec = images.get(im.img);
   if (!rec) { toast('That photo is not available any more.'); return; }
   let target = shapes[0];

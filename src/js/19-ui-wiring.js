@@ -52,7 +52,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.shiftKey && (k === 'h' || k === 'v')) { e.preventDefault(); mirrorSelected(k); return; }
-  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', t: 'text', d: 'perspective' };
+  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', n: 'pencil', t: 'text', d: 'perspective' };
   if (map[k]) { setTool(map[k]); e.preventDefault(); return; }
   if (k === 'enter' && S.tool === 'perspective' && !e.target.closest('button')) { e.preventDefault(); setTool('select'); refreshAll(); }
   else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }

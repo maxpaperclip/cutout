@@ -9,7 +9,7 @@ function strokeAttrs(o) {
     a['stroke-linejoin'] = o.join || 'miter';
     if (o.dash === 'dashed') a['stroke-dasharray'] = rnd(Math.max(sw, 1) * 3, 2) + ' ' + rnd(Math.max(sw, 1) * 2, 2);
     else if (o.dash === 'dotted') a['stroke-dasharray'] = '0 ' + rnd(Math.max(sw, 1) * 2, 2);
-    a['stroke-linecap'] = o.dash === 'dotted' ? 'round' : (o.kind === 'line' && o.dash === 'solid' ? 'round' : 'butt');
+    a['stroke-linecap'] = o.dash === 'dotted' ? 'round' : ((o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt');
   }
   return a;
 }

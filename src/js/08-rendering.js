@@ -69,10 +69,13 @@ function syncObjects() {
       setA(g, 'opacity', null);
     }
     setA(g, 'display', o.hidden ? 'none' : null);
-    if (o.kind === 'line') {
-      if (!g._hit) { g._hit = svgEl('line', { class: 'obj-hit' }); g.appendChild(g._hit); }
-      setA(g._hit, 'x1', spec.a.x1); setA(g._hit, 'y1', spec.a.y1); setA(g._hit, 'x2', spec.a.x2); setA(g._hit, 'y2', spec.a.y2);
-      setA(g._hit, 'stroke-width', rnd(Math.max(o.sw, 16 / view.z), 3));
+    // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
+    // invisible outline to click on, so thin strokes are easy to select
+    const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
+    if (outlineOnly) {
+      if (g._hit && g._hit.tagName !== spec.tag) { g._hit.remove(); g._hit = null; }
+      if (!g._hit) { g._hit = svgEl(spec.tag, { class: 'obj-hit' }); g.appendChild(g._hit); }
+      applyAttrs(g._hit, Object.assign({}, spec.a, { fill: null, stroke: null, 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }));
     } else if (g._hit) { g._hit.remove(); g._hit = null; }
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
@@ -120,6 +123,7 @@ function zoomCenter(f) { userView = true; const s = stageSize(); zoomAt(f, s.w /
 function drawOverlay() {
   if (S.tool === 'perspective') { perspOverlay(); return; }
   ov.textContent = '';
+  if (drag && drag.type === 'pencil') { pencilPreview(); return; }
   const z = view.z;
   if (drag && drag.type === 'marquee' && drag.cur) {
     const r = drag.rect();

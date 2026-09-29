@@ -50,6 +50,7 @@ const EXPORT_NAMES = [
   'hasGrad', 'makeGrad', 'cloneGrad', 'syncGradFill', 'gradAngle', 'setGradAngle',
   'reverseGrad', 'sanitizeGrad', 'shiftHue', 'normHex',
   'gradColorAt', 'addGradStop', 'removeGradStop', 'moveGradStop', 'GRAD_MAX_STOPS',
+  'pencilGeometry', 'pathIsOpen', 'isOpenPath', 'PENCIL',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',
