@@ -33,6 +33,7 @@ function readSrc(filename) {
 const MODULE_FILES = [
   '01-helpers.js',
   '04-document-model.js',
+  '04b-groups.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
 ];
@@ -51,6 +52,9 @@ const EXPORT_NAMES = [
   'reverseGrad', 'sanitizeGrad', 'shiftHue', 'normHex',
   'gradColorAt', 'addGradStop', 'removeGradStop', 'moveGradStop', 'GRAD_MAX_STOPS',
   'pencilGeometry', 'pathIsOpen', 'isOpenPath', 'PENCIL',
+  'groupById', 'ancestorsOf', 'effHidden', 'effLocked', 'groupLeaves', 'topGroupOf', 'buildTree',
+  'flattenTree', 'normalizeGroups', 'selectionUnits', 'clickUnit', 'groupObjects', 'ungroupObjects',
+  'reorderUnits', 'copyWithGroups', 'groupsFilledBy', 'scaleAbout', 'rotateAbout', 'groupLabel',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',

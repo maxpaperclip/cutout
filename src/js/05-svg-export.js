@@ -122,7 +122,7 @@ function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
   if (bg) parts.push('<rect x="' + rnd(box.x, 3) + '" y="' + rnd(box.y, 3) + '" width="' + rnd(box.w, 3) + '" height="' + rnd(box.h, 3) + '" fill="' + esc(bg) + '"/>');
   let n = 0;
-  objs.forEach(o => { if (!o.hidden) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });
+  objs.forEach(o => { if (!isHidden(o)) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });   // hidden, or inside a hidden group
   parts.push('</svg>');
   return parts.join('');
 }

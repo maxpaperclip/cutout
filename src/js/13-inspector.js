@@ -22,6 +22,9 @@ function updateInspector() {
   show('#sec-arrange', n > 0);
   $('#empty-hint').hidden = n > 0;
   $$('[data-bool]').forEach(b => { b.disabled = n < 2; });
+  const units = n ? selectionUnits(doc, S.sel) : [];
+  $('#btn-group').disabled = units.length < 2;
+  $('#btn-ungroup').disabled = !units.some(u => u.g);
   $('#btn-flatten').disabled = !(o && o.kind !== 'path' && o.kind !== 'line' && o.kind !== 'image');
   // photo mask controls
   const nPhoto = sel.filter(x => x.kind === 'image').length, nShape = n - nPhoto;
@@ -373,5 +376,7 @@ $$('[data-order]').forEach(b => b.addEventListener('click', () => orderSelected(
 $('#btn-flip-h').addEventListener('click', () => mirrorSelected('h'));
 $('#btn-flip-v').addEventListener('click', () => mirrorSelected('v'));
 $('#btn-dup').addEventListener('click', duplicateSelected);
+$('#btn-group').addEventListener('click', groupSelected);
+$('#btn-ungroup').addEventListener('click', ungroupSelected);
 $('#btn-del').addEventListener('click', deleteSelected);
 

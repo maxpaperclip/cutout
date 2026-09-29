@@ -9,6 +9,14 @@ function sanitizeDoc(d) {
   out.w = num(d.w, 800, 16, 8000); out.h = num(d.h, 600, 16, 8000);
   out.bg = d.bg === 'transparent' ? 'transparent' : col(d.bg, '#ffffff');
   let missingFont = false, missingPhoto = false;
+  // Groups get new ids, like objects do; gmap turns a file's group id into the new group
+  const gmap = new Map(), has = v => v !== null && v !== undefined && gmap.has(+v);
+  (Array.isArray(d.groups) ? d.groups.slice(0, 5000) : []).forEach(r => {
+    if (!r || !Number.isFinite(+r.id) || gmap.has(+r.id)) return;
+    const g = { id: out.nextId++, name: typeof r.name === 'string' ? r.name.slice(0, 60) : '', parent: r.parent, hidden: !!r.hidden, locked: !!r.locked };
+    gmap.set(+r.id, g); out.groups.push(g);
+  });
+  out.groups.forEach(g => { g.parent = has(g.parent) ? gmap.get(+g.parent).id : null; });
   (Array.isArray(d.objects) ? d.objects : []).forEach(r => {
     if (!r || KINDS.indexOf(r.kind) < 0) return;
     const o = {
@@ -19,6 +27,7 @@ function sanitizeDoc(d) {
       hidden: !!r.hidden, locked: !!r.locked
     };
     if (o.kind !== 'line') { if (r.fx) o.fx = true; if (r.fy) o.fy = true; }
+    if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (o.kind === 'image') {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
@@ -42,6 +51,7 @@ function sanitizeDoc(d) {
     }
     try { refresh(o); out.objects.push(o); } catch (e) { /* skip broken objects */ }
   });
+  normalizeGroups(out);
   out._missingFont = missingFont; out._missingPhoto = missingPhoto;
   return out;
 }

@@ -68,7 +68,7 @@ function syncObjects() {
       if (g._edge) { g._edge.remove(); g._edge = null; }
       setA(g, 'opacity', null);
     }
-    setA(g, 'display', o.hidden ? 'none' : null);
+    setA(g, 'display', isHidden(o) ? 'none' : null);   // hidden, or inside a hidden group
     // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
     const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
@@ -129,7 +129,7 @@ function drawOverlay() {
     const r = drag.rect();
     ov.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'ov-line ov-fill' }));
   }
-  const sel = selObjs().filter(o => !o.hidden);
+  const sel = selObjs().filter(o => !isHidden(o));
   if (!sel.length || (drag && drag.type === 'marquee')) return;
   const hs = 9 / z;
   if (sel.length === 1) {
@@ -152,13 +152,27 @@ function drawOverlay() {
       ov.appendChild(g);
     }
   } else {
-    sel.forEach(o => {
+    // Several objects, or a group. A whole group gets one solid box; a loose selection shows each
+    // object's outline and a dashed box around them all. Either way the corners scale everything
+    // together and the round handle turns it (see "moving several objects as one").
+    const units = selectionUnits(doc, new Set(sel.map(o => o.id))), oneGroup = units.length === 1 && !!units[0].g;
+    if (!oneGroup) sel.forEach(o => {
       if (o.kind === 'line') { ov.appendChild(svgEl('line', { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, class: 'ov-line' })); return; }
       const c = centerOf(o);
       ov.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line', transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null }));
     });
-    const u = unionBox(sel);
-    ov.appendChild(svgEl('rect', { x: u.x, y: u.y, width: u.w, height: u.h, class: 'ov-line ov-dash' }));
+    const turning = drag && drag.type === 'mrotate';
+    const u = turning ? drag.u0 : unionBox(sel), cx = u.x + u.w / 2, cy = u.y + u.h / 2;
+    const g = svgEl('g', { transform: turning && drag.theta ? 'rotate(' + rnd(drag.theta, 3) + ' ' + cx + ' ' + cy + ')' : null });
+    g.appendChild(svgEl('rect', { x: u.x, y: u.y, width: u.w, height: u.h, class: oneGroup ? 'ov-line' : 'ov-line ov-dash' }));
+    if (!sel.some(isLocked)) {
+      [['mnw', 0, 0], ['mne', 1, 0], ['mse', 1, 1], ['msw', 0, 1]].forEach(([n, hx, hy]) =>
+        g.appendChild(svgEl('rect', { x: u.x + hx * u.w - hs / 2, y: u.y + hy * u.h - hs / 2, width: hs, height: hs, rx: hs * 0.18, class: 'handle', 'data-h': n })));
+      const ry = u.y - 26 / z;
+      g.appendChild(svgEl('line', { x1: cx, y1: u.y, x2: cx, y2: ry, class: 'ov-line' }));
+      g.appendChild(svgEl('circle', { cx, cy: ry, r: 5.5 / z, class: 'handle rot', 'data-h': 'mrot' }));
+    }
+    ov.appendChild(g);
   }
 }
 
