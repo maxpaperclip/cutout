@@ -22,11 +22,13 @@ src/
     03-fonts-runtime.js Parses FONT_DATA into usable fonts (opentype.js)
     04-document-model.js
     04b-groups.js       Groups (folders in Layers): kept beside the flat object list
+    04c-path-edit.js    Path geometry shared by the Pen tool and point editing
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     07-history-autosave.js  Undo/redo + IndexedDB persistence
     08-rendering.js
     09-pointer-interaction.js
+    09b-pen.js          Pen tool and point editing (pointer and keyboard handling)
     10-perspective.js
     11-editing-commands.js
     12-ui-chrome.js

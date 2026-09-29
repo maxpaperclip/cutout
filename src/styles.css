@@ -151,9 +151,15 @@ input:disabled,select:disabled{opacity:.45}
 #empty .btns{display:flex;gap:8px;flex-wrap:wrap}
 
 #busy{position:fixed;inset:0;z-index:90;cursor:progress}
-#persp-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
-#persp-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
-#persp-bar .btn{flex:none}
+#persp-bar,#path-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
+#persp-bar span,#path-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
+#persp-bar .btn,#path-bar .btn{flex:none}
+/* Pen and point editing */
+.pe-hit{fill:none;stroke:transparent;pointer-events:stroke;cursor:copy}
+.handle.pe-pt{cursor:move}
+.handle.pe-pt.on{fill:var(--accent)}
+.handle.pe-knob{fill:var(--accent);stroke:var(--handle)}
+.pe-close{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:none}
 
 /* ---------- panel ---------- */
 .tabs{display:flex;gap:2px;padding:8px 10px 0;border-bottom:1px solid var(--line)}
