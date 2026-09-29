@@ -163,6 +163,51 @@ function sanitizeGrad(r) {
   return g;
 }
 
+/* ---------- freehand drawing (pencil) ----------
+   The pencil records the pointer's path, then smooths it into a few curves with paper.js's
+   simplify(). The result is an ordinary 'path' object, so it can be moved, resized, turned,
+   recolored and edited like any other shape. A stroke that ends close to where it began is
+   closed into a loop and filled; otherwise it stays an open line with no fill. */
+const PENCIL = {
+  tolerance: 2.5,   // how far (screen pixels) the smoothed curve may stray from the pointer's path
+  closeGap: 14,     // end this close (screen pixels) to the start to close the loop
+  minStep: 1.5      // ignore pointer moves smaller than this (screen pixels)
+};
+// points: page coordinates. z: the current zoom, so smoothing feels the same at any zoom.
+// Returns { d, x, y, w, h, closed } with d in box coordinates, or null for a stroke too small to keep.
+function pencilGeometry(points, z) {
+  z = z || 1;
+  const pts = [];
+  points.forEach(p => { const q = pts[pts.length - 1]; if (!q || Math.hypot(p.x - q.x, p.y - q.y) * z >= PENCIL.minStep) pts.push({ x: p.x, y: p.y }); });
+  if (pts.length < 2) return null;
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  if (len * z < 4) return null;
+  const a = pts[0], b = pts[pts.length - 1];
+  const closed = pts.length > 3 && Math.hypot(b.x - a.x, b.y - a.y) * z <= PENCIL.closeGap && len * z > PENCIL.closeGap * 4;
+  if (closed) pts.pop();   // the loop closes back to the first point by itself
+  const path = new paper.Path({ segments: pts.map(p => [p.x, p.y]), insert: false });
+  if (closed) path.closed = true;
+  if (path.segments.length > 2) path.simplify(PENCIL.tolerance / z);
+  const bn = path.bounds;
+  path.translate(new paper.Point(-bn.x, -bn.y));
+  return { d: path.pathData, x: bn.x, y: bn.y, w: Math.max(bn.width, 0.01), h: Math.max(bn.height, 0.01), closed };
+}
+// True when some part of a path doesn't join back up to its start (a pencil line, for example).
+// Such paths have no inside, so they can't be combined or used as photo masks.
+const openCache = new Map();
+function pathIsOpen(d) {
+  if (typeof d !== 'string' || !d) return false;
+  let v = openCache.get(d);
+  if (v === undefined) {
+    v = d.split(/(?=[Mm])/).some(sub => /[^\s]/.test(sub) && !/[Zz]\s*$/.test(sub));
+    openCache.set(d, v);
+    if (openCache.size > 200) openCache.delete(openCache.keys().next().value);
+  }
+  return v;
+}
+const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
+
 /* ---------- geometry builders ---------- */
 function buildText(o) {
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;

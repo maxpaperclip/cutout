@@ -52,6 +52,7 @@ stage.addEventListener('pointermove', e => {
     case 'pan': userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); break;
     case 'move': updateMove(p, e); break;
     case 'draw': updateDraw(p, e); break;
+    case 'pencil': updatePencil(p); break;
     case 'resize': updateResize(p, e); break;
     case 'rotate': updateRotate(p, e); break;
     case 'lineend': updateLineEnd(p, e); break;
@@ -73,6 +74,7 @@ function endPointer(e) {
       else refreshAll();
       break;
     case 'draw': finishDraw(d, e); break;
+    case 'pencil': finishPencil(d); break;
     case 'resize': case 'rotate': case 'lineend': commit(); break;
     case 'persp': perspRelease(d); break;
     case 'marquee': refreshAll(); break;
@@ -171,6 +173,7 @@ function updateMarquee(p) {
 /* ---------- drawing ---------- */
 function beginDraw(e, p) {
   if (S.tool === 'text') { createText(p); return; }
+  if (S.tool === 'pencil') { beginPencil(p); return; }
   drag = { type: 'draw', tool: S.tool, start: snapPt(p), sx: e.clientX, sy: e.clientY, id: null };
 }
 function makeDrawn(tool, box) {
@@ -216,6 +219,37 @@ function finishDraw(d, e) {
     doc.objects.push(o); S.sel = new Set([o.id]);
   }
   setTool('select');
+  commit();
+}
+/* ---------- pencil ----------
+   Draws freehand. The raw path is shown as it is drawn, then smoothed into a shape on release
+   (see pencilGeometry). The pencil stays selected so several strokes can be drawn in a row. */
+const pencilStroke = () => S.style.stroke === 'none' ? '#151936' : S.style.stroke;
+const pencilWidth = () => Math.max(S.style.sw, 3);
+function beginPencil(p) {
+  S.sel = new Set();
+  drag = { type: 'pencil', pts: [p], d: 'M' + rnd(p.x, 2) + ' ' + rnd(p.y, 2) };
+  drawOverlay(); updateInspector(); renderLayers();
+}
+function updatePencil(p) {
+  const q = drag.pts[drag.pts.length - 1];
+  if (Math.hypot(p.x - q.x, p.y - q.y) * view.z < 1) return;
+  drag.pts.push(p); drag.d += 'L' + rnd(p.x, 2) + ' ' + rnd(p.y, 2);
+  if (drag.el) setA(drag.el, 'd', drag.d); else drawOverlay();
+}
+// The stroke as it is being drawn, in the pencil's own color (called from drawOverlay)
+function pencilPreview() {
+  drag.el = svgEl('path', { d: drag.d, fill: 'none', stroke: pencilStroke(), 'stroke-width': pencilWidth(), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'pointer-events': 'none' });
+  ov.appendChild(drag.el);
+}
+function finishPencil(d) {
+  const g = pencilGeometry(d.pts, view.z);
+  if (!g) { drawOverlay(); return; }
+  const props = { name: g.closed ? 'Drawn shape' : 'Drawn line', x: g.x, y: g.y, w: g.w, h: g.h, nat: { d: g.d, w: g.w, h: g.h },
+    stroke: pencilStroke(), sw: pencilWidth(), join: 'round' };
+  if (!g.closed) props.fill = 'none';   // a closed loop takes the current fill (and gradient) like any new shape
+  const o = newShape('path', props);
+  doc.objects.push(o); S.sel = new Set([o.id]);
   commit();
 }
 function constrainAngle(a, b) {

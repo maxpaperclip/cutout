@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.7.0</title>
+<title>Cutout v1.8.0</title>
 <style>
 
 :root{
@@ -323,6 +323,7 @@ input:disabled,select:disabled{opacity:.45}
     <button class="tool" data-tool="polygon" title="Polygon (P)" aria-label="Polygon tool"><span class="ico" data-icon="polygon"></span></button>
     <button class="tool" data-tool="star" title="Star (S)" aria-label="Star tool"><span class="ico" data-icon="star"></span></button>
     <button class="tool" data-tool="line" title="Line (L)" aria-label="Line tool"><span class="ico" data-icon="line"></span></button>
+    <button class="tool" data-tool="pencil" title="Pencil (N). Draw freely; end where you started to make a filled shape." aria-label="Pencil tool"><span class="ico" data-icon="pencil"></span></button>
     <div class="tool-sep"></div>
     <button class="tool" data-tool="text" title="Text (T)" aria-label="Text tool"><span class="ico" data-icon="text"></span></button>
     <div class="tool-sep"></div>
@@ -585,7 +586,7 @@ input:disabled,select:disabled{opacity:.45}
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
-        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · T text · D perspective.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
+        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · N pencil · T text · D perspective.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
@@ -657,7 +658,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.7.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.8.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -698,6 +699,7 @@ const ICONS = {
   polygon: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   line: '<path d="M5.5 18.5l13-13"/><circle cx="5.5" cy="18.5" r="1.3"/><circle cx="18.5" cy="5.5" r="1.3"/>',
+  pencil: '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
   perspective: '<path d="M8.5 5h7l4.5 14H4z"/><path d="M12 5v14" stroke-dasharray="2 2.4" opacity=".55"/>',
   path: '<path d="M4 16c3-9 6-9 8-4s5 5 8-4"/>',
@@ -930,6 +932,51 @@ function sanitizeGrad(r) {
   return g;
 }
 
+/* ---------- freehand drawing (pencil) ----------
+   The pencil records the pointer's path, then smooths it into a few curves with paper.js's
+   simplify(). The result is an ordinary 'path' object, so it can be moved, resized, turned,
+   recolored and edited like any other shape. A stroke that ends close to where it began is
+   closed into a loop and filled; otherwise it stays an open line with no fill. */
+const PENCIL = {
+  tolerance: 2.5,   // how far (screen pixels) the smoothed curve may stray from the pointer's path
+  closeGap: 14,     // end this close (screen pixels) to the start to close the loop
+  minStep: 1.5      // ignore pointer moves smaller than this (screen pixels)
+};
+// points: page coordinates. z: the current zoom, so smoothing feels the same at any zoom.
+// Returns { d, x, y, w, h, closed } with d in box coordinates, or null for a stroke too small to keep.
+function pencilGeometry(points, z) {
+  z = z || 1;
+  const pts = [];
+  points.forEach(p => { const q = pts[pts.length - 1]; if (!q || Math.hypot(p.x - q.x, p.y - q.y) * z >= PENCIL.minStep) pts.push({ x: p.x, y: p.y }); });
+  if (pts.length < 2) return null;
+  let len = 0;
+  for (let i = 1; i < pts.length; i++) len += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+  if (len * z < 4) return null;
+  const a = pts[0], b = pts[pts.length - 1];
+  const closed = pts.length > 3 && Math.hypot(b.x - a.x, b.y - a.y) * z <= PENCIL.closeGap && len * z > PENCIL.closeGap * 4;
+  if (closed) pts.pop();   // the loop closes back to the first point by itself
+  const path = new paper.Path({ segments: pts.map(p => [p.x, p.y]), insert: false });
+  if (closed) path.closed = true;
+  if (path.segments.length > 2) path.simplify(PENCIL.tolerance / z);
+  const bn = path.bounds;
+  path.translate(new paper.Point(-bn.x, -bn.y));
+  return { d: path.pathData, x: bn.x, y: bn.y, w: Math.max(bn.width, 0.01), h: Math.max(bn.height, 0.01), closed };
+}
+// True when some part of a path doesn't join back up to its start (a pencil line, for example).
+// Such paths have no inside, so they can't be combined or used as photo masks.
+const openCache = new Map();
+function pathIsOpen(d) {
+  if (typeof d !== 'string' || !d) return false;
+  let v = openCache.get(d);
+  if (v === undefined) {
+    v = d.split(/(?=[Mm])/).some(sub => /[^\s]/.test(sub) && !/[Zz]\s*$/.test(sub));
+    openCache.set(d, v);
+    if (openCache.size > 200) openCache.delete(openCache.keys().next().value);
+  }
+  return v;
+}
+const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
+
 /* ---------- geometry builders ---------- */
 function buildText(o) {
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
@@ -1043,7 +1090,7 @@ function strokeAttrs(o) {
     a['stroke-linejoin'] = o.join || 'miter';
     if (o.dash === 'dashed') a['stroke-dasharray'] = rnd(Math.max(sw, 1) * 3, 2) + ' ' + rnd(Math.max(sw, 1) * 2, 2);
     else if (o.dash === 'dotted') a['stroke-dasharray'] = '0 ' + rnd(Math.max(sw, 1) * 2, 2);
-    a['stroke-linecap'] = o.dash === 'dotted' ? 'round' : (o.kind === 'line' && o.dash === 'solid' ? 'round' : 'butt');
+    a['stroke-linecap'] = o.dash === 'dotted' ? 'round' : ((o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt');
   }
   return a;
 }
@@ -1225,6 +1272,7 @@ function runBoolean(op) {
   const list = doc.objects.filter(o => S.sel.has(o.id));
   if (list.length < 2) { toast('Select two or more shapes first.'); return; }
   if (list.some(o => o.kind === 'image')) { toast('Photos can\u2019t be combined like shapes. Use \u201cUse shapes as mask\u201d to put a photo inside a shape.'); return; }
+  if (list.some(isOpenPath)) { toast('A drawn line that doesn\u2019t join up has no inside, so it can\u2019t be combined. To draw a shape, end the line where it started.'); return; }
   const res = combineShapes(op, list);
   if (!res) return;
   const hadPhoto = list.some(hasPic);
@@ -1251,7 +1299,7 @@ function useAsMask() {
   const sel = doc.objects.filter(o => S.sel.has(o.id));
   const pics = sel.filter(o => o.kind === 'image'), shapes = sel.filter(o => o.kind !== 'image');
   if (pics.length !== 1 || !shapes.length) { toast('Select one photo and the shape or text you want to use as the mask.'); return; }
-  if (shapes.some(o => o.kind === 'line')) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
+  if (shapes.some(o => o.kind === 'line' || isOpenPath(o))) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
   const im = pics[0], rec = images.get(im.img);
   if (!rec) { toast('That photo is not available any more.'); return; }
   let target = shapes[0];
@@ -1523,10 +1571,13 @@ function syncObjects() {
       setA(g, 'opacity', null);
     }
     setA(g, 'display', o.hidden ? 'none' : null);
-    if (o.kind === 'line') {
-      if (!g._hit) { g._hit = svgEl('line', { class: 'obj-hit' }); g.appendChild(g._hit); }
-      setA(g._hit, 'x1', spec.a.x1); setA(g._hit, 'y1', spec.a.y1); setA(g._hit, 'x2', spec.a.x2); setA(g._hit, 'y2', spec.a.y2);
-      setA(g._hit, 'stroke-width', rnd(Math.max(o.sw, 16 / view.z), 3));
+    // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
+    // invisible outline to click on, so thin strokes are easy to select
+    const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
+    if (outlineOnly) {
+      if (g._hit && g._hit.tagName !== spec.tag) { g._hit.remove(); g._hit = null; }
+      if (!g._hit) { g._hit = svgEl(spec.tag, { class: 'obj-hit' }); g.appendChild(g._hit); }
+      applyAttrs(g._hit, Object.assign({}, spec.a, { fill: null, stroke: null, 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }));
     } else if (g._hit) { g._hit.remove(); g._hit = null; }
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
@@ -1574,6 +1625,7 @@ function zoomCenter(f) { userView = true; const s = stageSize(); zoomAt(f, s.w /
 function drawOverlay() {
   if (S.tool === 'perspective') { perspOverlay(); return; }
   ov.textContent = '';
+  if (drag && drag.type === 'pencil') { pencilPreview(); return; }
   const z = view.z;
   if (drag && drag.type === 'marquee' && drag.cur) {
     const r = drag.rect();
@@ -1666,6 +1718,7 @@ stage.addEventListener('pointermove', e => {
     case 'pan': userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); break;
     case 'move': updateMove(p, e); break;
     case 'draw': updateDraw(p, e); break;
+    case 'pencil': updatePencil(p); break;
     case 'resize': updateResize(p, e); break;
     case 'rotate': updateRotate(p, e); break;
     case 'lineend': updateLineEnd(p, e); break;
@@ -1687,6 +1740,7 @@ function endPointer(e) {
       else refreshAll();
       break;
     case 'draw': finishDraw(d, e); break;
+    case 'pencil': finishPencil(d); break;
     case 'resize': case 'rotate': case 'lineend': commit(); break;
     case 'persp': perspRelease(d); break;
     case 'marquee': refreshAll(); break;
@@ -1785,6 +1839,7 @@ function updateMarquee(p) {
 /* ---------- drawing ---------- */
 function beginDraw(e, p) {
   if (S.tool === 'text') { createText(p); return; }
+  if (S.tool === 'pencil') { beginPencil(p); return; }
   drag = { type: 'draw', tool: S.tool, start: snapPt(p), sx: e.clientX, sy: e.clientY, id: null };
 }
 function makeDrawn(tool, box) {
@@ -1830,6 +1885,37 @@ function finishDraw(d, e) {
     doc.objects.push(o); S.sel = new Set([o.id]);
   }
   setTool('select');
+  commit();
+}
+/* ---------- pencil ----------
+   Draws freehand. The raw path is shown as it is drawn, then smoothed into a shape on release
+   (see pencilGeometry). The pencil stays selected so several strokes can be drawn in a row. */
+const pencilStroke = () => S.style.stroke === 'none' ? '#151936' : S.style.stroke;
+const pencilWidth = () => Math.max(S.style.sw, 3);
+function beginPencil(p) {
+  S.sel = new Set();
+  drag = { type: 'pencil', pts: [p], d: 'M' + rnd(p.x, 2) + ' ' + rnd(p.y, 2) };
+  drawOverlay(); updateInspector(); renderLayers();
+}
+function updatePencil(p) {
+  const q = drag.pts[drag.pts.length - 1];
+  if (Math.hypot(p.x - q.x, p.y - q.y) * view.z < 1) return;
+  drag.pts.push(p); drag.d += 'L' + rnd(p.x, 2) + ' ' + rnd(p.y, 2);
+  if (drag.el) setA(drag.el, 'd', drag.d); else drawOverlay();
+}
+// The stroke as it is being drawn, in the pencil's own color (called from drawOverlay)
+function pencilPreview() {
+  drag.el = svgEl('path', { d: drag.d, fill: 'none', stroke: pencilStroke(), 'stroke-width': pencilWidth(), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'pointer-events': 'none' });
+  ov.appendChild(drag.el);
+}
+function finishPencil(d) {
+  const g = pencilGeometry(d.pts, view.z);
+  if (!g) { drawOverlay(); return; }
+  const props = { name: g.closed ? 'Drawn shape' : 'Drawn line', x: g.x, y: g.y, w: g.w, h: g.h, nat: { d: g.d, w: g.w, h: g.h },
+    stroke: pencilStroke(), sw: pencilWidth(), join: 'round' };
+  if (!g.closed) props.fill = 'none';   // a closed loop takes the current fill (and gradient) like any new shape
+  const o = newShape('path', props);
+  doc.objects.push(o); S.sel = new Set([o.id]);
   commit();
 }
 function constrainAngle(a, b) {
@@ -3378,7 +3464,7 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.shiftKey && (k === 'h' || k === 'v')) { e.preventDefault(); mirrorSelected(k); return; }
-  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', t: 'text', d: 'perspective' };
+  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', n: 'pencil', t: 'text', d: 'perspective' };
   if (map[k]) { setTool(map[k]); e.preventDefault(); return; }
   if (k === 'enter' && S.tool === 'perspective' && !e.target.closest('button')) { e.preventDefault(); setTool('select'); refreshAll(); }
   else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
