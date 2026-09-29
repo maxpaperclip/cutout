@@ -9,6 +9,8 @@ const ICONS = {
   polygon: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   line: '<path d="M5.5 18.5l13-13"/><circle cx="5.5" cy="18.5" r="1.3"/><circle cx="18.5" cy="5.5" r="1.3"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+  chev: '<path d="M9 6l6 6-6 6"/>',
   pencil: '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
   perspective: '<path d="M8.5 5h7l4.5 14H4z"/><path d="M12 5v14" stroke-dasharray="2 2.4" opacity=".55"/>',

@@ -21,6 +21,7 @@ src/
     02-icons.js
     03-fonts-runtime.js Parses FONT_DATA into usable fonts (opentype.js)
     04-document-model.js
+    04b-groups.js       Groups (folders in Layers): kept beside the flat object list
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     07-history-autosave.js  Undo/redo + IndexedDB persistence

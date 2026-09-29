@@ -189,7 +189,7 @@ const PERSP_HINT = 'Drag a corner to tilt the selection. Hold Shift to move two 
 function perspEligible() {
   const sel = selObjs();
   if (!sel.length) return { why: 'Select a shape, some text, a photo or a few objects, then drag a corner to tilt them.' };
-  if (sel.some(o => o.locked)) return { why: 'Unlock the selected objects first.' };
+  if (sel.some(isLocked)) return { why: 'Unlock the selected objects first.' };
   if (sel.some(o => o.kind === 'image' && !images.has(o.img))) return { why: 'That photo is not available any more.' };
   if (sel.some(o => hasPic(o) && !picCovers(o) && o.fill && o.fill !== 'none')) return { why: 'The photo has to fill the shape before it can be tilted. Choose Fit photo first.' };
   if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
@@ -494,8 +494,9 @@ function perspDown(e, p) {
   const multi = e.shiftKey || e.metaKey || e.ctrlKey;
   const g = e.target.closest && e.target.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
-  if (o && !o.locked && !o.hidden) {
-    if (multi && S.sel.has(o.id)) S.sel.delete(o.id); else if (multi) S.sel.add(o.id); else S.sel = new Set([o.id]);
+  if (o && !isLocked(o) && !isHidden(o)) {
+    const unit = clickUnit(doc, o).filter(x => !isLocked(x) && !isHidden(x)).map(x => x.id);   // a whole group, as on the canvas
+    if (multi && S.sel.has(o.id)) unit.forEach(id => S.sel.delete(id)); else if (multi) unit.forEach(id => S.sel.add(id)); else S.sel = new Set(unit);
   } else if (!multi) S.sel = new Set();
   refreshAll();
 }

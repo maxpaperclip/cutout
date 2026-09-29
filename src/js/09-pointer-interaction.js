@@ -39,7 +39,7 @@ stage.addEventListener('pointerdown', e => {
   if (h) { beginHandle(h.dataset.h, p, e); return; }
   const g = e.target.closest && e.target.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
-  if (o && !o.locked && !o.hidden) { beginMove(o, p, e); return; }
+  if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
   beginMarquee(p, e);
 });
 
@@ -56,6 +56,8 @@ stage.addEventListener('pointermove', e => {
     case 'resize': updateResize(p, e); break;
     case 'rotate': updateRotate(p, e); break;
     case 'lineend': updateLineEnd(p, e); break;
+    case 'mscale': updateMultiScale(p); break;
+    case 'mrotate': updateMultiRotate(p, e); break;
     case 'persp': updatePersp(p, e); break;
     case 'marquee': updateMarquee(p, e); break;
   }
@@ -70,12 +72,12 @@ function endPointer(e) {
   switch (d.type) {
     case 'move':
       if (d.moved) commit();
-      else if (d.collapseTo && !d.shift) { S.sel = new Set([d.collapseTo]); refreshAll(); }
+      else if (d.collapseTo && !d.shift) { S.sel = new Set(d.collapseTo); refreshAll(); }
       else refreshAll();
       break;
     case 'draw': finishDraw(d, e); break;
     case 'pencil': finishPencil(d); break;
-    case 'resize': case 'rotate': case 'lineend': commit(); break;
+    case 'resize': case 'rotate': case 'lineend': case 'mscale': case 'mrotate': commit(); break;
     case 'persp': perspRelease(d); break;
     case 'marquee': refreshAll(); break;
     default: drawOverlay();
@@ -93,9 +95,15 @@ stage.addEventListener('wheel', e => {
 }, { passive: false });
 stage.addEventListener('dblclick', e => {
   if (S.tool !== 'select') return;
-  const g = e.target.closest && e.target.closest('[data-id]');
+  // The stage holds on to the pointer during a click (for dragging), so the browser reports the
+  // double-click as coming from the stage itself. Ask what is actually under the pointer instead.
+  const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
+  const g = under.closest && under.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
-  if (o && o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+  if (!o || isLocked(o) || isHidden(o)) return;
+  // Double-click picks just this object, even inside a group; for text it also opens the editor
+  if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+  else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
 });
 
 /* ---------- pinch to zoom / two-finger pan ---------- */
@@ -121,15 +129,19 @@ function updatePinch() {
 /* ---------- select / move ---------- */
 function beginMove(o, p, e) {
   const multi = e.shiftKey || e.metaKey || e.ctrlKey;
+  // A click picks the object's whole group. If just this object was picked (by double-clicking
+  // into its group), it stays picked on its own, so it can be moved by itself.
+  const unit = clickUnit(doc, o).filter(x => !isLocked(x) && !isHidden(x)).map(x => x.id);
+  const whole = unit.every(id => S.sel.has(id));
   let collapseTo = null;
   if (multi) {
-    if (S.sel.has(o.id)) { S.sel.delete(o.id); refreshAll(); return; }
-    S.sel.add(o.id);
-  } else if (!S.sel.has(o.id)) S.sel = new Set([o.id]);
-  else if (S.sel.size > 1) collapseTo = o.id;
+    if (S.sel.has(o.id)) { (whole ? unit : [o.id]).forEach(id => S.sel.delete(id)); refreshAll(); return; }
+    unit.forEach(id => S.sel.add(id));
+  } else if (!S.sel.has(o.id)) S.sel = new Set(unit);
+  else if (selectionUnits(doc, S.sel).length > 1) collapseTo = whole ? unit : [o.id];
   drag = {
     type: 'move', start: p, sx: e.clientX, sy: e.clientY, moved: false, shift: multi, collapseTo,
-    orig: selObjs().filter(x => !x.locked).map(x => ({ id: x.id, x: x.x, y: x.y, x1: x.x1, y1: x.y1, x2: x.x2, y2: x.y2 }))
+    orig: selObjs().filter(x => !isLocked(x)).map(x => ({ id: x.id, x: x.x, y: x.y, x1: x.x1, y1: x.y1, x2: x.x2, y2: x.y2 }))
   };
   refreshAll();
 }
@@ -162,9 +174,10 @@ function updateMarquee(p) {
   drag.cur = p;
   const r = drag.rect(), sel = new Set(drag.base);
   doc.objects.forEach(o => {
-    if (o.hidden || o.locked) return;
+    if (isHidden(o) || isLocked(o)) return;
     const b = aabb(o);
-    if (b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y) sel.add(o.id);
+    // touching any part of a group picks up the whole group
+    if (b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y) clickUnit(doc, o).forEach(x => { if (!isHidden(x) && !isLocked(x)) sel.add(x.id); });
   });
   S.sel = sel;
   drawOverlay(); updateInspector(); renderLayers();
@@ -269,6 +282,7 @@ function focusText() {
 
 /* ---------- resize / rotate / line ends ---------- */
 function beginHandle(h, p, e) {
+  if (h[0] === 'm') { beginMultiHandle(h, p); return; }
   const o = one(); if (!o) return;
   if (h === 'rot') {
     const c = centerOf(o);
@@ -278,6 +292,37 @@ function beginHandle(h, p, e) {
   } else {
     drag = { type: 'resize', id: o.id, h, o0: { x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot, size: o.size }, pic0: o.pic ? Object.assign({}, o.pic) : null };
   }
+}
+/* ---------- moving several objects as one ----------
+   The handles around a group or a multiple selection. Corners scale everything in proportion
+   from the opposite corner; the round handle turns everything around the middle. Each move
+   starts again from the snapshot taken when the drag began (see scaleAbout / rotateAbout). */
+function beginMultiHandle(h, p) {
+  const sel = selObjs().filter(o => !isHidden(o));
+  if (!sel.length || sel.some(isLocked)) return;
+  const u0 = unionBox(sel), o0 = new Map(sel.map(o => [o.id, JSON.parse(JSON.stringify(o))]));
+  if (h === 'mrot') {
+    const cx = u0.x + u0.w / 2, cy = u0.y + u0.h / 2;
+    drag = { type: 'mrotate', u0, o0, cx, cy, a0: Math.atan2(p.y - cy, p.x - cx) / D2R, theta: 0 };
+  } else {
+    drag = { type: 'mscale', u0, o0, ax: h.includes('w') ? u0.x + u0.w : u0.x, ay: h.includes('n') ? u0.y + u0.h : u0.y, sx: h.includes('w') ? -1 : 1, sy: h.includes('n') ? -1 : 1 };
+  }
+}
+function updateMultiScale(p) {
+  const d = drag, ks = [];
+  if (d.u0.w > 1) ks.push((p.x - d.ax) * d.sx / d.u0.w);   // a very flat selection scales by its other side
+  if (d.u0.h > 1) ks.push((p.y - d.ay) * d.sy / d.u0.h);
+  const k = Math.max(ks.length ? Math.max(...ks) : 1, MIN / Math.max(1, Math.min(d.u0.w || 1, d.u0.h || 1)), 0.02);
+  d.o0.forEach((s, id) => { const o = byId(id); if (o) scaleAbout(o, s, d.ax, d.ay, k); });
+  render();
+}
+function updateMultiRotate(p, e) {
+  const d = drag;
+  let t = Math.atan2(p.y - d.cy, p.x - d.cx) / D2R - d.a0;
+  if (e.shiftKey) t = Math.round(t / 15) * 15;
+  d.theta = normDeg(t);
+  d.o0.forEach((s, id) => { const o = byId(id); if (o) rotateAbout(o, s, d.cx, d.cy, d.theta); });
+  render();
 }
 function updateRotate(p, e) {
   const o = byId(drag.id); if (!o) return;

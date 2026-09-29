@@ -4,7 +4,7 @@
    rect / ellipse: drawn natively.   polygon / text / path: an SVG path `d`
    in local coordinates (0,0 = top-left of the box).   line: two endpoints.
    ===================================================================== */
-const blankDoc = () => ({ w: 800, h: 600, bg: '#ffffff', nextId: 1, objects: [] });
+const blankDoc = () => ({ w: 800, h: 600, bg: '#ffffff', nextId: 1, objects: [], groups: [] });   // groups: see 04b-groups.js
 let doc = blankDoc();
 const S = {
   tool: 'select', sel: new Set(), snap: true, showGrid: true, grid: 20, clip: null, pasteN: 0,

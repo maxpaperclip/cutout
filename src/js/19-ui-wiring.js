@@ -46,6 +46,7 @@ window.addEventListener('keydown', e => {
     if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (k === 'y') { e.preventDefault(); redo(); }
     else if (k === 'd') { e.preventDefault(); duplicateSelected(); }
+    else if (k === 'g') { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
     else if (k === 'a') { e.preventDefault(); selectAll(); }
     else if (k === 'c') { copySelected(); }
     else if (k === 'v') { pasteClipboard(); }

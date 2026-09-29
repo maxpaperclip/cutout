@@ -138,6 +138,7 @@ async function restoreSession() {
 }
 
 function commit() {
+  normalizeGroups(doc);   // every change passes through here, so groups always stay tidy
   const s = JSON.stringify(doc);
   if (hist.stack[hist.idx] !== s) {
     hist.stack.length = hist.idx + 1; hist.ids.length = hist.idx + 1;
@@ -150,6 +151,7 @@ function commit() {
 }
 function loadSnapshot(str) {
   doc = JSON.parse(str);
+  if (!Array.isArray(doc.groups)) doc.groups = [];   // snapshots from before groups existed
   S.sel = new Set(Array.from(S.sel).filter(id => byId(id)));
   refreshAll();
 }

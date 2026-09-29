@@ -271,11 +271,15 @@
           <button class="btn line" data-order="backward" title="Send backward ([)">Down</button>
           <button class="btn line" data-order="back" title="Send to back">Back</button>
         </div>
+        <div class="inline" style="margin-bottom:8px">
+          <button class="btn line" id="btn-group" style="flex:1" title="Put the selection in a group (Ctrl+G)">Group</button>
+          <button class="btn line" id="btn-ungroup" style="flex:1" title="Take the selected group apart (Ctrl+Shift+G)">Ungroup</button>
+        </div>
         <div class="inline">
           <button class="btn line" id="btn-dup" style="flex:1">Duplicate</button>
           <button class="btn line" id="btn-del" style="flex:1;color:var(--danger)">Delete</button>
         </div>
-        <p class="help">With one object selected, Align lines it up with the page. With several, it lines them up with each other. Mirror flips an object in place, or a whole selection as one group.</p>
+        <p class="help">With one object or group selected, Align lines it up with the page. With several, it lines them up with each other. Mirror flips an object in place, or a whole selection as one piece. Click a grouped object to pick its whole group; double-click to pick just that object.</p>
       </section>
     </div>
 
@@ -318,7 +322,7 @@
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
-        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · N pencil · T text · D perspective.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
+        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · N pencil · T text · D perspective.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>

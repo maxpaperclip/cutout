@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.8.0</title>
+<title>Cutout v1.9.0</title>
 <style>
 
 :root{
@@ -239,6 +239,17 @@ input:disabled,select:disabled{opacity:.45}
 .layer .btn.icon{width:28px;height:28px}
 .layer .btn .ico{width:16px;height:16px}
 .layer input[type=checkbox]{margin:0 4px 0 0;flex:none}
+/* Folders (groups): rows are indented by how deep they sit, and a folder opens with its arrow */
+.layer{padding-left:calc(6px + var(--depth, 0) * 16px)}
+.layer .twisty,.layer .twisty-gap{flex:none;width:22px;height:28px}
+.layer .twisty{display:grid;place-items:center;padding:0;border:0;border-radius:6px;background:none;color:var(--ink-2);cursor:pointer}
+.layer .twisty:hover{background:var(--chrome-2)}
+.layer .twisty .ico{width:14px;height:14px;transition:transform .12s}
+.layer .twisty[aria-expanded="true"] .ico{transform:rotate(90deg)}
+.layer .twisty svg{fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.layer.grp .lname{font-weight:600}
+.layer .lcount{margin-left:6px;color:var(--ink-3);font-weight:400;font-size:11px}
+.layer.part{background:linear-gradient(90deg,var(--accent-soft) 3px,transparent 3px)}
 
 /* ---------- export dialog ---------- */
 #export-overlay{position:fixed;inset:0;z-index:60;display:grid;place-items:center;padding:16px;background:rgba(10,12,30,.5)}
@@ -539,11 +550,15 @@ input:disabled,select:disabled{opacity:.45}
           <button class="btn line" data-order="backward" title="Send backward ([)">Down</button>
           <button class="btn line" data-order="back" title="Send to back">Back</button>
         </div>
+        <div class="inline" style="margin-bottom:8px">
+          <button class="btn line" id="btn-group" style="flex:1" title="Put the selection in a group (Ctrl+G)">Group</button>
+          <button class="btn line" id="btn-ungroup" style="flex:1" title="Take the selected group apart (Ctrl+Shift+G)">Ungroup</button>
+        </div>
         <div class="inline">
           <button class="btn line" id="btn-dup" style="flex:1">Duplicate</button>
           <button class="btn line" id="btn-del" style="flex:1;color:var(--danger)">Delete</button>
         </div>
-        <p class="help">With one object selected, Align lines it up with the page. With several, it lines them up with each other. Mirror flips an object in place, or a whole selection as one group.</p>
+        <p class="help">With one object or group selected, Align lines it up with the page. With several, it lines them up with each other. Mirror flips an object in place, or a whole selection as one piece. Click a grouped object to pick its whole group; double-click to pick just that object.</p>
       </section>
     </div>
 
@@ -586,7 +601,7 @@ input:disabled,select:disabled{opacity:.45}
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
-        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · N pencil · T text · D perspective.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
+        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · N pencil · T text · D perspective.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
@@ -658,7 +673,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.8.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.9.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -699,6 +714,8 @@ const ICONS = {
   polygon: '<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
   line: '<path d="M5.5 18.5l13-13"/><circle cx="5.5" cy="18.5" r="1.3"/><circle cx="18.5" cy="5.5" r="1.3"/>',
+  folder: '<path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2v7.5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/>',
+  chev: '<path d="M9 6l6 6-6 6"/>',
   pencil: '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
   perspective: '<path d="M8.5 5h7l4.5 14H4z"/><path d="M12 5v14" stroke-dasharray="2 2.4" opacity=".55"/>',
@@ -773,7 +790,7 @@ const fontOf = key => (fonts[key] || fonts[DEFAULT_FONT] || fonts[Object.keys(fo
    rect / ellipse: drawn natively.   polygon / text / path: an SVG path `d`
    in local coordinates (0,0 = top-left of the box).   line: two endpoints.
    ===================================================================== */
-const blankDoc = () => ({ w: 800, h: 600, bg: '#ffffff', nextId: 1, objects: [] });
+const blankDoc = () => ({ w: 800, h: 600, bg: '#ffffff', nextId: 1, objects: [], groups: [] });   // groups: see 04b-groups.js
 let doc = blankDoc();
 const S = {
   tool: 'select', sel: new Set(), snap: true, showGrid: true, grid: 20, clip: null, pasteN: 0,
@@ -1080,6 +1097,209 @@ function moveBy(o, dx, dy) {
 }
 
 /* =====================================================================
+   Groups (shown as folders in the Layers tab)
+   The drawing stays one flat list, doc.objects, in stacking order (bottom first). That is what
+   rendering, export, Combine and Perspective work on, so none of them need to know about groups.
+   Groups are kept beside it:
+     doc.groups = [{ id, name, parent, hidden, locked }]   parent: the id of the group it sits in, or null
+     o.parent   = the id of the group an object sits in (absent when it isn't in one)
+   Groups and objects share one id counter (doc.nextId), so an id means one thing only.
+   normalizeGroups() keeps this tidy: it drops empty groups and broken links, and keeps each
+   group's members next to each other in the stacking order, gathered where its top member is.
+   Most functions here take the drawing (d) as an argument so they can be tested on their own.
+   ===================================================================== */
+const groupById = (d, id) => (id === undefined || id === null) ? null : d.groups.find(g => g.id === id) || null;
+// The groups an object (or group) sits in, innermost first
+function ancestorsOf(d, item) {
+  const out = [], seen = new Set();
+  let g = groupById(d, item.parent);
+  while (g && !seen.has(g.id)) { out.push(g); seen.add(g.id); g = groupById(d, g.parent); }
+  return out;
+}
+// Hidden or locked when the object is, or any group it sits in is
+const effHidden = (d, o) => !!o.hidden || ancestorsOf(d, o).some(g => g.hidden);
+const effLocked = (d, o) => !!o.locked || ancestorsOf(d, o).some(g => g.locked);
+const inGroup = (d, o, gid) => ancestorsOf(d, o).some(g => g.id === gid);
+// Every object inside a group, including inside the groups within it, bottom first
+const groupLeaves = (d, gid) => d.objects.filter(o => inGroup(d, o, gid));
+// The outermost group an object sits in, or null
+function topGroupOf(d, o) { const a = ancestorsOf(d, o); return a.length ? a[a.length - 1] : null; }
+
+/* ---------- the tree ----------
+   Built fresh from the flat list whenever it is needed. A node is { g, children } for a group or
+   { o } for an object; children are listed top first, the way the Layers tab shows them. */
+function buildTree(d) {
+  const root = { children: [] }, nodes = new Map();
+  for (let i = d.objects.length - 1; i >= 0; i--) {
+    const o = d.objects[i];
+    let at = root;
+    ancestorsOf(d, o).reverse().forEach(g => {
+      let n = nodes.get(g.id);
+      if (!n) { n = { g, children: [] }; nodes.set(g.id, n); at.children.push(n); }
+      at = n;
+    });
+    at.children.push({ o });
+  }
+  return root;
+}
+// Back to the flat stacking order (bottom first)
+function flattenTree(root) {
+  const out = [];
+  (function walk(n) { for (let i = n.children.length - 1; i >= 0; i--) { const c = n.children[i]; if (c.o) out.push(c.o); else walk(c); } })(root);
+  return out;
+}
+function nodeLeaves(n) {
+  if (n.o) return [n.o];
+  const out = [];
+  n.children.forEach(c => out.push(...nodeLeaves(c)));
+  return out;
+}
+const nodeParent = n => n.o ? (n.o.parent !== undefined ? n.o.parent : null) : n.g.parent;
+const setNodeParent = (n, pid) => { const t = n.o || n.g; if (pid === null || pid === undefined) { if (n.o) delete t.parent; else t.parent = null; } else t.parent = pid; };
+
+// Repair and tidy the groups. Safe to run any time; returns d.
+function normalizeGroups(d) {
+  if (!Array.isArray(d.groups)) d.groups = [];
+  const ids = new Set(d.groups.map(g => g.id));
+  d.groups.forEach(g => { if (g.parent === undefined || !ids.has(g.parent) || g.parent === g.id) g.parent = null; });
+  // break any loop of groups sitting inside each other
+  d.groups.forEach(g => {
+    const seen = new Set([g.id]);
+    let p = groupById(d, g.parent);
+    while (p) { if (seen.has(p.id)) { g.parent = null; break; } seen.add(p.id); p = groupById(d, p.parent); }
+  });
+  d.objects.forEach(o => { if (o.parent !== undefined && !ids.has(o.parent)) delete o.parent; });
+  // a group with nothing in it is removed
+  const used = new Set();
+  d.objects.forEach(o => ancestorsOf(d, o).forEach(g => used.add(g.id)));
+  if (used.size !== d.groups.length) d.groups = d.groups.filter(g => used.has(g.id));
+  d.objects = flattenTree(buildTree(d));
+  return d;
+}
+
+/* ---------- selection units ----------
+   The selection is always a set of objects. A "unit" is what a command should treat as one
+   thing: a whole group when all of it is selected, otherwise a single object. */
+function selectionUnits(d, sel) {
+  const units = [];
+  const visit = n => {
+    if (n.o) { if (sel.has(n.o.id)) units.push(n); return; }
+    const leaves = nodeLeaves(n);
+    if (leaves.length && leaves.every(o => sel.has(o.id))) { units.push(n); return; }
+    n.children.forEach(visit);
+  };
+  buildTree(d).children.forEach(visit);   // the drawing itself is never a unit
+  return units;
+}
+// What a click on an object selects: its whole outermost group, or just the object
+function clickUnit(d, o) { const g = topGroupOf(d, o); return g ? groupLeaves(d, g.id) : [o]; }
+
+// Put the selected units into a new group. Returns the new group, or null (with the reason in .why).
+function groupObjects(d, sel) {
+  const units = selectionUnits(d, sel);
+  const count = units.reduce((n, u) => n + nodeLeaves(u).length, 0);
+  if (units.length < 2) {
+    return { why: count ? 'Select two or more things to group.' : 'Select the things you want to group.' };
+  }
+  const parents = new Set(units.map(nodeParent));
+  const parent = parents.size === 1 ? [...parents][0] : null;   // stay inside the shared group, if there is one
+  const g = { id: d.nextId++, name: '', parent, hidden: false, locked: false };
+  d.groups.push(g);
+  units.forEach(u => setNodeParent(u, g.id));
+  normalizeGroups(d);
+  return { group: g };
+}
+// Take apart the selected groups; what was inside moves up one level. Returns the number undone.
+function ungroupObjects(d, sel) {
+  const gone = selectionUnits(d, sel).filter(u => u.g).map(u => u.g);
+  if (!gone.length) return 0;
+  const ids = new Set(gone.map(g => g.id));
+  const up = id => { let p = id; while (p !== null && ids.has(p)) p = groupById(d, p).parent; return p; };
+  d.objects.forEach(o => { if (o.parent !== undefined && ids.has(o.parent)) setNodeParent({ o }, up(o.parent)); });
+  d.groups.forEach(g => { if (!ids.has(g.id) && g.parent !== null && ids.has(g.parent)) g.parent = up(g.parent); });
+  d.groups = d.groups.filter(g => !ids.has(g.id));
+  normalizeGroups(d);
+  return gone.length;
+}
+
+/* ---------- stacking order by unit ----------
+   Bring forward / send backward / to front / to back move whole selected units among their
+   siblings, so a group stays in one piece and never mixes with things outside it. */
+function reorderUnits(d, sel, how) {
+  const root = buildTree(d);
+  const picked = n => nodeLeaves(n).length > 0 && nodeLeaves(n).every(o => sel.has(o.id));
+  (function walk(n) {
+    const ch = n.children;   // top first
+    if (how === 'front') n.children = ch.filter(picked).concat(ch.filter(c => !picked(c)));
+    else if (how === 'back') n.children = ch.filter(c => !picked(c)).concat(ch.filter(picked));
+    else if (how === 'forward') { for (let i = 1; i < ch.length; i++) if (picked(ch[i]) && !picked(ch[i - 1])) { const t = ch[i]; ch[i] = ch[i - 1]; ch[i - 1] = t; i++; } }
+    else if (how === 'backward') { for (let i = ch.length - 2; i >= 0; i--) if (picked(ch[i]) && !picked(ch[i + 1])) { const t = ch[i]; ch[i] = ch[i + 1]; ch[i + 1] = t; i--; } }
+    n.children.forEach(c => { if (c.g && !picked(c)) walk(c); });
+  })(root);
+  d.objects = flattenTree(root);
+}
+
+/* ---------- copies ----------
+   Copy objects along with any groups they fill completely, giving everything new ids.
+   keepParent: for Duplicate, a copy of part of a group stays in that group. */
+function copyWithGroups(d, objs, groups, keepParent) {
+  const gmap = new Map();
+  const newGroups = groups.map(g => { const c = { id: d.nextId++, name: g.name, parent: g.parent, hidden: !!g.hidden, locked: !!g.locked }; gmap.set(g.id, c.id); return c; });
+  const liveIds = new Set(d.groups.map(g => g.id));
+  const remap = pid => gmap.has(pid) ? gmap.get(pid) : (keepParent && liveIds.has(pid) ? pid : undefined);
+  newGroups.forEach(g => { const p = remap(g.parent); g.parent = p === undefined ? null : p; });
+  const newObjs = objs.map(o => {
+    const c = JSON.parse(JSON.stringify(o));
+    c.id = d.nextId++;
+    const p = remap(o.parent);
+    if (p === undefined) delete c.parent; else c.parent = p;
+    return c;
+  });
+  return { objects: newObjs, groups: newGroups };
+}
+// The groups that the given objects fill completely (for copying a selection)
+function groupsFilledBy(d, objs) {
+  const ids = new Set(objs.map(o => o.id));
+  return d.groups.filter(g => { const l = groupLeaves(d, g.id); return l.length && l.every(o => ids.has(o.id)); });
+}
+
+/* ---------- moving several objects as one ----------
+   Scaling and turning a selection (or group) about a point, from a snapshot taken when the drag
+   began (o0), so repeated moves never add up rounding errors. Scaling is always proportional:
+   a turned object can be scaled evenly, but stretching it one way would need a skew, which
+   Cutout's objects can't hold. Outline widths, corner rounding, text size and photo fills
+   scale along with the shapes. */
+function scaleAbout(o, o0, ax, ay, k) {
+  if (o0.sw !== undefined) o.sw = rnd(o0.sw * k, 3);
+  if (o.kind === 'line') {
+    o.x1 = ax + (o0.x1 - ax) * k; o.y1 = ay + (o0.y1 - ay) * k; o.x2 = ax + (o0.x2 - ax) * k; o.y2 = ay + (o0.y2 - ay) * k;
+    refresh(o); return;
+  }
+  const cx = ax + (o0.x + o0.w / 2 - ax) * k, cy = ay + (o0.y + o0.h / 2 - ay) * k;
+  if (o.kind === 'text') { o.size = Math.max(1, rnd(o0.size * k, 3)); refresh(o); }
+  else {
+    o.w = Math.max(o0.w * k, 0.01); o.h = Math.max(o0.h * k, 0.01);
+    if (o.kind === 'rect') o.r = (o0.r || 0) * k;
+    refresh(o);
+  }
+  o.x = cx - o.w / 2; o.y = cy - o.h / 2;
+  if (o0.pic && o.pic) rescalePic(o, o0.pic, k, k);
+}
+function rotateAbout(o, o0, cx, cy, deg) {
+  if (o.kind === 'line') {
+    const a = rotPt(o0.x1, o0.y1, cx, cy, deg), b = rotPt(o0.x2, o0.y2, cx, cy, deg);
+    o.x1 = a.x; o.y1 = a.y; o.x2 = b.x; o.y2 = b.y; refresh(o); return;
+  }
+  const c = rotPt(o0.x + o0.w / 2, o0.y + o0.h / 2, cx, cy, deg);
+  o.x = c.x - o0.w / 2; o.y = c.y - o0.h / 2;
+  o.rot = rnd(normDeg((o0.rot || 0) + deg), 2);
+}
+const groupLabel = g => g.name || 'Group';
+
+// Short forms for the app, which always works on the current drawing
+const isHidden = o => effHidden(doc, o);
+const isLocked = o => effLocked(doc, o);
+/* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
    ===================================================================== */
 function strokeAttrs(o) {
@@ -1203,7 +1423,7 @@ function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
   if (bg) parts.push('<rect x="' + rnd(box.x, 3) + '" y="' + rnd(box.y, 3) + '" width="' + rnd(box.w, 3) + '" height="' + rnd(box.h, 3) + '" fill="' + esc(bg) + '"/>');
   let n = 0;
-  objs.forEach(o => { if (!o.hidden) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });
+  objs.forEach(o => { if (!isHidden(o)) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });   // hidden, or inside a hidden group
   parts.push('</svg>');
   return parts.join('');
 }
@@ -1264,6 +1484,7 @@ function combineShapes(op, list) {
 // Swap the listed objects for one new object, placed where the bottom-most of them was
 function replaceObjects(list, res) {
   const at = doc.objects.indexOf(list[0]), gone = new Set(list.map(o => o.id));
+  if (list[0].parent !== undefined) res.parent = list[0].parent;   // stays in the bottom shape's group
   doc.objects = doc.objects.filter(o => !gone.has(o.id));
   doc.objects.splice(Math.min(at, doc.objects.length), 0, res);
   S.sel = new Set([res.id]);
@@ -1327,6 +1548,7 @@ function releaseMask() {
   const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: c.x + r.x - pw / 2, y: c.y + r.y - ph / 2, w: pw, h: ph, rot: o.rot, opacity: 1, hidden: false, locked: false };
   if (o.fx) im.fx = true;
   if (o.fy) im.fy = true;
+  if (o.parent !== undefined) im.parent = o.parent;
   delete o.pic;
   doc.objects.splice(doc.objects.indexOf(o), 0, im);
   S.sel = new Set([im.id, o.id]);
@@ -1480,6 +1702,7 @@ async function restoreSession() {
 }
 
 function commit() {
+  normalizeGroups(doc);   // every change passes through here, so groups always stay tidy
   const s = JSON.stringify(doc);
   if (hist.stack[hist.idx] !== s) {
     hist.stack.length = hist.idx + 1; hist.ids.length = hist.idx + 1;
@@ -1492,6 +1715,7 @@ function commit() {
 }
 function loadSnapshot(str) {
   doc = JSON.parse(str);
+  if (!Array.isArray(doc.groups)) doc.groups = [];   // snapshots from before groups existed
   S.sel = new Set(Array.from(S.sel).filter(id => byId(id)));
   refreshAll();
 }
@@ -1570,7 +1794,7 @@ function syncObjects() {
       if (g._edge) { g._edge.remove(); g._edge = null; }
       setA(g, 'opacity', null);
     }
-    setA(g, 'display', o.hidden ? 'none' : null);
+    setA(g, 'display', isHidden(o) ? 'none' : null);   // hidden, or inside a hidden group
     // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
     const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
@@ -1631,7 +1855,7 @@ function drawOverlay() {
     const r = drag.rect();
     ov.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'ov-line ov-fill' }));
   }
-  const sel = selObjs().filter(o => !o.hidden);
+  const sel = selObjs().filter(o => !isHidden(o));
   if (!sel.length || (drag && drag.type === 'marquee')) return;
   const hs = 9 / z;
   if (sel.length === 1) {
@@ -1654,13 +1878,27 @@ function drawOverlay() {
       ov.appendChild(g);
     }
   } else {
-    sel.forEach(o => {
+    // Several objects, or a group. A whole group gets one solid box; a loose selection shows each
+    // object's outline and a dashed box around them all. Either way the corners scale everything
+    // together and the round handle turns it (see "moving several objects as one").
+    const units = selectionUnits(doc, new Set(sel.map(o => o.id))), oneGroup = units.length === 1 && !!units[0].g;
+    if (!oneGroup) sel.forEach(o => {
       if (o.kind === 'line') { ov.appendChild(svgEl('line', { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, class: 'ov-line' })); return; }
       const c = centerOf(o);
       ov.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line', transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null }));
     });
-    const u = unionBox(sel);
-    ov.appendChild(svgEl('rect', { x: u.x, y: u.y, width: u.w, height: u.h, class: 'ov-line ov-dash' }));
+    const turning = drag && drag.type === 'mrotate';
+    const u = turning ? drag.u0 : unionBox(sel), cx = u.x + u.w / 2, cy = u.y + u.h / 2;
+    const g = svgEl('g', { transform: turning && drag.theta ? 'rotate(' + rnd(drag.theta, 3) + ' ' + cx + ' ' + cy + ')' : null });
+    g.appendChild(svgEl('rect', { x: u.x, y: u.y, width: u.w, height: u.h, class: oneGroup ? 'ov-line' : 'ov-line ov-dash' }));
+    if (!sel.some(isLocked)) {
+      [['mnw', 0, 0], ['mne', 1, 0], ['mse', 1, 1], ['msw', 0, 1]].forEach(([n, hx, hy]) =>
+        g.appendChild(svgEl('rect', { x: u.x + hx * u.w - hs / 2, y: u.y + hy * u.h - hs / 2, width: hs, height: hs, rx: hs * 0.18, class: 'handle', 'data-h': n })));
+      const ry = u.y - 26 / z;
+      g.appendChild(svgEl('line', { x1: cx, y1: u.y, x2: cx, y2: ry, class: 'ov-line' }));
+      g.appendChild(svgEl('circle', { cx, cy: ry, r: 5.5 / z, class: 'handle rot', 'data-h': 'mrot' }));
+    }
+    ov.appendChild(g);
   }
 }
 
@@ -1705,7 +1943,7 @@ stage.addEventListener('pointerdown', e => {
   if (h) { beginHandle(h.dataset.h, p, e); return; }
   const g = e.target.closest && e.target.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
-  if (o && !o.locked && !o.hidden) { beginMove(o, p, e); return; }
+  if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
   beginMarquee(p, e);
 });
 
@@ -1722,6 +1960,8 @@ stage.addEventListener('pointermove', e => {
     case 'resize': updateResize(p, e); break;
     case 'rotate': updateRotate(p, e); break;
     case 'lineend': updateLineEnd(p, e); break;
+    case 'mscale': updateMultiScale(p); break;
+    case 'mrotate': updateMultiRotate(p, e); break;
     case 'persp': updatePersp(p, e); break;
     case 'marquee': updateMarquee(p, e); break;
   }
@@ -1736,12 +1976,12 @@ function endPointer(e) {
   switch (d.type) {
     case 'move':
       if (d.moved) commit();
-      else if (d.collapseTo && !d.shift) { S.sel = new Set([d.collapseTo]); refreshAll(); }
+      else if (d.collapseTo && !d.shift) { S.sel = new Set(d.collapseTo); refreshAll(); }
       else refreshAll();
       break;
     case 'draw': finishDraw(d, e); break;
     case 'pencil': finishPencil(d); break;
-    case 'resize': case 'rotate': case 'lineend': commit(); break;
+    case 'resize': case 'rotate': case 'lineend': case 'mscale': case 'mrotate': commit(); break;
     case 'persp': perspRelease(d); break;
     case 'marquee': refreshAll(); break;
     default: drawOverlay();
@@ -1759,9 +1999,15 @@ stage.addEventListener('wheel', e => {
 }, { passive: false });
 stage.addEventListener('dblclick', e => {
   if (S.tool !== 'select') return;
-  const g = e.target.closest && e.target.closest('[data-id]');
+  // The stage holds on to the pointer during a click (for dragging), so the browser reports the
+  // double-click as coming from the stage itself. Ask what is actually under the pointer instead.
+  const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
+  const g = under.closest && under.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
-  if (o && o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+  if (!o || isLocked(o) || isHidden(o)) return;
+  // Double-click picks just this object, even inside a group; for text it also opens the editor
+  if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+  else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
 });
 
 /* ---------- pinch to zoom / two-finger pan ---------- */
@@ -1787,15 +2033,19 @@ function updatePinch() {
 /* ---------- select / move ---------- */
 function beginMove(o, p, e) {
   const multi = e.shiftKey || e.metaKey || e.ctrlKey;
+  // A click picks the object's whole group. If just this object was picked (by double-clicking
+  // into its group), it stays picked on its own, so it can be moved by itself.
+  const unit = clickUnit(doc, o).filter(x => !isLocked(x) && !isHidden(x)).map(x => x.id);
+  const whole = unit.every(id => S.sel.has(id));
   let collapseTo = null;
   if (multi) {
-    if (S.sel.has(o.id)) { S.sel.delete(o.id); refreshAll(); return; }
-    S.sel.add(o.id);
-  } else if (!S.sel.has(o.id)) S.sel = new Set([o.id]);
-  else if (S.sel.size > 1) collapseTo = o.id;
+    if (S.sel.has(o.id)) { (whole ? unit : [o.id]).forEach(id => S.sel.delete(id)); refreshAll(); return; }
+    unit.forEach(id => S.sel.add(id));
+  } else if (!S.sel.has(o.id)) S.sel = new Set(unit);
+  else if (selectionUnits(doc, S.sel).length > 1) collapseTo = whole ? unit : [o.id];
   drag = {
     type: 'move', start: p, sx: e.clientX, sy: e.clientY, moved: false, shift: multi, collapseTo,
-    orig: selObjs().filter(x => !x.locked).map(x => ({ id: x.id, x: x.x, y: x.y, x1: x.x1, y1: x.y1, x2: x.x2, y2: x.y2 }))
+    orig: selObjs().filter(x => !isLocked(x)).map(x => ({ id: x.id, x: x.x, y: x.y, x1: x.x1, y1: x.y1, x2: x.x2, y2: x.y2 }))
   };
   refreshAll();
 }
@@ -1828,9 +2078,10 @@ function updateMarquee(p) {
   drag.cur = p;
   const r = drag.rect(), sel = new Set(drag.base);
   doc.objects.forEach(o => {
-    if (o.hidden || o.locked) return;
+    if (isHidden(o) || isLocked(o)) return;
     const b = aabb(o);
-    if (b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y) sel.add(o.id);
+    // touching any part of a group picks up the whole group
+    if (b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y) clickUnit(doc, o).forEach(x => { if (!isHidden(x) && !isLocked(x)) sel.add(x.id); });
   });
   S.sel = sel;
   drawOverlay(); updateInspector(); renderLayers();
@@ -1935,6 +2186,7 @@ function focusText() {
 
 /* ---------- resize / rotate / line ends ---------- */
 function beginHandle(h, p, e) {
+  if (h[0] === 'm') { beginMultiHandle(h, p); return; }
   const o = one(); if (!o) return;
   if (h === 'rot') {
     const c = centerOf(o);
@@ -1944,6 +2196,37 @@ function beginHandle(h, p, e) {
   } else {
     drag = { type: 'resize', id: o.id, h, o0: { x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot, size: o.size }, pic0: o.pic ? Object.assign({}, o.pic) : null };
   }
+}
+/* ---------- moving several objects as one ----------
+   The handles around a group or a multiple selection. Corners scale everything in proportion
+   from the opposite corner; the round handle turns everything around the middle. Each move
+   starts again from the snapshot taken when the drag began (see scaleAbout / rotateAbout). */
+function beginMultiHandle(h, p) {
+  const sel = selObjs().filter(o => !isHidden(o));
+  if (!sel.length || sel.some(isLocked)) return;
+  const u0 = unionBox(sel), o0 = new Map(sel.map(o => [o.id, JSON.parse(JSON.stringify(o))]));
+  if (h === 'mrot') {
+    const cx = u0.x + u0.w / 2, cy = u0.y + u0.h / 2;
+    drag = { type: 'mrotate', u0, o0, cx, cy, a0: Math.atan2(p.y - cy, p.x - cx) / D2R, theta: 0 };
+  } else {
+    drag = { type: 'mscale', u0, o0, ax: h.includes('w') ? u0.x + u0.w : u0.x, ay: h.includes('n') ? u0.y + u0.h : u0.y, sx: h.includes('w') ? -1 : 1, sy: h.includes('n') ? -1 : 1 };
+  }
+}
+function updateMultiScale(p) {
+  const d = drag, ks = [];
+  if (d.u0.w > 1) ks.push((p.x - d.ax) * d.sx / d.u0.w);   // a very flat selection scales by its other side
+  if (d.u0.h > 1) ks.push((p.y - d.ay) * d.sy / d.u0.h);
+  const k = Math.max(ks.length ? Math.max(...ks) : 1, MIN / Math.max(1, Math.min(d.u0.w || 1, d.u0.h || 1)), 0.02);
+  d.o0.forEach((s, id) => { const o = byId(id); if (o) scaleAbout(o, s, d.ax, d.ay, k); });
+  render();
+}
+function updateMultiRotate(p, e) {
+  const d = drag;
+  let t = Math.atan2(p.y - d.cy, p.x - d.cx) / D2R - d.a0;
+  if (e.shiftKey) t = Math.round(t / 15) * 15;
+  d.theta = normDeg(t);
+  d.o0.forEach((s, id) => { const o = byId(id); if (o) rotateAbout(o, s, d.cx, d.cy, d.theta); });
+  render();
 }
 function updateRotate(p, e) {
   const o = byId(drag.id); if (!o) return;
@@ -2181,7 +2464,7 @@ const PERSP_HINT = 'Drag a corner to tilt the selection. Hold Shift to move two 
 function perspEligible() {
   const sel = selObjs();
   if (!sel.length) return { why: 'Select a shape, some text, a photo or a few objects, then drag a corner to tilt them.' };
-  if (sel.some(o => o.locked)) return { why: 'Unlock the selected objects first.' };
+  if (sel.some(isLocked)) return { why: 'Unlock the selected objects first.' };
   if (sel.some(o => o.kind === 'image' && !images.has(o.img))) return { why: 'That photo is not available any more.' };
   if (sel.some(o => hasPic(o) && !picCovers(o) && o.fill && o.fill !== 'none')) return { why: 'The photo has to fill the shape before it can be tilted. Choose Fit photo first.' };
   if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
@@ -2486,8 +2769,9 @@ function perspDown(e, p) {
   const multi = e.shiftKey || e.metaKey || e.ctrlKey;
   const g = e.target.closest && e.target.closest('[data-id]');
   const o = g ? byId(+g.dataset.id) : null;
-  if (o && !o.locked && !o.hidden) {
-    if (multi && S.sel.has(o.id)) S.sel.delete(o.id); else if (multi) S.sel.add(o.id); else S.sel = new Set([o.id]);
+  if (o && !isLocked(o) && !isHidden(o)) {
+    const unit = clickUnit(doc, o).filter(x => !isLocked(x) && !isHidden(x)).map(x => x.id);   // a whole group, as on the canvas
+    if (multi && S.sel.has(o.id)) unit.forEach(id => S.sel.delete(id)); else if (multi) unit.forEach(id => S.sel.add(id)); else S.sel = new Set(unit);
   } else if (!multi) S.sel = new Set();
   refreshAll();
 }
@@ -2566,47 +2850,60 @@ function deleteSelected() {
   doc.objects = doc.objects.filter(o => !S.sel.has(o.id));
   S.sel = new Set(); commit();
 }
-function cloneObj(o, off) {
-  const c = JSON.parse(JSON.stringify(o));
-  c.id = doc.nextId++; c.name = o.name ? o.name + ' copy' : '';
-  moveBy(c, off, off);
-  return c;
-}
+// Copies go just above the topmost original, so a copy of something inside a group lands inside it.
+// Whole groups in the selection are copied as groups (see copyWithGroups).
 function duplicateSelected() {
   const sel = selObjs(); if (!sel.length) return;
-  const ids = new Set();
-  sel.forEach(o => { const c = cloneObj(o, 16); doc.objects.push(c); ids.add(c.id); });
-  S.sel = ids; commit();
+  const c = copyWithGroups(doc, sel, groupsFilledBy(doc, sel), true);
+  c.objects.forEach(o => { moveBy(o, 16, 16); o.name = o.name ? o.name + ' copy' : ''; });
+  const at = Math.max(...sel.map(o => doc.objects.indexOf(o))) + 1;
+  doc.groups.push(...c.groups); doc.objects.splice(at, 0, ...c.objects);
+  S.sel = new Set(c.objects.map(o => o.id)); commit();
 }
-function copySelected() { const sel = selObjs(); if (sel.length) { S.clip = JSON.stringify(sel); S.pasteN = 0; toast('Copied.'); } }
+function copySelected() {
+  const sel = selObjs(); if (!sel.length) return;
+  S.clip = JSON.stringify({ objects: sel, groups: groupsFilledBy(doc, sel) }); S.pasteN = 0; toast('Copied.');
+}
+// Pasted copies go on top, keeping any whole groups that were copied
 function pasteClipboard() {
   if (!S.clip) return;
   S.pasteN++;
-  const ids = new Set();
-  JSON.parse(S.clip).forEach(o => { const c = cloneObj(o, 16 * S.pasteN); c.name = o.name; doc.objects.push(c); ids.add(c.id); });
-  S.sel = ids; commit();
+  const clip = JSON.parse(S.clip), objs = Array.isArray(clip) ? clip : clip.objects, groups = Array.isArray(clip) ? [] : clip.groups;
+  const c = copyWithGroups(doc, objs, groups, false);
+  c.objects.forEach(o => moveBy(o, 16 * S.pasteN, 16 * S.pasteN));
+  doc.groups.push(...c.groups); doc.objects.push(...c.objects);
+  S.sel = new Set(c.objects.map(o => o.id)); commit();
 }
+// Put the selection in a group (Ctrl+G), or take selected groups apart (Ctrl+Shift+G)
+function groupSelected() {
+  const r = groupObjects(doc, S.sel);
+  if (r.why) { toast(r.why); return; }
+  commit();
+}
+function ungroupSelected() {
+  if (!ungroupObjects(doc, S.sel)) { toast('Select a group to take it apart.'); return; }
+  commit();
+}
+// Whole groups move as one, and a single member moves only within its own group
 function orderSelected(how) {
-  const a = doc.objects, sel = S.sel;
-  if (!sel.size) return;
-  if (how === 'front') doc.objects = a.filter(o => !sel.has(o.id)).concat(a.filter(o => sel.has(o.id)));
-  else if (how === 'back') doc.objects = a.filter(o => sel.has(o.id)).concat(a.filter(o => !sel.has(o.id)));
-  else if (how === 'forward') { for (let i = a.length - 2; i >= 0; i--) if (sel.has(a[i].id) && !sel.has(a[i + 1].id)) { const t = a[i]; a[i] = a[i + 1]; a[i + 1] = t; } }
-  else if (how === 'backward') { for (let i = 1; i < a.length; i++) if (sel.has(a[i].id) && !sel.has(a[i - 1].id)) { const t = a[i]; a[i] = a[i - 1]; a[i - 1] = t; } }
+  if (!S.sel.size) return;
+  reorderUnits(doc, S.sel, how);
   commit();
 }
 function alignSelected(mode) {
-  const sel = selObjs(); if (!sel.length) return;
-  const ref = sel.length > 1 ? unionBox(sel) : { x: 0, y: 0, w: doc.w, h: doc.h };
-  sel.forEach(o => {
-    const b = aabb(o); let dx = 0, dy = 0;
+  const sel = selObjs().filter(o => !isLocked(o)); if (!sel.length) return;
+  // A whole group lines up as one piece, keeping its own layout
+  const units = selectionUnits(doc, new Set(sel.map(o => o.id))).map(nodeLeaves);
+  const ref = units.length > 1 ? unionBox(sel) : { x: 0, y: 0, w: doc.w, h: doc.h };
+  units.forEach(list => {
+    const b = unionBox(list); let dx = 0, dy = 0;
     if (mode === 'l') dx = ref.x - b.x;
     if (mode === 'ch') dx = ref.x + ref.w / 2 - (b.x + b.w / 2);
     if (mode === 'r') dx = ref.x + ref.w - (b.x + b.w);
     if (mode === 't') dy = ref.y - b.y;
     if (mode === 'cv') dy = ref.y + ref.h / 2 - (b.y + b.h / 2);
     if (mode === 'b') dy = ref.y + ref.h - (b.y + b.h);
-    moveBy(o, dx, dy);
+    list.forEach(o => moveBy(o, dx, dy));
   });
   commit();
 }
@@ -2627,7 +2924,7 @@ function mirrorSelected(axis) {
   commit();
 }
 function nudge(dx, dy) { const sel = selObjs(); if (!sel.length) return; sel.forEach(o => moveBy(o, dx, dy)); commit(); }
-function selectAll() { S.sel = new Set(doc.objects.filter(o => !o.hidden && !o.locked).map(o => o.id)); refreshAll(); }
+function selectAll() { S.sel = new Set(doc.objects.filter(o => !isHidden(o) && !isLocked(o)).map(o => o.id)); refreshAll(); }
 
 /* =====================================================================
    Toast, menus, panel
@@ -2670,6 +2967,9 @@ function updateInspector() {
   show('#sec-arrange', n > 0);
   $('#empty-hint').hidden = n > 0;
   $$('[data-bool]').forEach(b => { b.disabled = n < 2; });
+  const units = n ? selectionUnits(doc, S.sel) : [];
+  $('#btn-group').disabled = units.length < 2;
+  $('#btn-ungroup').disabled = !units.some(u => u.g);
   $('#btn-flatten').disabled = !(o && o.kind !== 'path' && o.kind !== 'line' && o.kind !== 'image');
   // photo mask controls
   const nPhoto = sel.filter(x => x.kind === 'image').length, nShape = n - nPhoto;
@@ -3021,59 +3321,103 @@ $$('[data-order]').forEach(b => b.addEventListener('click', () => orderSelected(
 $('#btn-flip-h').addEventListener('click', () => mirrorSelected('h'));
 $('#btn-flip-v').addEventListener('click', () => mirrorSelected('v'));
 $('#btn-dup').addEventListener('click', duplicateSelected);
+$('#btn-group').addEventListener('click', groupSelected);
+$('#btn-ungroup').addEventListener('click', ungroupSelected);
 $('#btn-del').addEventListener('click', deleteSelected);
 
 /* =====================================================================
    Layers tab
+   Shows the drawing top first, with each group as a folder that opens to show what is inside
+   (see 04b-groups.js). Which folders are open is remembered here, not in the drawing, so opening
+   a folder isn't something Undo steps through.
    ===================================================================== */
 const layersBox = $('#layers');
 let layerSig = '';
+const layerOpen = new Set();   // ids of the folders that are open
+// Open the folders around an object, so it can be seen in the list
+function revealInLayers(o) { ancestorsOf(doc, o).forEach(g => layerOpen.add(g.id)); }
+
+function layerRow(item, depth, isGroup, leaves) {
+  const hidden = effHidden(doc, item);   // hidden itself, or inside a hidden group
+  const label = isGroup ? groupLabel(item) : labelOf(item);
+  const row = elt('div', 'layer' + (isGroup ? ' grp' : '') + (hidden ? ' off' : ''));
+  row.dataset.id = item.id; row.dataset.kind = isGroup ? 'g' : 'o';
+  row.style.setProperty('--depth', depth);
+  if (isGroup) {
+    const open = layerOpen.has(item.id);
+    const tw = elt('button', 'twisty'); tw.dataset.act = 'twisty';
+    tw.setAttribute('aria-expanded', open ? 'true' : 'false');
+    tw.setAttribute('aria-label', (open ? 'Close ' : 'Open ') + label);
+    tw.innerHTML = '<span class="ico">' + icon('chev') + '</span>';
+    row.appendChild(tw);
+  } else row.appendChild(elt('span', 'twisty-gap'));
+  const cb = elt('input'); cb.type = 'checkbox'; cb.dataset.act = 'pick'; cb.setAttribute('aria-label', 'Select ' + label);
+  const ic = elt('span', 'kico'); ic.innerHTML = icon(isGroup ? 'folder' : iconFor(item));
+  const nm = elt('span', 'lname', label); nm.dataset.act = 'name';
+  nm.title = isGroup ? 'Click to select the whole group, double-click to rename' : 'Click to select, double-click to rename';
+  if (isGroup) nm.appendChild(elt('small', 'lcount', String(leaves)));
+  const eye = elt('button', 'btn icon'); eye.dataset.act = 'eye'; eye.title = item.hidden ? 'Show' : 'Hide'; eye.setAttribute('aria-label', eye.title + ' ' + label); eye.innerHTML = '<span class="ico">' + icon(item.hidden ? 'eyeoff' : 'eye') + '</span>';
+  const lk = elt('button', 'btn icon'); lk.dataset.act = 'lock'; lk.title = item.locked ? 'Unlock' : 'Lock'; lk.setAttribute('aria-label', lk.title + ' ' + label); lk.innerHTML = '<span class="ico">' + icon(item.locked ? 'lock' : 'unlock') + '</span>';
+  row.append(cb, ic, nm, eye, lk);
+  return row;
+}
+// Show which rows are selected. A folder is ticked when everything in it is selected, and
+// half-ticked when only some of it is.
+function markLayerSelection() {
+  $$('.layer', layersBox).forEach(row => {
+    const id = +row.dataset.id, cb = row.querySelector('input[type=checkbox]');
+    let on = false, some = false;
+    if (row.dataset.kind === 'g') {
+      const l = groupLeaves(doc, id), n = l.filter(o => S.sel.has(o.id)).length;
+      on = l.length > 0 && n === l.length; some = n > 0 && !on;
+    } else on = S.sel.has(id);
+    row.classList.toggle('sel', on); row.classList.toggle('part', some);
+    cb.checked = on; cb.indeterminate = some;
+  });
+}
 function renderLayers() {
-  // Only rebuild rows when the list itself changed; otherwise just update selection in place
-  const sig = doc.objects.map(o => o.id + '|' + labelOf(o) + '|' + (o.hidden ? 1 : 0) + (o.locked ? 1 : 0) + '|' + iconFor(o)).join('\n');
-  if (sig === layerSig && layersBox.children.length) {
-    $$('.layer', layersBox).forEach(row => {
-      const on = S.sel.has(+row.dataset.id);
-      row.classList.toggle('sel', on); row.querySelector('input[type=checkbox]').checked = on;
-    });
-    return;
-  }
+  // Only rebuild rows when the list itself changed; otherwise just update the selection in place
+  const sig = doc.objects.map(o => o.id + '|' + labelOf(o) + '|' + (o.hidden ? 1 : 0) + (o.locked ? 1 : 0) + '|' + iconFor(o) + '|' + (o.parent || '')).join('\n') +
+    '#' + doc.groups.map(g => g.id + '|' + g.name + '|' + (g.hidden ? 1 : 0) + (g.locked ? 1 : 0) + '|' + g.parent).join('\n') + '#' + [...layerOpen].join(',');
+  if (sig === layerSig && layersBox.children.length) { markLayerSelection(); return; }
   layerSig = sig;
   layersBox.textContent = '';
   if (!doc.objects.length) { layersBox.appendChild(elt('p', 'hint', 'Nothing on the page yet.')); return; }
-  for (let i = doc.objects.length - 1; i >= 0; i--) {
-    const o = doc.objects[i];
-    const row = elt('div', 'layer' + (S.sel.has(o.id) ? ' sel' : '') + (o.hidden ? ' off' : '')); row.dataset.id = o.id;
-    const cb = elt('input'); cb.type = 'checkbox'; cb.checked = S.sel.has(o.id); cb.dataset.act = 'pick'; cb.setAttribute('aria-label', 'Select ' + labelOf(o));
-    const ic = elt('span', 'kico'); ic.innerHTML = icon(iconFor(o));
-    const nm = elt('span', 'lname', labelOf(o)); nm.dataset.act = 'name'; nm.title = 'Click to select, double-click to rename';
-    const eye = elt('button', 'btn icon'); eye.dataset.act = 'eye'; eye.title = o.hidden ? 'Show' : 'Hide'; eye.setAttribute('aria-label', eye.title); eye.innerHTML = '<span class="ico">' + icon(o.hidden ? 'eyeoff' : 'eye') + '</span>';
-    const lk = elt('button', 'btn icon'); lk.dataset.act = 'lock'; lk.title = o.locked ? 'Unlock' : 'Lock'; lk.setAttribute('aria-label', lk.title); lk.innerHTML = '<span class="ico">' + icon(o.locked ? 'lock' : 'unlock') + '</span>';
-    row.append(cb, ic, nm, eye, lk);
-    layersBox.appendChild(row);
-  }
+  const tree = buildTree(doc);
+  (function add(nodes, depth) {
+    nodes.forEach(n => {
+      if (n.o) { layersBox.appendChild(layerRow(n.o, depth, false)); return; }
+      layersBox.appendChild(layerRow(n.g, depth, true, nodeLeaves(n).length));
+      if (layerOpen.has(n.g.id)) add(n.children, depth + 1);
+    });
+  })(tree.children, 0);
+  markLayerSelection();
 }
 layersBox.addEventListener('click', e => {
   const row = e.target.closest('.layer'); if (!row) return;
-  const o = byId(+row.dataset.id); if (!o) return;
-  const act = (e.target.closest('[data-act]') || {}).dataset ? e.target.closest('[data-act]').dataset.act : 'name';
-  if (act === 'eye') { o.hidden = !o.hidden; if (o.hidden) S.sel.delete(o.id); commit(); }
-  else if (act === 'lock') { o.locked = !o.locked; commit(); }
-  else if (act === 'pick') { if (S.sel.has(o.id)) S.sel.delete(o.id); else S.sel.add(o.id); refreshAll(); }
-  else if (e.shiftKey || e.metaKey || e.ctrlKey) { if (S.sel.has(o.id)) S.sel.delete(o.id); else S.sel.add(o.id); refreshAll(); }
-  else { S.sel = new Set([o.id]); refreshAll(); }
+  const id = +row.dataset.id, isGroup = row.dataset.kind === 'g';
+  const item = isGroup ? groupById(doc, id) : byId(id); if (!item) return;
+  const actEl = e.target.closest('[data-act]'), act = actEl ? actEl.dataset.act : 'name';
+  const ids = isGroup ? groupLeaves(doc, id).map(o => o.id) : [id];
+  const toggle = () => { const all = ids.every(x => S.sel.has(x)); ids.forEach(x => all ? S.sel.delete(x) : S.sel.add(x)); };
+  if (act === 'twisty') { if (layerOpen.has(id)) layerOpen.delete(id); else layerOpen.add(id); renderLayers(); return; }
+  if (act === 'eye') { item.hidden = !item.hidden; if (item.hidden) ids.forEach(x => S.sel.delete(x)); commit(); }
+  else if (act === 'lock') { item.locked = !item.locked; commit(); }
+  else if (act === 'pick' || e.shiftKey || e.metaKey || e.ctrlKey) { toggle(); refreshAll(); }
+  else { S.sel = new Set(ids); refreshAll(); }
 });
 layersBox.addEventListener('dblclick', e => {
   const nm = e.target.closest('.lname'); if (!nm) return;
-  const row = nm.closest('.layer'), o = byId(+row.dataset.id); if (!o) return;
-  const inp = elt('input', 'lname-in'); inp.type = 'text'; inp.value = labelOf(o); inp.maxLength = 60;
+  const row = nm.closest('.layer'), isGroup = row.dataset.kind === 'g';
+  const item = isGroup ? groupById(doc, +row.dataset.id) : byId(+row.dataset.id); if (!item) return;
+  const inp = elt('input', 'lname-in'); inp.type = 'text'; inp.value = isGroup ? groupLabel(item) : labelOf(item); inp.maxLength = 60;
+  inp.setAttribute('aria-label', 'Name');
   nm.replaceWith(inp); inp.focus(); inp.select();
   let done = false;
-  const finish = ok => { if (done) return; done = true; if (ok) { o.name = inp.value.trim(); commit(); } else renderLayers(); };
+  const finish = ok => { if (done) return; done = true; if (ok) { item.name = inp.value.trim(); commit(); } else renderLayers(); };
   inp.addEventListener('keydown', ev => { if (ev.key === 'Enter') finish(true); else if (ev.key === 'Escape') finish(false); });
   inp.addEventListener('blur', () => finish(true));
 });
-
 /* =====================================================================
    Page tab
    ===================================================================== */
@@ -3225,6 +3569,14 @@ function sanitizeDoc(d) {
   out.w = num(d.w, 800, 16, 8000); out.h = num(d.h, 600, 16, 8000);
   out.bg = d.bg === 'transparent' ? 'transparent' : col(d.bg, '#ffffff');
   let missingFont = false, missingPhoto = false;
+  // Groups get new ids, like objects do; gmap turns a file's group id into the new group
+  const gmap = new Map(), has = v => v !== null && v !== undefined && gmap.has(+v);
+  (Array.isArray(d.groups) ? d.groups.slice(0, 5000) : []).forEach(r => {
+    if (!r || !Number.isFinite(+r.id) || gmap.has(+r.id)) return;
+    const g = { id: out.nextId++, name: typeof r.name === 'string' ? r.name.slice(0, 60) : '', parent: r.parent, hidden: !!r.hidden, locked: !!r.locked };
+    gmap.set(+r.id, g); out.groups.push(g);
+  });
+  out.groups.forEach(g => { g.parent = has(g.parent) ? gmap.get(+g.parent).id : null; });
   (Array.isArray(d.objects) ? d.objects : []).forEach(r => {
     if (!r || KINDS.indexOf(r.kind) < 0) return;
     const o = {
@@ -3235,6 +3587,7 @@ function sanitizeDoc(d) {
       hidden: !!r.hidden, locked: !!r.locked
     };
     if (o.kind !== 'line') { if (r.fx) o.fx = true; if (r.fy) o.fy = true; }
+    if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (o.kind === 'image') {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
@@ -3258,6 +3611,7 @@ function sanitizeDoc(d) {
     }
     try { refresh(o); out.objects.push(o); } catch (e) { /* skip broken objects */ }
   });
+  normalizeGroups(out);
   out._missingFont = missingFont; out._missingPhoto = missingPhoto;
   return out;
 }
@@ -3458,6 +3812,7 @@ window.addEventListener('keydown', e => {
     if (k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
     else if (k === 'y') { e.preventDefault(); redo(); }
     else if (k === 'd') { e.preventDefault(); duplicateSelected(); }
+    else if (k === 'g') { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
     else if (k === 'a') { e.preventDefault(); selectAll(); }
     else if (k === 'c') { copySelected(); }
     else if (k === 'v') { pasteClipboard(); }

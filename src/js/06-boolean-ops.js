@@ -54,6 +54,7 @@ function combineShapes(op, list) {
 // Swap the listed objects for one new object, placed where the bottom-most of them was
 function replaceObjects(list, res) {
   const at = doc.objects.indexOf(list[0]), gone = new Set(list.map(o => o.id));
+  if (list[0].parent !== undefined) res.parent = list[0].parent;   // stays in the bottom shape's group
   doc.objects = doc.objects.filter(o => !gone.has(o.id));
   doc.objects.splice(Math.min(at, doc.objects.length), 0, res);
   S.sel = new Set([res.id]);
@@ -117,6 +118,7 @@ function releaseMask() {
   const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: c.x + r.x - pw / 2, y: c.y + r.y - ph / 2, w: pw, h: ph, rot: o.rot, opacity: 1, hidden: false, locked: false };
   if (o.fx) im.fx = true;
   if (o.fy) im.fy = true;
+  if (o.parent !== undefined) im.parent = o.parent;
   delete o.pic;
   doc.objects.splice(doc.objects.indexOf(o), 0, im);
   S.sel = new Set([im.id, o.id]);
