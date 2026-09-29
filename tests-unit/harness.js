@@ -47,10 +47,12 @@ const EXPORT_NAMES = [
   'blankDoc', 'newShape', 'refresh', 'buildPolygon', 'syncLineBox',
   'centerOf', 'aabb', 'unionBox', 'moveBy', 'labelOf', 'iconFor',
   'KIND_LABEL', 'byId', 'selObjs', 'one', 'hasPic', 'docImageIds',
+  'hasGrad', 'makeGrad', 'cloneGrad', 'syncGradFill', 'gradAngle', 'setGradAngle',
+  'reverseGrad', 'sanitizeGrad', 'shiftHue', 'normHex',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',
-  'buildSVG', 'rescalePic', 'drawOrigin',
+  'buildSVG', 'rescalePic', 'drawOrigin', 'gradSpec', 'gradToSVG', 'serOpen',
   // 06-boolean-ops.js
   'combineShapes', 'replaceObjects', 'runBoolean', 'flattenSelected',
   'localPaper', 'worldPaper', 'lineToPaper', 'useAsMask', 'releaseMask',
