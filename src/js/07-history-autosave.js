@@ -2,7 +2,16 @@
    History + autosave (IndexedDB)
    The drawing (small JSON) and the photos (files) are stored separately.
    ===================================================================== */
-const hist = { stack: [], ids: [], idx: -1 };   // ids[i] = the photo ids that snapshot i refers to
+/* Undo history: a list of steps, each the drawing as it was after one change.
+     step = { json: the drawing (docJSON), ids: the photo ids it uses, change: extra, or undefined }
+   A change can carry more than the drawing's JSON: { undo(), redo(), forget(), bytes }. That is for
+   changes kept outside the drawing itself, like pixels painted into a paint layer; undo() and redo()
+   put them back, and forget() is called when the step is dropped. The history keeps at most
+   HISTORY.steps steps and about HISTORY.bytes of memory, dropping the oldest first. */
+const HISTORY = { steps: 100, bytes: 48 * 1048576 };
+const hist = { steps: [], idx: -1, bytes: 0 };
+const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
+function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
 const AUTOSAVE_KEY = 'cutout.autosave.v1';       // older versions saved here; read once for migration
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
@@ -55,7 +64,7 @@ function scheduleSave(str) {
 }
 async function persistNow(str) {
   try {
-    const ids = hist.ids[hist.idx] || new Set();
+    const ids = (hist.steps[hist.idx] && hist.steps[hist.idx].ids) || new Set();
     if (DB.ok) {
       for (const id of ids) {
         const r = images.get(id);
@@ -85,7 +94,7 @@ async function persistNow(str) {
 async function gcImages() {
   if (importing) return;
   const keep = new Set(docImageIds(doc));
-  hist.ids.forEach(s => s.forEach(id => keep.add(id)));
+  hist.steps.forEach(st => st.ids.forEach(id => keep.add(id)));
   if (psn) psn.items.forEach(it => { if (it.o0.img) keep.add(it.o0.img); if (it.o0.pic && it.o0.pic.id) keep.add(it.o0.pic.id); });
   const drop = [];
   images.forEach((r, id) => { if (!keep.has(id)) drop.push(id); });
@@ -137,14 +146,18 @@ async function restoreSession() {
   return { doc: d, lost };
 }
 
-function commit() {
+// Record the drawing as a new undo step (if anything changed) and redraw everything.
+// change: optional, for changes kept outside the drawing's JSON (see HISTORY above).
+function commit(change) {
   normalizeGroups(doc);   // every change passes through here, so groups always stay tidy
   const s = docJSON(doc);   // without derived outlines; loadSnapshot rebuilds them
-  if (hist.stack[hist.idx] !== s) {
-    hist.stack.length = hist.idx + 1; hist.ids.length = hist.idx + 1;
-    hist.stack.push(s); hist.ids.push(docImageIds(doc));
-    if (hist.stack.length > 100) { hist.stack.shift(); hist.ids.shift(); }
-    hist.idx = hist.stack.length - 1;
+  const cur = hist.steps[hist.idx];
+  if (!cur || cur.json !== s || change) {
+    hist.steps.splice(hist.idx + 1).forEach(dropStep);   // a new change ends the redo trail
+    const st = { json: s, ids: docImageIds(doc), change };
+    hist.steps.push(st); hist.bytes += stepBytes(st);
+    while (hist.steps.length > 2 && (hist.steps.length > HISTORY.steps || hist.bytes > HISTORY.bytes)) dropStep(hist.steps.shift());
+    hist.idx = hist.steps.length - 1;
     scheduleSave(s);
   }
   refreshAll();
@@ -156,8 +169,21 @@ function loadSnapshot(str) {
   S.sel = new Set(Array.from(S.sel).filter(id => byId(id)));
   refreshAll();
 }
-function undo() { if (psnBusy) return; if (hist.idx > 0) { hist.idx--; loadSnapshot(hist.stack[hist.idx]); scheduleSave(hist.stack[hist.idx]); } }
-function redo() { if (psnBusy) return; if (hist.idx < hist.stack.length - 1) { hist.idx++; loadSnapshot(hist.stack[hist.idx]); scheduleSave(hist.stack[hist.idx]); } }
-function revertUncommitted() { if (hist.idx >= 0) loadSnapshot(hist.stack[hist.idx]); }
-function resetHistory() { hist.stack = []; hist.ids = []; hist.idx = -1; commit(); }
+const canUndo = () => hist.idx > 0, canRedo = () => hist.idx < hist.steps.length - 1;
+function undo() {
+  if (psnBusy || !canUndo()) return;
+  const st = hist.steps[hist.idx];
+  if (st.change && st.change.undo) st.change.undo();
+  hist.idx--; loadSnapshot(hist.steps[hist.idx].json); scheduleSave(hist.steps[hist.idx].json);
+}
+function redo() {
+  if (psnBusy || !canRedo()) return;
+  hist.idx++;
+  const st = hist.steps[hist.idx];
+  loadSnapshot(st.json);
+  if (st.change && st.change.redo) st.change.redo();
+  scheduleSave(st.json);
+}
+function revertUncommitted() { if (hist.idx >= 0) loadSnapshot(hist.steps[hist.idx].json); }
+function resetHistory() { hist.steps.forEach(dropStep); hist.steps = []; hist.idx = -1; hist.bytes = 0; commit(); }
 

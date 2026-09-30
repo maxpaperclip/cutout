@@ -9,14 +9,26 @@ const snapV = v => S.snap ? Math.round(v / S.grid) * S.grid : v;
 const snapPt = p => ({ x: snapV(p.x), y: snapV(p.y) });
 function toWorld(e) { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.z, y: (e.clientY - r.top - view.y) / view.z }; }
 
+/* ---------- tools ----------
+   Each tool is an entry in TOOLS saying what it does; each kind of drag is an entry in DRAGS.
+   The pointer and keyboard handlers below only look things up, so a new tool (a brush, say) is
+   an entry in each, in its own file, and nothing here has to change.
+     TOOLS.name = { key: its keyboard shortcut, cursor: 'select' | 'hand' | 'draw' | 'text',
+                    down(e, p), hover(e, p), dblclick(e, under): pointer, p in page coordinates
+                    keys(e): return true when the key was used
+                    overlay(): draw over the canvas; return true to skip the selection handles
+                    enter(), leave(): when the tool is chosen, and when another is }
+     DRAGS.type = { move(p, e), end(d, e), overlay() }  for drag = { type, ... } */
+const TOOLS = {}, DRAGS = {};
+const tool = () => TOOLS[S.tool] || {};
 function setTool(t) {
-  if (pen && t !== 'pen') penFinish(false);   // switching away finishes the line being drawn
-  if (pe) pe = null;
-  S.tool = t;
-  if (t !== 'perspective') psn = null;
-  $$('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t ? 'true' : 'false'));
-  stage.setAttribute('class', 't-' + (t === 'select' || t === 'perspective' ? 'select' : t === 'hand' ? 'hand' : t === 'text' ? 'text' : 'draw') + (spaceDown ? ' panning' : ''));
-  const bar = $('#persp-bar'); if (bar) bar.hidden = t !== 'perspective';
+  const prev = tool();
+  if (prev.leave) prev.leave();   // also when the same tool is chosen again: it starts over
+  S.tool = TOOLS[t] ? t : 'select';
+  const cur = tool();
+  if (cur.enter) cur.enter();
+  $$('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === S.tool ? 'true' : 'false'));
+  stage.setAttribute('class', 't-' + (cur.cursor || 'select') + (spaceDown ? ' panning' : ''));
   updateEmpty();
   drawOverlay();
 }
@@ -28,69 +40,30 @@ stage.addEventListener('pointerdown', e => {
   closeMenus();
   if (pointers.size === 2) { startPinch(); return; }
   if (pointers.size > 2) return;
-  if (e.button === 1 || S.tool === 'hand' || spaceDown) {
+  if (e.button === 1 || S.tool === 'hand' || spaceDown) {   // any tool pans with the middle button or Space
     drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
     stage.classList.add('panning');
     e.preventDefault();
     return;
   }
-  const p = toWorld(e);
-  if (S.tool === 'perspective') { perspDown(e, p); return; }
-  if (S.tool === 'pen') { penDown(e, p); return; }
-  if (S.tool !== 'select') { beginDraw(e, p); return; }
-  if (pe && peDown(e, p)) return;
-  const h = e.target.closest && e.target.closest('[data-h]');
-  if (h) { beginHandle(h.dataset.h, p, e); return; }
-  const g = e.target.closest && e.target.closest('[data-id]');
-  const o = g ? byId(+g.dataset.id) : null;
-  if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
-  beginMarquee(p, e);
+  const t = tool();
+  if (t.down) t.down(e, toWorld(e));
 });
-
 stage.addEventListener('pointermove', e => {
   if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pinch && pointers.size === 2) { updatePinch(); return; }
-  if (!drag) { if (S.tool === 'pen' && pen) penHover(toWorld(e), e); return; }
-  const p = toWorld(e);
-  switch (drag.type) {
-    case 'pan': userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); break;
-    case 'move': updateMove(p, e); break;
-    case 'draw': updateDraw(p, e); break;
-    case 'pencil': updatePencil(p); break;
-    case 'pen': updatePenDrag(p, e); break;
-    case 'pepoint': updatePePoint(p, e); break;
-    case 'pehandle': updatePeHandle(p, e); break;
-    case 'resize': updateResize(p, e); break;
-    case 'rotate': updateRotate(p, e); break;
-    case 'lineend': updateLineEnd(p, e); break;
-    case 'mscale': updateMultiScale(p); break;
-    case 'mrotate': updateMultiRotate(p, e); break;
-    case 'persp': updatePersp(p, e); break;
-    case 'marquee': updateMarquee(p, e); break;
-  }
+  if (!drag) { const t = tool(); if (t.hover) t.hover(e, toWorld(e)); return; }
+  const k = DRAGS[drag.type];
+  if (k && k.move) k.move(toWorld(e), e);
 });
-
 function endPointer(e) {
   pointers.delete(e.pointerId);
   if (pinch) { if (pointers.size < 2) pinch = null; return; }
   if (!drag) return;
   const d = drag; drag = null;
   stage.classList.toggle('panning', spaceDown);
-  switch (d.type) {
-    case 'move':
-      if (d.moved) commit();
-      else if (d.collapseTo && !d.shift) { S.sel = new Set(d.collapseTo); refreshAll(); }
-      else refreshAll();
-      break;
-    case 'draw': finishDraw(d, e); break;
-    case 'pencil': finishPencil(d); break;
-    case 'pen': drawOverlay(); break;
-    case 'pepoint': case 'pehandle': if (d.moved) commit(); else drawOverlay(); break;
-    case 'resize': case 'rotate': case 'lineend': case 'mscale': case 'mrotate': commit(); break;
-    case 'persp': perspRelease(d); break;
-    case 'marquee': refreshAll(); break;
-    default: drawOverlay();
-  }
+  const k = DRAGS[d.type];
+  if (k && k.end) k.end(d, e); else drawOverlay();
 }
 stage.addEventListener('pointerup', endPointer);
 stage.addEventListener('pointercancel', endPointer);
@@ -105,27 +78,45 @@ stage.addEventListener('wheel', e => {
 stage.addEventListener('dblclick', e => {
   // The stage holds on to the pointer during a click (for dragging), so the browser reports the
   // double-click as coming from the stage itself. Ask what is actually under the pointer instead.
-  const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
-  if (S.tool === 'pen') {
-    // a double-click finishes an open line; its second click placed a point on top of the last one
-    if (pen && pen.pts.length >= 2) {
-      const a = pen.pts[pen.pts.length - 1], b = pen.pts[pen.pts.length - 2];
-      if (Math.hypot(a.x - b.x, a.y - b.y) * view.z < 4) pen.pts.pop();
-      penFinish(false);
-    }
-    return;
-  }
-  if (S.tool !== 'select') return;
-  if (pe) return;   // double-clicking a point is handled in peDown (see there)
-  const g = under.closest && under.closest('[data-id]');
-  const o = g ? byId(+g.dataset.id) : null;
-  if (!o || isLocked(o) || isHidden(o)) return;
-  // Double-click picks just this object, even inside a group; for text it also opens the editor,
-  // and for a plain shape it shows its points for editing
-  if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
-  else if (o.kind === 'path') { revealInLayers(o); enterPointEdit(o); }
-  else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
+  const under = document.elementFromPoint(e.clientX, e.clientY) || e.target, t = tool();
+  if (t.dblclick) t.dblclick(e, under);
 });
+
+DRAGS.pan = { move(p, e) { userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); } };
+TOOLS.hand = { key: 'h', cursor: 'hand' };   // panning itself is handled above, for every tool
+
+/* ---------- the Select tool ---------- */
+TOOLS.select = {
+  key: 'v', cursor: 'select',
+  down(e, p) {
+    if (pe && peDown(e, p)) return;   // editing points (see 09b-pen.js)
+    const h = e.target.closest && e.target.closest('[data-h]');
+    if (h) { beginHandle(h.dataset.h, p, e); return; }
+    const g = e.target.closest && e.target.closest('[data-id]');
+    const o = g ? byId(+g.dataset.id) : null;
+    if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
+    beginMarquee(p, e);
+  },
+  dblclick(e, under) {
+    if (pe) return;   // double-clicking a point is handled in peDown (see there)
+    const g = under.closest && under.closest('[data-id]');
+    const o = g ? byId(+g.dataset.id) : null;
+    if (!o || isLocked(o) || isHidden(o)) return;
+    // Double-click picks just this object, even inside a group; for text it also opens the editor,
+    // and for a plain shape it shows its points for editing
+    if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+    else if (o.kind === 'path') { revealInLayers(o); enterPointEdit(o); }
+    else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
+  },
+  keys(e) {
+    if (pe) return peKeys(e);
+    // Enter on a plain shape shows its points
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.target.closest('button') && one() && one().kind === 'path') { e.preventDefault(); enterPointEdit(one()); return true; }
+    return false;
+  },
+  overlay: () => !!(pe && peOverlay()),
+  leave() { pe = null; }
+};
 
 /* ---------- pinch to zoom / two-finger pan ---------- */
 function pinchState() {
@@ -205,10 +196,12 @@ function updateMarquee(p) {
 
 /* ---------- drawing ---------- */
 function beginDraw(e, p) {
-  if (S.tool === 'text') { createText(p); return; }
-  if (S.tool === 'pencil') { beginPencil(p); return; }
   drag = { type: 'draw', tool: S.tool, start: snapPt(p), sx: e.clientX, sy: e.clientY, id: null };
 }
+// Shapes and lines: drag to draw (or click for a default size), then back to Select
+[['rect', 'r'], ['ellipse', 'e'], ['polygon', 'p'], ['star', 's'], ['line', 'l']].forEach(([t, key]) => { TOOLS[t] = { key, cursor: 'draw', down: beginDraw }; });
+TOOLS.text = { key: 't', cursor: 'text', down: (e, p) => createText(p) };
+DRAGS.draw = { move: (p, e) => updateDraw(p, e), end: (d, e) => finishDraw(d, e) };
 function makeDrawn(tool, box) {
   if (tool === 'rect') return newShape('rect', box);
   if (tool === 'ellipse') return newShape('ellipse', box);
@@ -386,3 +379,21 @@ function updateResize(p, e) {
   render();
 }
 
+
+// The drags that belong to the Select tool, shapes and the pencil
+DRAGS.move = {
+  move: (p, e) => updateMove(p, e),
+  end(d) {
+    if (d.moved) commit();
+    else if (d.collapseTo && !d.shift) { S.sel = new Set(d.collapseTo); refreshAll(); }
+    else refreshAll();
+  }
+};
+DRAGS.marquee = { move: (p, e) => updateMarquee(p, e), end: () => refreshAll() };
+DRAGS.resize = { move: (p, e) => updateResize(p, e), end: () => commit() };
+DRAGS.rotate = { move: (p, e) => updateRotate(p, e), end: () => commit() };
+DRAGS.lineend = { move: (p, e) => updateLineEnd(p, e), end: () => commit() };
+DRAGS.mscale = { move: p => updateMultiScale(p), end: () => commit() };
+DRAGS.mrotate = { move: (p, e) => updateMultiRotate(p, e), end: () => commit() };
+TOOLS.pencil = { key: 'n', cursor: 'draw', down: (e, p) => beginPencil(p) };
+DRAGS.pencil = { move: p => updatePencil(p), end: d => finishPencil(d), overlay() { pencilPreview(); return true; } };

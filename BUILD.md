@@ -104,6 +104,32 @@ as before — they're not imported, they're just in scope because
 `build.js` concatenates everything into one script. `npm run dev` will
 rebuild automatically as you save.
 
+## Adding a tool
+
+Tools and drags are entries in two tables in `src/js/09-pointer-interaction.js`,
+so a new tool lives in its own file and nothing else has to change:
+
+```js
+TOOLS.brush = {
+  key: 'k', cursor: 'draw',               // keyboard shortcut and pointer style
+  down(e, p) { drag = { type: 'brush', pts: [p] }; },   // p is in page coordinates
+  keys(e) { return false; },              // return true when the tool used the key
+  overlay() { return false; },            // draw over the canvas; true hides the selection handles
+  enter() {}, leave() {}                  // when chosen, and when another tool is
+};
+DRAGS.brush = { move(p, e) {}, end(d, e) { commit(); }, overlay() { return true; } };
+```
+
+Add the file to `src/js/manifest.json` after `09-pointer-interaction.js`, and a
+toolbar button with `data-tool="brush"`.
+
+Undo: `commit()` records the drawing as a new step. A change kept outside the
+drawing's JSON (pixels in a paint layer, say) can pass
+`commit({ undo() {}, redo() {}, forget() {}, bytes })`; the history calls those
+when stepping back and forward, and `forget()` when the step is dropped. The
+history keeps at most 100 steps and about 48 MB (`HISTORY` in
+`07-history-autosave.js`).
+
 ## Releasing an update
 
 1. Make your changes under `src/`.

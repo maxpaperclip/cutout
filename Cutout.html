@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.14.1</title>
+<title>Cutout v1.14.2</title>
 <style>
 
 :root{
@@ -704,7 +704,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.14.1';   // filled in by build.js from package.json
+const APP_VERSION = '1.14.2';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1861,7 +1861,16 @@ function fitPhoto() {
    History + autosave (IndexedDB)
    The drawing (small JSON) and the photos (files) are stored separately.
    ===================================================================== */
-const hist = { stack: [], ids: [], idx: -1 };   // ids[i] = the photo ids that snapshot i refers to
+/* Undo history: a list of steps, each the drawing as it was after one change.
+     step = { json: the drawing (docJSON), ids: the photo ids it uses, change: extra, or undefined }
+   A change can carry more than the drawing's JSON: { undo(), redo(), forget(), bytes }. That is for
+   changes kept outside the drawing itself, like pixels painted into a paint layer; undo() and redo()
+   put them back, and forget() is called when the step is dropped. The history keeps at most
+   HISTORY.steps steps and about HISTORY.bytes of memory, dropping the oldest first. */
+const HISTORY = { steps: 100, bytes: 48 * 1048576 };
+const hist = { steps: [], idx: -1, bytes: 0 };
+const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
+function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
 const AUTOSAVE_KEY = 'cutout.autosave.v1';       // older versions saved here; read once for migration
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
@@ -1914,7 +1923,7 @@ function scheduleSave(str) {
 }
 async function persistNow(str) {
   try {
-    const ids = hist.ids[hist.idx] || new Set();
+    const ids = (hist.steps[hist.idx] && hist.steps[hist.idx].ids) || new Set();
     if (DB.ok) {
       for (const id of ids) {
         const r = images.get(id);
@@ -1944,7 +1953,7 @@ async function persistNow(str) {
 async function gcImages() {
   if (importing) return;
   const keep = new Set(docImageIds(doc));
-  hist.ids.forEach(s => s.forEach(id => keep.add(id)));
+  hist.steps.forEach(st => st.ids.forEach(id => keep.add(id)));
   if (psn) psn.items.forEach(it => { if (it.o0.img) keep.add(it.o0.img); if (it.o0.pic && it.o0.pic.id) keep.add(it.o0.pic.id); });
   const drop = [];
   images.forEach((r, id) => { if (!keep.has(id)) drop.push(id); });
@@ -1996,14 +2005,18 @@ async function restoreSession() {
   return { doc: d, lost };
 }
 
-function commit() {
+// Record the drawing as a new undo step (if anything changed) and redraw everything.
+// change: optional, for changes kept outside the drawing's JSON (see HISTORY above).
+function commit(change) {
   normalizeGroups(doc);   // every change passes through here, so groups always stay tidy
   const s = docJSON(doc);   // without derived outlines; loadSnapshot rebuilds them
-  if (hist.stack[hist.idx] !== s) {
-    hist.stack.length = hist.idx + 1; hist.ids.length = hist.idx + 1;
-    hist.stack.push(s); hist.ids.push(docImageIds(doc));
-    if (hist.stack.length > 100) { hist.stack.shift(); hist.ids.shift(); }
-    hist.idx = hist.stack.length - 1;
+  const cur = hist.steps[hist.idx];
+  if (!cur || cur.json !== s || change) {
+    hist.steps.splice(hist.idx + 1).forEach(dropStep);   // a new change ends the redo trail
+    const st = { json: s, ids: docImageIds(doc), change };
+    hist.steps.push(st); hist.bytes += stepBytes(st);
+    while (hist.steps.length > 2 && (hist.steps.length > HISTORY.steps || hist.bytes > HISTORY.bytes)) dropStep(hist.steps.shift());
+    hist.idx = hist.steps.length - 1;
     scheduleSave(s);
   }
   refreshAll();
@@ -2015,10 +2028,23 @@ function loadSnapshot(str) {
   S.sel = new Set(Array.from(S.sel).filter(id => byId(id)));
   refreshAll();
 }
-function undo() { if (psnBusy) return; if (hist.idx > 0) { hist.idx--; loadSnapshot(hist.stack[hist.idx]); scheduleSave(hist.stack[hist.idx]); } }
-function redo() { if (psnBusy) return; if (hist.idx < hist.stack.length - 1) { hist.idx++; loadSnapshot(hist.stack[hist.idx]); scheduleSave(hist.stack[hist.idx]); } }
-function revertUncommitted() { if (hist.idx >= 0) loadSnapshot(hist.stack[hist.idx]); }
-function resetHistory() { hist.stack = []; hist.ids = []; hist.idx = -1; commit(); }
+const canUndo = () => hist.idx > 0, canRedo = () => hist.idx < hist.steps.length - 1;
+function undo() {
+  if (psnBusy || !canUndo()) return;
+  const st = hist.steps[hist.idx];
+  if (st.change && st.change.undo) st.change.undo();
+  hist.idx--; loadSnapshot(hist.steps[hist.idx].json); scheduleSave(hist.steps[hist.idx].json);
+}
+function redo() {
+  if (psnBusy || !canRedo()) return;
+  hist.idx++;
+  const st = hist.steps[hist.idx];
+  loadSnapshot(st.json);
+  if (st.change && st.change.redo) st.change.redo();
+  scheduleSave(st.json);
+}
+function revertUncommitted() { if (hist.idx >= 0) loadSnapshot(hist.steps[hist.idx].json); }
+function resetHistory() { hist.steps.forEach(dropStep); hist.steps = []; hist.idx = -1; hist.bytes = 0; commit(); }
 
 /* =====================================================================
    Rendering: canvas objects
@@ -2107,13 +2133,14 @@ function zoomAt(f, sx, sy) {
 function zoomCenter(f) { userView = true; const s = stageSize(); zoomAt(f, s.w / 2, s.h / 2); }
 
 /* ---------- selection overlay ---------- */
+// What's drawn over the canvas: whatever the current drag or tool draws, or else the selection
+// handles (see TOOLS and DRAGS in 09-pointer-interaction.js)
 function drawOverlay() {
-  if (S.tool === 'perspective') { perspOverlay(); return; }
   ov.textContent = '';
   showPathBar();
-  if (drag && drag.type === 'pencil') { pencilPreview(); return; }
-  if (S.tool === 'pen') { penOverlay(); return; }
-  if (pe && peOverlay()) return;
+  const k = drag && DRAGS[drag.type], t = tool();
+  if (k && k.overlay && k.overlay()) return;
+  if (t.overlay && t.overlay()) return;
   const z = view.z;
   if (drag && drag.type === 'marquee' && drag.cur) {
     const r = drag.rect();
@@ -2178,14 +2205,26 @@ const snapV = v => S.snap ? Math.round(v / S.grid) * S.grid : v;
 const snapPt = p => ({ x: snapV(p.x), y: snapV(p.y) });
 function toWorld(e) { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.z, y: (e.clientY - r.top - view.y) / view.z }; }
 
+/* ---------- tools ----------
+   Each tool is an entry in TOOLS saying what it does; each kind of drag is an entry in DRAGS.
+   The pointer and keyboard handlers below only look things up, so a new tool (a brush, say) is
+   an entry in each, in its own file, and nothing here has to change.
+     TOOLS.name = { key: its keyboard shortcut, cursor: 'select' | 'hand' | 'draw' | 'text',
+                    down(e, p), hover(e, p), dblclick(e, under): pointer, p in page coordinates
+                    keys(e): return true when the key was used
+                    overlay(): draw over the canvas; return true to skip the selection handles
+                    enter(), leave(): when the tool is chosen, and when another is }
+     DRAGS.type = { move(p, e), end(d, e), overlay() }  for drag = { type, ... } */
+const TOOLS = {}, DRAGS = {};
+const tool = () => TOOLS[S.tool] || {};
 function setTool(t) {
-  if (pen && t !== 'pen') penFinish(false);   // switching away finishes the line being drawn
-  if (pe) pe = null;
-  S.tool = t;
-  if (t !== 'perspective') psn = null;
-  $$('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === t ? 'true' : 'false'));
-  stage.setAttribute('class', 't-' + (t === 'select' || t === 'perspective' ? 'select' : t === 'hand' ? 'hand' : t === 'text' ? 'text' : 'draw') + (spaceDown ? ' panning' : ''));
-  const bar = $('#persp-bar'); if (bar) bar.hidden = t !== 'perspective';
+  const prev = tool();
+  if (prev.leave) prev.leave();   // also when the same tool is chosen again: it starts over
+  S.tool = TOOLS[t] ? t : 'select';
+  const cur = tool();
+  if (cur.enter) cur.enter();
+  $$('.tool[data-tool]').forEach(b => b.setAttribute('aria-pressed', b.dataset.tool === S.tool ? 'true' : 'false'));
+  stage.setAttribute('class', 't-' + (cur.cursor || 'select') + (spaceDown ? ' panning' : ''));
   updateEmpty();
   drawOverlay();
 }
@@ -2197,69 +2236,30 @@ stage.addEventListener('pointerdown', e => {
   closeMenus();
   if (pointers.size === 2) { startPinch(); return; }
   if (pointers.size > 2) return;
-  if (e.button === 1 || S.tool === 'hand' || spaceDown) {
+  if (e.button === 1 || S.tool === 'hand' || spaceDown) {   // any tool pans with the middle button or Space
     drag = { type: 'pan', sx: e.clientX, sy: e.clientY, vx: view.x, vy: view.y };
     stage.classList.add('panning');
     e.preventDefault();
     return;
   }
-  const p = toWorld(e);
-  if (S.tool === 'perspective') { perspDown(e, p); return; }
-  if (S.tool === 'pen') { penDown(e, p); return; }
-  if (S.tool !== 'select') { beginDraw(e, p); return; }
-  if (pe && peDown(e, p)) return;
-  const h = e.target.closest && e.target.closest('[data-h]');
-  if (h) { beginHandle(h.dataset.h, p, e); return; }
-  const g = e.target.closest && e.target.closest('[data-id]');
-  const o = g ? byId(+g.dataset.id) : null;
-  if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
-  beginMarquee(p, e);
+  const t = tool();
+  if (t.down) t.down(e, toWorld(e));
 });
-
 stage.addEventListener('pointermove', e => {
   if (pointers.has(e.pointerId)) pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
   if (pinch && pointers.size === 2) { updatePinch(); return; }
-  if (!drag) { if (S.tool === 'pen' && pen) penHover(toWorld(e), e); return; }
-  const p = toWorld(e);
-  switch (drag.type) {
-    case 'pan': userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); break;
-    case 'move': updateMove(p, e); break;
-    case 'draw': updateDraw(p, e); break;
-    case 'pencil': updatePencil(p); break;
-    case 'pen': updatePenDrag(p, e); break;
-    case 'pepoint': updatePePoint(p, e); break;
-    case 'pehandle': updatePeHandle(p, e); break;
-    case 'resize': updateResize(p, e); break;
-    case 'rotate': updateRotate(p, e); break;
-    case 'lineend': updateLineEnd(p, e); break;
-    case 'mscale': updateMultiScale(p); break;
-    case 'mrotate': updateMultiRotate(p, e); break;
-    case 'persp': updatePersp(p, e); break;
-    case 'marquee': updateMarquee(p, e); break;
-  }
+  if (!drag) { const t = tool(); if (t.hover) t.hover(e, toWorld(e)); return; }
+  const k = DRAGS[drag.type];
+  if (k && k.move) k.move(toWorld(e), e);
 });
-
 function endPointer(e) {
   pointers.delete(e.pointerId);
   if (pinch) { if (pointers.size < 2) pinch = null; return; }
   if (!drag) return;
   const d = drag; drag = null;
   stage.classList.toggle('panning', spaceDown);
-  switch (d.type) {
-    case 'move':
-      if (d.moved) commit();
-      else if (d.collapseTo && !d.shift) { S.sel = new Set(d.collapseTo); refreshAll(); }
-      else refreshAll();
-      break;
-    case 'draw': finishDraw(d, e); break;
-    case 'pencil': finishPencil(d); break;
-    case 'pen': drawOverlay(); break;
-    case 'pepoint': case 'pehandle': if (d.moved) commit(); else drawOverlay(); break;
-    case 'resize': case 'rotate': case 'lineend': case 'mscale': case 'mrotate': commit(); break;
-    case 'persp': perspRelease(d); break;
-    case 'marquee': refreshAll(); break;
-    default: drawOverlay();
-  }
+  const k = DRAGS[d.type];
+  if (k && k.end) k.end(d, e); else drawOverlay();
 }
 stage.addEventListener('pointerup', endPointer);
 stage.addEventListener('pointercancel', endPointer);
@@ -2274,27 +2274,45 @@ stage.addEventListener('wheel', e => {
 stage.addEventListener('dblclick', e => {
   // The stage holds on to the pointer during a click (for dragging), so the browser reports the
   // double-click as coming from the stage itself. Ask what is actually under the pointer instead.
-  const under = document.elementFromPoint(e.clientX, e.clientY) || e.target;
-  if (S.tool === 'pen') {
-    // a double-click finishes an open line; its second click placed a point on top of the last one
-    if (pen && pen.pts.length >= 2) {
-      const a = pen.pts[pen.pts.length - 1], b = pen.pts[pen.pts.length - 2];
-      if (Math.hypot(a.x - b.x, a.y - b.y) * view.z < 4) pen.pts.pop();
-      penFinish(false);
-    }
-    return;
-  }
-  if (S.tool !== 'select') return;
-  if (pe) return;   // double-clicking a point is handled in peDown (see there)
-  const g = under.closest && under.closest('[data-id]');
-  const o = g ? byId(+g.dataset.id) : null;
-  if (!o || isLocked(o) || isHidden(o)) return;
-  // Double-click picks just this object, even inside a group; for text it also opens the editor,
-  // and for a plain shape it shows its points for editing
-  if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
-  else if (o.kind === 'path') { revealInLayers(o); enterPointEdit(o); }
-  else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
+  const under = document.elementFromPoint(e.clientX, e.clientY) || e.target, t = tool();
+  if (t.dblclick) t.dblclick(e, under);
 });
+
+DRAGS.pan = { move(p, e) { userView = true; view.x = drag.vx + (e.clientX - drag.sx); view.y = drag.vy + (e.clientY - drag.sy); applyView(); } };
+TOOLS.hand = { key: 'h', cursor: 'hand' };   // panning itself is handled above, for every tool
+
+/* ---------- the Select tool ---------- */
+TOOLS.select = {
+  key: 'v', cursor: 'select',
+  down(e, p) {
+    if (pe && peDown(e, p)) return;   // editing points (see 09b-pen.js)
+    const h = e.target.closest && e.target.closest('[data-h]');
+    if (h) { beginHandle(h.dataset.h, p, e); return; }
+    const g = e.target.closest && e.target.closest('[data-id]');
+    const o = g ? byId(+g.dataset.id) : null;
+    if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
+    beginMarquee(p, e);
+  },
+  dblclick(e, under) {
+    if (pe) return;   // double-clicking a point is handled in peDown (see there)
+    const g = under.closest && under.closest('[data-id]');
+    const o = g ? byId(+g.dataset.id) : null;
+    if (!o || isLocked(o) || isHidden(o)) return;
+    // Double-click picks just this object, even inside a group; for text it also opens the editor,
+    // and for a plain shape it shows its points for editing
+    if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+    else if (o.kind === 'path') { revealInLayers(o); enterPointEdit(o); }
+    else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
+  },
+  keys(e) {
+    if (pe) return peKeys(e);
+    // Enter on a plain shape shows its points
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.target.closest('button') && one() && one().kind === 'path') { e.preventDefault(); enterPointEdit(one()); return true; }
+    return false;
+  },
+  overlay: () => !!(pe && peOverlay()),
+  leave() { pe = null; }
+};
 
 /* ---------- pinch to zoom / two-finger pan ---------- */
 function pinchState() {
@@ -2374,10 +2392,12 @@ function updateMarquee(p) {
 
 /* ---------- drawing ---------- */
 function beginDraw(e, p) {
-  if (S.tool === 'text') { createText(p); return; }
-  if (S.tool === 'pencil') { beginPencil(p); return; }
   drag = { type: 'draw', tool: S.tool, start: snapPt(p), sx: e.clientX, sy: e.clientY, id: null };
 }
+// Shapes and lines: drag to draw (or click for a default size), then back to Select
+[['rect', 'r'], ['ellipse', 'e'], ['polygon', 'p'], ['star', 's'], ['line', 'l']].forEach(([t, key]) => { TOOLS[t] = { key, cursor: 'draw', down: beginDraw }; });
+TOOLS.text = { key: 't', cursor: 'text', down: (e, p) => createText(p) };
+DRAGS.draw = { move: (p, e) => updateDraw(p, e), end: (d, e) => finishDraw(d, e) };
 function makeDrawn(tool, box) {
   if (tool === 'rect') return newShape('rect', box);
   if (tool === 'ellipse') return newShape('ellipse', box);
@@ -2555,6 +2575,24 @@ function updateResize(p, e) {
   render();
 }
 
+
+// The drags that belong to the Select tool, shapes and the pencil
+DRAGS.move = {
+  move: (p, e) => updateMove(p, e),
+  end(d) {
+    if (d.moved) commit();
+    else if (d.collapseTo && !d.shift) { S.sel = new Set(d.collapseTo); refreshAll(); }
+    else refreshAll();
+  }
+};
+DRAGS.marquee = { move: (p, e) => updateMarquee(p, e), end: () => refreshAll() };
+DRAGS.resize = { move: (p, e) => updateResize(p, e), end: () => commit() };
+DRAGS.rotate = { move: (p, e) => updateRotate(p, e), end: () => commit() };
+DRAGS.lineend = { move: (p, e) => updateLineEnd(p, e), end: () => commit() };
+DRAGS.mscale = { move: p => updateMultiScale(p), end: () => commit() };
+DRAGS.mrotate = { move: (p, e) => updateMultiRotate(p, e), end: () => commit() };
+TOOLS.pencil = { key: 'n', cursor: 'draw', down: (e, p) => beginPencil(p) };
+DRAGS.pencil = { move: p => updatePencil(p), end: d => finishPencil(d), overlay() { pencilPreview(); return true; } };
 /* =====================================================================
    Pen tool and point editing
    Pen (B): click to place sharp corners; click and drag to place a smooth, curved point. Shift keeps
@@ -2662,8 +2700,7 @@ function penOverlay() {
 const peObj = () => { const o = pe && byId(pe.id); return o && o.kind === 'path' && !isLocked(o) && !isHidden(o) ? o : null; };
 function enterPointEdit(o) {
   if (!o || !(o.kind === 'path' || kindInfo(o).plain) || isLocked(o)) return;
-  if (pen) penFinish(false);
-  if (S.tool !== 'select') setTool('select');
+  if (S.tool !== 'select') setTool('select');   // finishes a line being drawn with the pen
   S.sel = new Set([o.id]);
   if (o.kind !== 'path') flattenSelected();   // shapes and text become plain shapes, so their points can be moved
   pe = { id: o.id, sel: new Set() };
@@ -2789,12 +2826,17 @@ function peNudge(dx, dy) {
 
 /* ---------- keys ---------- */
 // Returns true when the pen or point editing used the key
-function pathKeys(e) {
+// Keys while drawing with the pen (returns true when a key was used)
+function penKeys(e) {
   const k = e.key;
-  if (pen && pen.pts.length) {
-    if (k === 'Enter' || k === 'Escape') { e.preventDefault(); if (pen.pts.length >= 2) penFinish(false); else { pen = null; refreshAll(); } return true; }
-    if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); penUndoPoint(); return true; }
-  }
+  if (!pen || !pen.pts.length) return false;
+  if (k === 'Enter' || k === 'Escape') { e.preventDefault(); if (pen.pts.length >= 2) penFinish(false); else { pen = null; refreshAll(); } return true; }
+  if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); penUndoPoint(); return true; }
+  return false;
+}
+// Keys while editing points (the Select tool asks this while pe is set)
+function peKeys(e) {
+  const k = e.key;
   if (pe) {
     if (k === 'Enter' || k === 'Escape') { e.preventDefault(); exitPointEdit(); return true; }
     if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); peRemove(); return true; }
@@ -2807,6 +2849,27 @@ function pathKeys(e) {
   }
   return false;
 }
+
+/* ---------- registering the Pen and its drags ---------- */
+TOOLS.pen = {
+  key: 'b', cursor: 'draw',
+  down: (e, p) => penDown(e, p),
+  hover: (e, p) => penHover(p, e),
+  dblclick() {
+    // a double-click finishes an open line; its second click placed a point on top of the last one
+    if (!pen || pen.pts.length < 2) return;
+    const a = pen.pts[pen.pts.length - 1], b = pen.pts[pen.pts.length - 2];
+    if (Math.hypot(a.x - b.x, a.y - b.y) * view.z < 4) pen.pts.pop();
+    penFinish(false);
+  },
+  keys: e => penKeys(e),
+  overlay() { penOverlay(); return true; },
+  leave() { if (pen) penFinish(false); }   // switching tools finishes the line being drawn
+};
+DRAGS.pen = { move: (p, e) => updatePenDrag(p, e), end: () => drawOverlay() };
+const peDragEnd = d => { if (d.moved) commit(); else drawOverlay(); };
+DRAGS.pepoint = { move: (p, e) => updatePePoint(p, e), end: peDragEnd };
+DRAGS.pehandle = { move: (p, e) => updatePeHandle(p, e), end: peDragEnd };
 /* =====================================================================
    Perspective
    Tilts the selection as if it were seen from an angle. The selection's bounding box is
@@ -3370,6 +3433,20 @@ function perspReset() {
   commit();
 }
 
+
+/* ---------- registering the Perspective tool ---------- */
+TOOLS.perspective = {
+  key: 'd', cursor: 'select',
+  down: (e, p) => perspDown(e, p),
+  keys(e) {
+    if (e.key !== 'Enter' || e.target.closest('button')) return false;
+    e.preventDefault(); setTool('select'); refreshAll(); return true;
+  },
+  overlay() { perspOverlay(); return true; },
+  enter() { $('#persp-bar').hidden = false; },
+  leave() { psn = null; $('#persp-bar').hidden = true; }
+};
+DRAGS.persp = { move: (p, e) => updatePersp(p, e), end: d => perspRelease(d) };
 /* =====================================================================
    Editing commands
    ===================================================================== */
@@ -4832,7 +4909,7 @@ async function importSVGFile(file) {
    ===================================================================== */
 function refreshAll() {
   drawArtboard(); syncObjects(); drawOverlay(); renderLayers(); updateInspector(); updatePageTab(); updateEmpty();
-  $('#btn-undo').disabled = hist.idx <= 0; $('#btn-redo').disabled = hist.idx >= hist.stack.length - 1;
+  $('#btn-undo').disabled = !canUndo(); $('#btn-redo').disabled = !canRedo();
 }
 function render() { syncObjects(); drawOverlay(); updateInspector(); }
 
@@ -4870,7 +4947,8 @@ window.addEventListener('keydown', e => {
   if (psnBusy) { e.preventDefault(); return; }
   if (!$('#export-overlay').hidden) { if (e.key === 'Escape') closeExport(); return; }
   if (isTyping(e)) return;
-  if (pathKeys(e)) return;   // the pen and point editing use Enter, Esc, Delete and the arrows
+  const t = tool();
+  if (t.keys && t.keys(e)) return;   // keys the current tool uses (the pen and point editing use Enter, Esc, Delete, the arrows)
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (e.code === 'Space' && !e.target.closest('button')) { if (!spaceDown) { spaceDown = true; stage.classList.add('panning'); } e.preventDefault(); return; }
   if (mod) {
@@ -4884,11 +4962,9 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.shiftKey && (k === 'h' || k === 'v')) { e.preventDefault(); mirrorSelected(k); return; }
-  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', n: 'pencil', b: 'pen', t: 'text', d: 'perspective' };
-  if (map[k]) { setTool(map[k]); e.preventDefault(); return; }
-  if (k === 'enter' && S.tool === 'perspective' && !e.target.closest('button')) { e.preventDefault(); setTool('select'); refreshAll(); }
-  else if (k === 'enter' && S.tool === 'select' && one() && one().kind === 'path' && !e.target.closest('button')) { e.preventDefault(); enterPointEdit(one()); }
-  else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
+  const byKey = Object.keys(TOOLS).find(n => TOOLS[n].key === k);   // each tool's own shortcut
+  if (byKey) { setTool(byKey); e.preventDefault(); return; }
+  if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
   else if (k === 'escape') { S.sel = new Set(); setTool('select'); refreshAll(); }
   else if (k.startsWith('arrow')) {
     const st = e.shiftKey ? 10 : 1;
