@@ -173,10 +173,6 @@ function groupsFilledBy(d, objs) {
    scale along with the shapes. */
 function scaleAbout(o, o0, ax, ay, k) {
   if (o0.sw !== undefined) o.sw = rnd(o0.sw * k, 3);
-  if (o.kind === 'line') {
-    o.x1 = ax + (o0.x1 - ax) * k; o.y1 = ay + (o0.y1 - ay) * k; o.x2 = ax + (o0.x2 - ax) * k; o.y2 = ay + (o0.y2 - ay) * k;
-    refresh(o); return;
-  }
   const cx = ax + (o0.x + o0.w / 2 - ax) * k, cy = ay + (o0.y + o0.h / 2 - ay) * k;
   if (o.kind === 'text') { o.size = Math.max(1, rnd(o0.size * k, 3)); refresh(o); }
   else {
@@ -188,10 +184,6 @@ function scaleAbout(o, o0, ax, ay, k) {
   if (o0.pic && o.pic) rescalePic(o, o0.pic, k, k);
 }
 function rotateAbout(o, o0, cx, cy, deg) {
-  if (o.kind === 'line') {
-    const a = rotPt(o0.x1, o0.y1, cx, cy, deg), b = rotPt(o0.x2, o0.y2, cx, cy, deg);
-    o.x1 = a.x; o.y1 = a.y; o.x2 = b.x; o.y2 = b.y; refresh(o); return;
-  }
   const c = rotPt(o0.x + o0.w / 2, o0.y + o0.h / 2, cx, cy, deg);
   o.x = c.x - o0.w / 2; o.y = c.y - o0.h / 2;
   o.rot = rnd(normDeg((o0.rot || 0) + deg), 2);

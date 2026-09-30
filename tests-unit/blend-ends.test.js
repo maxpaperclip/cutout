@@ -4,19 +4,21 @@ const assert = require('node:assert/strict');
 const { loadCutoutModules } = require('./harness');
 
 const outline = (extra) => Object.assign({ kind: 'rect', stroke: '#000000', sw: 2, dash: 'solid' }, extra);
+// A real straight line (lines are two-point paths), with the given settings
+const line = (m, extra) => Object.assign(m.makeLine({ x: 0, y: 0 }, { x: 40, y: 10 }), { stroke: '#000000', sw: 2, dash: 'solid' }, extra);
 
 test('line ends', async (t) => {
   await t.test('with no setting, ends are chosen as before: round for lines, flat for shapes', () => {
     const m = loadCutoutModules();
     assert.equal(m.strokeAttrs(outline())['stroke-linecap'], 'butt');
-    assert.equal(m.strokeAttrs(outline({ kind: 'line' }))['stroke-linecap'], 'round');
-    assert.equal(m.strokeAttrs(outline({ kind: 'line', dash: 'dashed' }))['stroke-linecap'], 'butt');
+    assert.equal(m.strokeAttrs(line(m))['stroke-linecap'], 'round');
+    assert.equal(m.strokeAttrs(line(m, { dash: 'dashed' }))['stroke-linecap'], 'butt');
   });
 
   await t.test('a chosen end is used as it is', () => {
     const m = loadCutoutModules();
     assert.equal(m.strokeAttrs(outline({ cap: 'square' }))['stroke-linecap'], 'square');
-    assert.equal(m.strokeAttrs(outline({ kind: 'line', cap: 'butt' }))['stroke-linecap'], 'butt');
+    assert.equal(m.strokeAttrs(line(m, { cap: 'butt' }))['stroke-linecap'], 'butt');
     assert.equal(m.strokeAttrs(outline({ cap: 'round', dash: 'dashed' }))['stroke-linecap'], 'round');
   });
 

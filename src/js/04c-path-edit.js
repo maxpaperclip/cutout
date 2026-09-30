@@ -31,8 +31,7 @@ function writePath(o, o0, path) {
   const p = path.clone({ insert: false });
   p.translate(new paper.Point(-b.x, -b.y));
   const d = p.pathData;
-  o.kind = 'path'; o.w = w; o.h = h; o.x = c[0] - w / 2; o.y = c[1] - h / 2;
-  o.nat = { d, w, h }; o.d = d; o.rot = o0.rot || 0;
+  toPlainPath(o, d, w, h); o.x = c[0] - w / 2; o.y = c[1] - h / 2; o.rot = o0.rot || 0;
   if (o0.fx) o.fx = true; else delete o.fx;
   if (o0.fy) o.fy = true; else delete o.fy;
   if (o0.pic && o.pic) o.pic = Object.assign({}, o0.pic, { dx: o0.pic.dx - shift.x, dy: o0.pic.dy - shift.y });
@@ -127,4 +126,43 @@ function penGeometry(pts, closed) {
 function snap45(a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
   return { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
+}
+
+/* ---------- straight lines ----------
+   A line is a plain shape (path) with just two points and no curve: there is no separate kind.
+   The Line tool makes one, and anything with that outline (a pen line with two clicks, say) gets
+   the line's endpoint handles and X1 / Y1 / X2 / Y2 fields. */
+const lineCache = new Map();   // outline -> its two ends in box coordinates, or null
+function lineEnds(o) {
+  if (!o || o.kind !== 'path' || typeof o.d !== 'string') return null;
+  let e = lineCache.get(o.d);
+  if (e === undefined) {
+    e = null;
+    try {
+      const p = new paper.CompoundPath({ pathData: o.d, insert: false }), c = p.children;
+      if (c.length === 1 && !c[0].closed && c[0].segments.length === 2 && c[0].segments.every(s => !hasHandle(s.handleIn) && !hasHandle(s.handleOut)))
+        e = c[0].segments.map(s => [s.point.x, s.point.y]);
+    } catch (err) { e = null; }
+    lineCache.set(o.d, e);
+    if (lineCache.size > 500) lineCache.delete(lineCache.keys().next().value);
+  }
+  return e ? e.map(p => boxToWorld(o, p[0], p[1])) : null;   // page coordinates, through flip and turn
+}
+const isStraightLine = o => !!lineEnds(o);
+// The box and outline for a line from a to b (page coordinates)
+function lineGeometry(a, b) {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+  const d = 'M' + rnd(a.x - x, 3) + ' ' + rnd(a.y - y, 3) + 'L' + rnd(b.x - x, 3) + ' ' + rnd(b.y - y, 3);
+  const W = Math.max(w, 0.01), H = Math.max(h, 0.01);   // a flat line still has a (very thin) box
+  return { x, y, w: W, h: H, nat: { d, w: W, h: H } };
+}
+// A new line with the line tool's usual look (an outline, never a fill); props can override it
+function makeLine(a, b, props) {
+  const st = S.style;
+  return newShape('path', Object.assign({ fill: 'none', stroke: st.stroke === 'none' ? '#151936' : st.stroke, sw: Math.max(st.sw, 3) }, lineGeometry(a, b), props || {}));
+}
+// Move a line's ends (page coordinates). Any turn or flip is built into the new ends.
+function setLineEnds(o, a, b) {
+  Object.assign(o, lineGeometry(a, b)); o.rot = 0; delete o.fx; delete o.fy;
+  refresh(o);
 }

@@ -104,7 +104,7 @@ function penOverlay() {
 /* ---------- editing points ---------- */
 const peObj = () => { const o = pe && byId(pe.id); return o && o.kind === 'path' && !isLocked(o) && !isHidden(o) ? o : null; };
 function enterPointEdit(o) {
-  if (!o || o.kind === 'line' || o.kind === 'image' || isLocked(o)) return;
+  if (!o || !(o.kind === 'path' || kindInfo(o).plain) || isLocked(o)) return;
   if (pen) penFinish(false);
   if (S.tool !== 'select') setTool('select');
   S.sel = new Set([o.id]);

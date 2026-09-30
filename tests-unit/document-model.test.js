@@ -26,21 +26,32 @@ test('document model: newShape', async (t) => {
     assert.ok(p.d.startsWith('M'), 'polygon should get a generated path');
   });
 
-  await t.test('line defaults to no fill and a visible stroke', () => {
+  await t.test('a line is a plain two-point shape with no fill and a visible stroke', () => {
     const m = loadCutoutModules();
-    const l = m.newShape('line', { x1: 0, y1: 0, x2: 50, y2: 50 });
+    const l = m.makeLine({ x: 0, y: 0 }, { x: 50, y: 50 });
+    assert.equal(l.kind, 'path');
     assert.equal(l.fill, 'none');
     assert.notEqual(l.stroke, 'none');
     assert.ok(l.sw >= 3, 'line stroke width should have a sensible minimum');
+    assert.equal(m.isStraightLine(l), true);
+    assert.equal(m.labelOf(l), 'Line');
   });
 
-  await t.test('line box (x/y/w/h) is derived from its endpoints', () => {
+  await t.test('line box (x/y/w/h) is derived from its endpoints, and lineEnds gives them back', () => {
     const m = loadCutoutModules();
-    const l = m.newShape('line', { x1: 30, y1: 100, x2: 130, y2: 40 });
+    const l = m.makeLine({ x: 30, y: 100 }, { x: 130, y: 40 });
     assert.equal(l.x, 30);
     assert.equal(l.y, 40);
     assert.equal(l.w, 100);
     assert.equal(l.h, 60);
+    assert.deepEqual(JSON.parse(JSON.stringify(m.lineEnds(l))), [[30, 100], [130, 40]]);
+  });
+
+  await t.test('a perfectly flat line still has a usable box', () => {
+    const m = loadCutoutModules();
+    const l = m.makeLine({ x: 0, y: 20 }, { x: 80, y: 20 });
+    assert.ok(l.h > 0 && l.h < 0.1);
+    assert.deepEqual(JSON.parse(JSON.stringify(m.lineEnds(l))), [[0, 20], [80, 20]]);
   });
 
   await t.test('text gets sensible defaults', () => {
@@ -142,12 +153,9 @@ test('document model: bounds (aabb / unionBox / centerOf)', async (t) => {
 
   await t.test('moveBy also shifts a line\'s endpoints', () => {
     const m = loadCutoutModules();
-    const l = m.newShape('line', { x1: 0, y1: 0, x2: 10, y2: 10 });
+    const l = m.makeLine({ x: 0, y: 0 }, { x: 10, y: 10 });
     m.moveBy(l, 5, 5);
-    assert.equal(l.x1, 5);
-    assert.equal(l.y1, 5);
-    assert.equal(l.x2, 15);
-    assert.equal(l.y2, 15);
+    assert.deepEqual(JSON.parse(JSON.stringify(m.lineEnds(l))), [[5, 5], [15, 15]]);
   });
 });
 

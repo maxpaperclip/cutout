@@ -139,7 +139,7 @@ async function restoreSession() {
 
 function commit() {
   normalizeGroups(doc);   // every change passes through here, so groups always stay tidy
-  const s = JSON.stringify(doc);
+  const s = docJSON(doc);   // without derived outlines; loadSnapshot rebuilds them
   if (hist.stack[hist.idx] !== s) {
     hist.stack.length = hist.idx + 1; hist.ids.length = hist.idx + 1;
     hist.stack.push(s); hist.ids.push(docImageIds(doc));
@@ -152,6 +152,7 @@ function commit() {
 function loadSnapshot(str) {
   doc = JSON.parse(str);
   if (!Array.isArray(doc.groups)) doc.groups = [];   // snapshots from before groups existed
+  rebuildOutlines(doc);
   S.sel = new Set(Array.from(S.sel).filter(id => byId(id)));
   refreshAll();
 }

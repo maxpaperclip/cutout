@@ -194,9 +194,9 @@ test('groups: scaling and turning several objects together', async (t) => {
     const o0 = plain(o);
     m.scaleAbout(o, o0, 100, 100, 2);
     assert.deepEqual([o.x, o.y, o.w, o.h, o.sw, o.r], [100, 100, 100, 40, 4, 8]);
-    const line = m.newShape('line', { x1: 0, y1: 0, x2: 10, y2: 0 });
+    const line = m.makeLine({ x: 0, y: 0 }, { x: 10, y: 0 });
     m.scaleAbout(line, plain(line), 0, 0, 3);
-    assert.equal(line.x2, 30);
+    assert.ok(Math.abs(m.lineEnds(line)[1][0] - 30) < 1e-9);
   });
 
   await t.test('scaleAbout scales text by its size', () => {
@@ -212,9 +212,10 @@ test('groups: scaling and turning several objects together', async (t) => {
     m.rotateAbout(o, plain(o), 0, 0, 90);
     assert.ok(Math.abs(o.x + 10) < 1e-9 && Math.abs(o.y - 90) < 1e-9, o.x + ',' + o.y);   // now centered at (0, 100)
     assert.equal(o.rot, 100);
-    const line = m.newShape('line', { x1: 10, y1: 0, x2: 20, y2: 0 });
+    const line = m.makeLine({ x: 10, y: 0 }, { x: 20, y: 0 });
     m.rotateAbout(line, plain(line), 0, 0, 90);
-    assert.ok(Math.abs(line.x1) < 1e-9 && Math.abs(line.y1 - 10) < 1e-9);
+    const e = m.lineEnds(line);
+    assert.ok(Math.abs(e[0][0]) < 1e-6 && Math.abs(e[0][1] - 10) < 1e-6, String(e));
   });
 });
 

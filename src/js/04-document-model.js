@@ -25,25 +25,42 @@ const images = new Map();        // id -> { id, blob, dataUrl, w, h, mime, bytes
 const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '').slice(0, 20) : Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 function docImageIds(d) {
   const s = new Set();
-  d.objects.forEach(o => { if (o.kind === 'image' && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); });
+  d.objects.forEach(o => { if (hasPixels(o) && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); });
   return s;
 }
 // A shape (or text) whose fill is a photo
-const hasPic = o => !!(o.pic && o.kind !== 'line' && o.kind !== 'image' && images.has(o.pic.id));
+const hasPic = o => !!(o.pic && hasPaint(o) && images.has(o.pic.id));
 // A shape (or text) whose fill is a gradient (see "gradient fills" below)
-const hasGrad = o => !!(o && o.grad && o.kind !== 'line' && o.kind !== 'image');
+const hasGrad = o => !!(o && o.grad && hasPaint(o));
 const byId = id => doc.objects.find(o => o.id === id);
 const selObjs = () => doc.objects.filter(o => S.sel.has(o.id));
 const one = () => { const s = selObjs(); return s.length === 1 ? s[0] : null; };
 
-const KIND_LABEL = { image: 'Photo', rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', line: 'Line', text: 'Text', path: 'Shape' };
+/* What each kind of object is and can do. Code asks these questions (through the helpers below)
+   instead of naming kinds, so a new kind (paint layers, say) is one entry here.
+     pixels:     drawn from a stored picture (see images); has no fill, outline or gradient
+     keepsRatio: resizing keeps its proportions (text grows by font size, pictures don't stretch)
+     plain:      can become a plain shape (Convert to plain shape, Edit points) */
+const KIND_INFO = {
+  rect:    { label: 'Rectangle', plain: true },
+  ellipse: { label: 'Ellipse', plain: true },
+  polygon: { label: 'Polygon', plain: true },
+  text:    { label: 'Text', plain: true, keepsRatio: true },
+  path:    { label: 'Shape' },
+  image:   { label: 'Photo', pixels: true, keepsRatio: true }
+};
+const kindInfo = o => (o && KIND_INFO[o.kind]) || {};
+const hasPixels = o => !!kindInfo(o).pixels;      // a photo (no fill, outline or gradient of its own)
+const hasPaint = o => !!o && !hasPixels(o);       // has a fill, an outline, and maybe a gradient
+const keepsRatio = o => !!kindInfo(o).keepsRatio;
 function labelOf(o) {
   if (o.name) return o.name;
   if (o.kind === 'text') return (o.text || '').split('\n')[0].slice(0, 26) || 'Text';
   if (o.kind === 'polygon' && o.star) return 'Star';
-  return KIND_LABEL[o.kind] || 'Object';
+  if (isStraightLine(o)) return 'Line';
+  return kindInfo(o).label || 'Object';
 }
-const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : (o.kind !== 'line' && o.kind !== 'image' && o.pic ? 'image' : o.kind);
+const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : hasPaint(o) && o.pic ? 'image' : isStraightLine(o) ? 'line' : o.kind;
 
 /* ---------- blend modes and line ends ----------
    o.blend: how an object mixes with what's under it (absent = normal).
@@ -56,6 +73,31 @@ const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Scre
 const BLEND_IDS = BLENDS.map(b => b[0]);
 const CAPS = ['butt', 'round', 'square'];
 const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blend) >= 0 ? o.blend : null;
+
+/* ---------- shared field lists ----------
+   STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
+   KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
+const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls'] };
+// Copy the listed settings from one object to another, removing any the source doesn't have.
+// Gradients are copied, never shared, so editing one object's gradient can't change another's.
+function copyKeys(from, to, keys) {
+  keys.forEach(k => {
+    if (from[k] === undefined) delete to[k];
+    else to[k] = k === 'grad' ? cloneGrad(from[k]) : from[k];
+  });
+  return to;
+}
+// Turn an object into a plain shape with the given outline (box coordinates, already sized w x h)
+function toPlainPath(o, d, w, h) {
+  Object.keys(KIND_PARAMS).forEach(k => KIND_PARAMS[k].forEach(p => delete o[p]));
+  o.kind = 'path'; o.w = w; o.h = h; o.nat = { d, w, h }; o.d = d;
+  return o;
+}
+// A photo object showing the stored picture rec (see images); props sets or overrides anything
+function makeImage(rec, props) {
+  return Object.assign({ id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: 0, y: 0, w: rec.w, h: rec.h, rot: 0, opacity: 1, hidden: false, locked: false }, props);
+}
 
 /* ---------- gradient fills ----------
    o.grad = { type: 'linear' | 'radial', stops: [{ at, c, a }, ...],
@@ -263,16 +305,29 @@ function scaledPathD(nat, w, h) {
   c.scale(sx, sy, new paper.Point(0, 0));
   return c.pathData;
 }
-function syncLineBox(o) {
-  o.x = Math.min(o.x1, o.x2); o.y = Math.min(o.y1, o.y2);
-  o.w = Math.abs(o.x2 - o.x1); o.h = Math.abs(o.y2 - o.y1); o.rot = 0;
-}
 // Rebuild derived geometry after a parameter changed
+/* Derived outlines. o.d (the outline drawn for text, polygons and plain shapes) is always rebuilt
+   from the object's own settings, so it is never saved: not in undo steps, autosave or project
+   files (see docJSON). It is rebuilt by refresh() when a drawing is opened or an undo step is
+   restored. Text layout is the slow part, so recent layouts are kept here. */
+const textLayouts = new Map();
+function layoutText(o) {
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text;
+  let g = textLayouts.get(key);
+  if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
+  g = buildText(o);
+  textLayouts.set(key, g);
+  if (textLayouts.size > 400) textLayouts.delete(textLayouts.keys().next().value);
+  return g;
+}
+// The drawing as JSON, without derived outlines (the key 'd' on an object; a path's own nat.d is kept)
+const docJSON = d => JSON.stringify(d, function (k, v) { return k === 'd' && this && this.kind ? undefined : v; });
+function rebuildOutlines(d) { d.objects.forEach(o => { try { refresh(o); } catch (e) { /* drawn as nothing until fixed */ } }); }
+
 function refresh(o) {
-  if (o.kind === 'text') { const g = buildText(o); o.d = g.d; o.w = g.w; o.h = g.h; }
+  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; }
   else if (o.kind === 'polygon') o.d = buildPolygon(o);
   else if (o.kind === 'path') o.d = scaledPathD(o.nat, o.w, o.h);
-  else if (o.kind === 'line') syncLineBox(o);
 }
 function newShape(kind, props) {
   const st = S.style;
@@ -283,15 +338,9 @@ function newShape(kind, props) {
   const given = k => props && props[k] !== undefined;
   // New shapes pick up the last gradient used, just as they pick up the last fill color.
   // Each shape gets its own copy, so editing one shape's gradient never changes another's.
-  if (st.grad && !given('fill') && !given('grad') && kind !== 'line' && kind !== 'text' && kind !== 'image') { o.grad = cloneGrad(st.grad); o.fill = o.grad.stops[0].c; }
+  if (st.grad && !given('fill') && !given('grad') && kind !== 'text' && !KIND_INFO[kind].pixels) { o.grad = cloneGrad(st.grad); o.fill = o.grad.stops[0].c; }
   if (kind === 'rect' && o.r === undefined) o.r = 0;
   if (kind === 'polygon') { o.sides = o.sides || 6; o.star = !!o.star; o.inner = o.inner || 0.45; }
-  if (kind === 'line') {
-    if (!given('fill')) o.fill = 'none';
-    if (!given('stroke')) o.stroke = st.stroke === 'none' ? '#151936' : st.stroke;
-    if (!given('sw')) o.sw = Math.max(st.sw, 3);
-    o.x1 = o.x1 || 0; o.y1 = o.y1 || 0; o.x2 = o.x2 || 0; o.y2 = o.y2 || 0;
-  }
   if (kind === 'text') {
     o.text = o.text !== undefined ? o.text : 'Text'; o.font = o.font || DEFAULT_FONT; o.size = o.size || 64;
     o.align = o.align || 'left'; o.lh = o.lh || 1.2; o.ls = o.ls || 0;
@@ -319,6 +368,5 @@ function unionBox(list) {
 }
 function moveBy(o, dx, dy) {
   o.x += dx; o.y += dy;
-  if (o.kind === 'line') { o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; }
 }
 

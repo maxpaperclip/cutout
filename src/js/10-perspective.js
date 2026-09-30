@@ -182,7 +182,7 @@ function photoTexture(rec) {
 }
 
 /* ---------- the session ---------- */
-const geomSnap = o => ({ kind: o.kind, x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot || 0, fx: !!o.fx, fy: !!o.fy, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, d: o.d, img: o.img, pic: o.pic ? o.pic.id + ',' + o.pic.dx + ',' + o.pic.dy + ',' + o.pic.s : '' });
+const geomSnap = o => ({ kind: o.kind, x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot || 0, fx: !!o.fx, fy: !!o.fy, d: o.d, img: o.img, pic: o.pic ? o.pic.id + ',' + o.pic.dx + ',' + o.pic.dy + ',' + o.pic.s : '' });
 const sameGeom = (a, b) => { for (const k in a) if (a[k] !== b[k]) return false; return true; };
 const PERSP_HINT = 'Drag a corner to tilt the selection. Hold Shift to move two corners together.';
 
@@ -190,7 +190,7 @@ function perspEligible() {
   const sel = selObjs();
   if (!sel.length) return { why: 'Select a shape, some text, a photo or a few objects, then drag a corner to tilt them.' };
   if (sel.some(isLocked)) return { why: 'Unlock the selected objects first.' };
-  if (sel.some(o => o.kind === 'image' && !images.has(o.img))) return { why: 'That photo is not available any more.' };
+  if (sel.some(o => hasPixels(o) && !images.has(o.img))) return { why: 'That photo is not available any more.' };
   if (sel.some(o => hasPic(o) && !picCovers(o) && o.fill && o.fill !== 'none')) return { why: 'The photo has to fill the shape before it can be tilted. Choose Fit photo first.' };
   if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
   return { objs: sel };
@@ -198,7 +198,7 @@ function perspEligible() {
 // (boxToWorld, box coordinates to page coordinates, is in 04c-path-edit.js)
 // Where a photo sits on the page, as a 3x3 matrix from photo pixels to page coordinates
 function perspPhotoInfo(o) {
-  const masked = o.kind !== 'image', rec = images.get(masked ? o.pic.id : o.img);
+  const masked = !hasPixels(o), rec = images.get(masked ? o.pic.id : o.img);
   const g = masked ? picGeom(o) : { x: 0, y: 0, w: o.w, h: o.h };
   const p0 = boxToWorld(o, 0, 0), p1 = boxToWorld(o, 1, 0), p2 = boxToWorld(o, 0, 1);
   const A = [p1[0] - p0[0], p1[1] - p0[1], p2[0] - p0[0], p2[1] - p0[1], p0[0], p0[1]];
@@ -215,9 +215,10 @@ function perspBuild(objs) {
   const grow = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
   const items = objs.map(o => {
     const it = { id: o.id, o0: JSON.parse(JSON.stringify(o)), last: geomSnap(o) };
-    if (o.kind === 'line') { it.line = [o.x1, o.y1, o.x2, o.y2]; grow(o.x1, o.y1); grow(o.x2, o.y2); return it; }
-    if (o.kind === 'image' || hasPic(o)) it.photo = perspPhotoInfo(o);
-    if (o.kind === 'image') {
+    const ends = lineEnds(o);   // a straight line stays straight when tilted, so just its ends move
+    if (ends) { it.line = ends[0].concat(ends[1]); ends.forEach(q => grow(q[0], q[1])); return it; }
+    if (hasPixels(o) || hasPic(o)) it.photo = perspPhotoInfo(o);
+    if (hasPixels(o)) {
       const P = it.photo.P;
       [[0, 0], [it.photo.W, 0], [it.photo.W, it.photo.H], [0, it.photo.H]].forEach(c => grow(P[0] * c[0] + P[1] * c[1] + P[2], P[3] * c[0] + P[4] * c[1] + P[5]));
       return it;
@@ -325,17 +326,16 @@ function perspWrite(results) {
   results.forEach(r => {
     const o = byId(r.it.id); if (!o || r.photoOnly) return;
     if (r.line) {
-      o.x1 = rnd(r.line[0], 3); o.y1 = rnd(r.line[1], 3); o.x2 = rnd(r.line[2], 3); o.y2 = rnd(r.line[3], 3);
-      refresh(o);
+      setLineEnds(o, { x: rnd(r.line[0], 3), y: rnd(r.line[1], 3) }, { x: rnd(r.line[2], 3), y: rnd(r.line[3], 3) });
     } else {
       if (!r.contours.length) return;
       const bb = perspBounds(r.contours), f = v => rnd(v, 2);
       const w = Math.max(rnd(bb.width, 3), 0.01), h = Math.max(rnd(bb.height, 3), 0.01);
       const d = r.contours.map(c => 'M' + f(c.cub[0][0][0] - bb.x) + ' ' + f(c.cub[0][0][1] - bb.y) +
         c.cub.map(q => 'C' + f(q[1][0] - bb.x) + ' ' + f(q[1][1] - bb.y) + ' ' + f(q[2][0] - bb.x) + ' ' + f(q[2][1] - bb.y) + ' ' + f(q[3][0] - bb.x) + ' ' + f(q[3][1] - bb.y)).join('') + (c.closed ? 'Z' : '')).join('');
-      ['r', 'sides', 'star', 'inner', 'text', 'font', 'size', 'align', 'lh', 'ls', 'fx', 'fy'].forEach(k => delete o[k]);
+      delete o.fx; delete o.fy;
       if (!r.it.photo) delete o.pic;
-      o.kind = 'path'; o.rot = 0; o.x = rnd(bb.x, 3); o.y = rnd(bb.y, 3); o.w = w; o.h = h; o.nat = { d, w, h }; o.d = d;
+      toPlainPath(o, d, w, h); o.rot = 0; o.x = rnd(bb.x, 3); o.y = rnd(bb.y, 3);
       if (!o.name) { o.name = r.it.o0.kind === 'text' ? labelOf(r.it.o0) : 'Shape'; r.it.auto = o.name; }
     }
   });
@@ -373,7 +373,7 @@ function perspPhotoPlan(P, it, preview) {
 }
 // Make the object show a new picture (of `pxW` pixels across) that covers plan.R
 function perspSetPhoto(o, plan, recId, pxW) {
-  if (o.kind === 'image') {
+  if (hasPixels(o)) {
     o.img = recId; o.x = rnd(plan.R.x, 3); o.y = rnd(plan.R.y, 3); o.w = rnd(plan.R.w, 3); o.h = rnd(plan.R.h, 3); o.rot = 0;
     delete o.fx; delete o.fy;
   } else {
@@ -546,13 +546,13 @@ function perspOverlay() {
   });
 }
 // Put the selection back the way it was when tilting began (text is editable text again)
-const PERSP_KEEP = ['fill', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend', 'hidden', 'locked'];
+const PERSP_KEEP = STYLE_KEYS.concat(['hidden', 'locked']);   // changes made while tilted are kept
 function perspReset() {
   const P = perspState().P; if (!P) return;
   P.items.forEach(it => {
     const i = doc.objects.findIndex(x => x.id === it.id); if (i < 0) return;
     const cur = doc.objects[i], back = JSON.parse(JSON.stringify(it.o0));
-    PERSP_KEEP.forEach(k => { if (k in cur) back[k] = cur[k]; });
+    copyKeys(cur, back, PERSP_KEEP);
     if (cur.name !== it.auto) back.name = cur.name;
     doc.objects[i] = back; it.last = geomSnap(back); images.delete('ptmp' + it.id);
   });

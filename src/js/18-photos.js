@@ -71,7 +71,7 @@ async function importFiles(list) {
       images.set(rec.id, rec);
       if (DB.ok) { try { await idbPut('images', { id: rec.id, blob: rec.blob, w: rec.w, h: rec.h, mime: rec.mime, name: rec.name }); rec.stored = true; } catch (e) { /* retried when autosaving */ } }
       const k = Math.min(1, (doc.w * 0.8) / rec.w, (doc.h * 0.8) / rec.h), w = rnd(rec.w * k, 2), h = rnd(rec.h * k, 2);
-      const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: rnd((doc.w - w) / 2 + off, 2), y: rnd((doc.h - h) / 2 + off, 2), w, h, rot: 0, opacity: 1, hidden: false, locked: false };
+      const im = makeImage(rec, { x: rnd((doc.w - w) / 2 + off, 2), y: rnd((doc.h - h) / 2 + off, 2), w, h });
       doc.objects.push(im); S.sel = new Set([im.id]); added++; off += 24;
     }
   } finally { importing--; }

@@ -43,7 +43,7 @@ function syncObjects() {
     }
     if (hasPic(o)) {
       // photo fill: color underneath, photo clipped to the shape, outline on top
-      const pg = picGeom(o), org = drawOrigin(o);
+      const pg = picGeom(o);
       applyAttrs(g._main, Object.assign({}, spec.a, { fill: st.fill, stroke: 'none' }));
       setA(g._main, 'display', picCovers(o) ? 'none' : null);
       let cp = clipEls.get(o.id);
@@ -53,7 +53,7 @@ function syncObjects() {
       applyAttrs(cp._shape, spec.a);
       if (!g._pic) { g._pic = svgEl('g'); g._img = svgEl('image', { preserveAspectRatio: 'none' }); g._pic.appendChild(g._img); g.appendChild(g._pic); }
       setA(g._pic, 'clip-path', 'url(#pc-' + o.id + ')');
-      setA(g._img, 'x', rnd(org.x + pg.x, 3)); setA(g._img, 'y', rnd(org.y + pg.y, 3));
+      setA(g._img, 'x', rnd(pg.x, 3)); setA(g._img, 'y', rnd(pg.y, 3));
       setA(g._img, 'width', rnd(pg.w, 3)); setA(g._img, 'height', rnd(pg.h, 3));
       setA(g._img, 'href', pg.rec.dataUrl); setA(g._img, 'transform', spec.a.transform);
       if (g._edge && g._edge.tagName !== spec.tag) { g._edge.remove(); g._edge = null; }
@@ -72,7 +72,7 @@ function syncObjects() {
     setA(g, 'style', blendOf(o) ? 'mix-blend-mode:' + blendOf(o) : null);
     // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
-    const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
+    const outlineOnly = hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none');
     if (outlineOnly) {
       if (g._hit && g._hit.tagName !== spec.tag) { g._hit.remove(); g._hit = null; }
       if (!g._hit) { g._hit = svgEl(spec.tag, { class: 'obj-hit' }); g.appendChild(g._hit); }
@@ -137,15 +137,15 @@ function drawOverlay() {
   if (!sel.length || (drag && drag.type === 'marquee')) return;
   const hs = 9 / z;
   if (sel.length === 1) {
-    const o = sel[0];
-    if (o.kind === 'line') {
-      ov.appendChild(svgEl('line', { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, class: 'ov-line ov-dash' }));
-      [['p1', o.x1, o.y1], ['p2', o.x2, o.y2]].forEach(h => ov.appendChild(svgEl('circle', { cx: h[1], cy: h[2], r: 6 / z, class: 'handle', 'data-h': h[0] })));
+    const o = sel[0], ends = lineEnds(o);
+    if (ends) {   // a straight line: a handle on each end instead of a box
+      ov.appendChild(svgEl('line', { x1: ends[0][0], y1: ends[0][1], x2: ends[1][0], y2: ends[1][1], class: 'ov-line ov-dash' }));
+      ends.forEach((q, i) => ov.appendChild(svgEl('circle', { cx: q[0], cy: q[1], r: 6 / z, class: 'handle', 'data-h': 'p' + (i + 1) })));
     } else {
       const c = centerOf(o);
       const g = svgEl('g', { transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null });
       g.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line' }));
-      const names = (o.kind === 'text' || o.kind === 'image') ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+      const names = keepsRatio(o) ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       names.forEach(n => {
         const hx = n.includes('e') ? 1 : n.includes('w') ? 0 : 0.5, hy = n.includes('s') ? 1 : n.includes('n') ? 0 : 0.5;
         g.appendChild(svgEl('rect', { x: o.x + hx * o.w - hs / 2, y: o.y + hy * o.h - hs / 2, width: hs, height: hs, rx: hs * 0.18, class: 'handle', 'data-h': n }));
@@ -161,7 +161,8 @@ function drawOverlay() {
     // together and the round handle turns it (see "moving several objects as one").
     const units = selectionUnits(doc, new Set(sel.map(o => o.id))), oneGroup = units.length === 1 && !!units[0].g;
     if (!oneGroup) sel.forEach(o => {
-      if (o.kind === 'line') { ov.appendChild(svgEl('line', { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, class: 'ov-line' })); return; }
+      const ends = lineEnds(o);
+      if (ends) { ov.appendChild(svgEl('line', { x1: ends[0][0], y1: ends[0][1], x2: ends[1][0], y2: ends[1][1], class: 'ov-line' })); return; }
       const c = centerOf(o);
       ov.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line', transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null }));
     });

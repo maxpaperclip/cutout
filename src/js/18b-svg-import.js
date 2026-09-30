@@ -363,7 +363,7 @@ async function importSVGFile(file) {
     let w = b.w * k, h = b.h * k;
     if (info.fit) { const s = Math.min(w / rec.w, h / rec.h); w = rec.w * s; h = rec.h * s; }   // SVG pictures keep their shape unless told not to
     const cx = b.cx * k + dx, cy = b.cy * k + dy;
-    const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: cx - w / 2, y: cy - h / 2, w, h, rot: b.rot, opacity: 1, hidden: false, locked: false };
+    const im = makeImage(rec, { x: cx - w / 2, y: cy - h / 2, w, h, rot: b.rot });
     if (b.flip) im.fy = true;
     if (p.blend) im.blend = p.blend;
     const parent = p.parent !== null ? p.parent : top ? top.id : null;

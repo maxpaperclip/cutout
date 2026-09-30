@@ -16,8 +16,8 @@ function updateInspector() {
   show('#sec-text', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
   show('#sec-app', n > 0);
-  const nPhotoSel = sel.filter(x => x.kind === 'image').length;
-  show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(x => x.kind === 'image')));
+  const nPhotoSel = sel.filter(hasPixels).length;
+  show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(hasPixels)));
   show('#sec-combine', !(n === 1 && nPhotoSel === 1));
   show('#sec-arrange', n > 0);
   $('#empty-hint').hidden = n > 0;
@@ -25,10 +25,10 @@ function updateInspector() {
   const units = n ? selectionUnits(doc, S.sel) : [];
   $('#btn-group').disabled = units.length < 2;
   $('#btn-ungroup').disabled = !units.some(u => u.g);
-  $('#btn-flatten').disabled = !(o && o.kind !== 'path' && o.kind !== 'line' && o.kind !== 'image');
-  $('#btn-points').disabled = !(o && o.kind !== 'line' && o.kind !== 'image' && !isLocked(o));
+  $('#btn-flatten').disabled = !(o && kindInfo(o).plain);
+  $('#btn-points').disabled = !(o && (o.kind === 'path' || kindInfo(o).plain) && !isLocked(o));
   // photo mask controls
-  const nPhoto = sel.filter(x => x.kind === 'image').length, nShape = n - nPhoto;
+  const nPhoto = sel.filter(hasPixels).length, nShape = n - nPhoto;
   $('#btn-mask').disabled = !(nPhoto === 1 && nShape >= 1);
   const masked = o && hasPic(o) ? o : null;
   $('#mask-controls').hidden = !masked;
@@ -44,13 +44,13 @@ function updateInspector() {
   }
   $('#btn-panel').setAttribute('aria-pressed', $('#panel').classList.contains('open') ? 'true' : 'false');
   if (o) {
-    const line = o.kind === 'line';
-    $('#lb-x').textContent = line ? 'X1' : 'X'; $('#lb-y').textContent = line ? 'Y1' : 'Y';
-    $('#lb-w').textContent = line ? 'X2' : 'W'; $('#lb-h').textContent = line ? 'Y2' : 'H';
-    $('#wrap-rot').hidden = line;
+    const ends = lineEnds(o);   // a straight line shows its two ends instead of a box
+    $('#lb-x').textContent = ends ? 'X1' : 'X'; $('#lb-y').textContent = ends ? 'Y1' : 'Y';
+    $('#lb-w').textContent = ends ? 'X2' : 'W'; $('#lb-h').textContent = ends ? 'Y2' : 'H';
+    $('#wrap-rot').hidden = !!ends;
     $('#wrap-r').hidden = o.kind !== 'rect';
-    setNum(F.x, line ? o.x1 : o.x); setNum(F.y, line ? o.y1 : o.y);
-    setNum(F.w, line ? o.x2 : o.w); setNum(F.h, line ? o.y2 : o.h);
+    setNum(F.x, ends ? ends[0][0] : o.x); setNum(F.y, ends ? ends[0][1] : o.y);
+    setNum(F.w, ends ? ends[1][0] : o.w); setNum(F.h, ends ? ends[1][1] : o.h);
     setNum(F.rot, o.rot);
     if (o.kind === 'rect') setNum(F.r, o.r || 0);
     if (o.kind === 'text') {
@@ -65,7 +65,7 @@ function updateInspector() {
     }
   }
   if (n) {
-    const a = sel.find(x => x.kind !== 'image') || sel[0], onlyLines = sel.every(x => x.kind === 'line'), onlyPhotos = sel.every(x => x.kind === 'image');
+    const a = sel.find(hasPaint) || sel[0], onlyLines = sel.every(isStraightLine), onlyPhotos = sel.every(hasPixels);
     const noFill = onlyLines || onlyPhotos, g = hasGrad(a) ? a.grad : null;
     $('#row-filltype').hidden = noFill; $('#row-fill').hidden = noFill || !!g; $('#palette').hidden = noFill || !!g;
     $('#grad-controls').hidden = noFill || !g;
@@ -105,12 +105,13 @@ function cssRgba(hex, a) {
 function forSel(fn) { selObjs().forEach(fn); }
 function rememberStyle(o) {
   if (!o) return;
-  if (o.kind !== 'line' && o.kind !== 'text') { S.style.fill = o.fill; S.style.grad = hasGrad(o) ? cloneGrad(o.grad) : null; }
-  S.style.stroke = o.stroke === 'none' && o.kind === 'line' ? S.style.stroke : o.stroke;
+  const line = isStraightLine(o);
+  if (!line && o.kind !== 'text') { S.style.fill = o.fill; S.style.grad = hasGrad(o) ? cloneGrad(o.grad) : null; }
+  S.style.stroke = o.stroke === 'none' && line ? S.style.stroke : o.stroke;
   S.style.sw = o.sw || S.style.sw; S.style.join = o.join; S.style.dash = o.dash;
 }
 // Choosing a plain fill color (or None) turns a gradient fill back into a solid one
-function styleSet(k, v) { forSel(o => { if (o.kind === 'image' && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(o => o.kind !== 'image')); render(); }
+function styleSet(k, v) { forSel(o => { if (hasPixels(o) && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(hasPaint)); render(); }
 
 // Geometry fields
 function onNum(inp, fn, resizes) {
@@ -123,18 +124,26 @@ function onNum(inp, fn, resizes) {
     commit();
   });
 }
-onNum(F.x, (o, v) => { if (o.kind === 'line') { o.x1 = v; } else o.x = v; });
-onNum(F.y, (o, v) => { if (o.kind === 'line') { o.y1 = v; } else o.y = v; });
+// For a straight line the four fields are its ends: X1, Y1 (end 0) and X2, Y2 (end 1)
+function setLineField(o, end, axis, v) {
+  const e = lineEnds(o); if (!e) return false;
+  const a = { x: e[0][0], y: e[0][1] }, b = { x: e[1][0], y: e[1][1] };
+  (end ? b : a)[axis] = v;
+  setLineEnds(o, a, b);
+  return true;
+}
+onNum(F.x, (o, v) => { if (!setLineField(o, 0, 'x', v)) o.x = v; });
+onNum(F.y, (o, v) => { if (!setLineField(o, 0, 'y', v)) o.y = v; });
 onNum(F.w, (o, v) => {
-  if (o.kind === 'line') o.x2 = v;
+  if (setLineField(o, 1, 'x', v)) return;
   else if (o.kind === 'text') { o.size = Math.max(4, o.size * Math.max(v, 1) / o.w); }
-  else if (o.kind === 'image') { const k = Math.max(v, 1) / o.w; o.w *= k; o.h *= k; }
+  else if (keepsRatio(o)) { const k = Math.max(v, 1) / o.w; o.w *= k; o.h *= k; }
   else o.w = Math.max(v, 1);
 }, true);
 onNum(F.h, (o, v) => {
-  if (o.kind === 'line') o.y2 = v;
+  if (setLineField(o, 1, 'y', v)) return;
   else if (o.kind === 'text') { o.size = Math.max(4, o.size * Math.max(v, 1) / o.h); }
-  else if (o.kind === 'image') { const k = Math.max(v, 1) / o.h; o.w *= k; o.h *= k; }
+  else if (keepsRatio(o)) { const k = Math.max(v, 1) / o.h; o.w *= k; o.h *= k; }
   else o.h = Math.max(v, 1);
 }, true);
 onNum(F.rot, (o, v) => { o.rot = rnd(normDeg(v), 2); });
@@ -194,7 +203,7 @@ wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
 // Gradient fills. Gradient edits apply to every selected shape that has a gradient.
 const gradTargets = () => selObjs().filter(hasGrad);
 // The shape whose gradient the editor shows (the same one the rest of Appearance shows)
-const gradPrimary = () => { const a = selObjs().find(x => x.kind !== 'image'); return a && hasGrad(a) ? a : null; };
+const gradPrimary = () => { const a = selObjs().find(hasPaint); return a && hasGrad(a) ? a : null; };
 
 /* ---------- gradient color editor ----------
    A bar showing the gradient, with a marker under it for each color. Click the bar to add a color,
@@ -314,7 +323,7 @@ $('#gs-remove').addEventListener('click', removeSelectedStop);
 // Arrow keys on a slider move the slider, not the selected shape
 ['#gs-alpha', '#opacity'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.stopPropagation(); }));
 function setFillType(ft) {
-  const list = selObjs().filter(o => o.kind !== 'line' && o.kind !== 'image');
+  const list = selObjs().filter(o => hasPaint(o) && !isStraightLine(o));
   if (!list.length) return;
   list.forEach(o => {
     if (ft === 'solid') { delete o.grad; return; }   // o.fill already holds the first gradient color
@@ -346,7 +355,7 @@ $('#stroke-join').addEventListener('change', e => { styleSet('join', e.target.va
 // Line ends: Automatic is stored as no setting at all, so older drawings look exactly as before
 $('#stroke-cap').addEventListener('change', e => {
   const v = e.target.value;
-  forSel(o => { if (o.kind === 'image') return; if (v) o.cap = v; else delete o.cap; });
+  forSel(o => { if (!hasPaint(o)) return; if (v) o.cap = v; else delete o.cap; });
   commit();
 });
 // Blend mode (photos too); Normal is stored as no setting

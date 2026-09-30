@@ -162,7 +162,7 @@ function beginMove(o, p, e) {
   else if (selectionUnits(doc, S.sel).length > 1) collapseTo = whole ? unit : [o.id];
   drag = {
     type: 'move', start: p, sx: e.clientX, sy: e.clientY, moved: false, shift: multi, collapseTo,
-    orig: selObjs().filter(x => !isLocked(x)).map(x => ({ id: x.id, x: x.x, y: x.y, x1: x.x1, y1: x.y1, x2: x.x2, y2: x.y2 }))
+    orig: selObjs().filter(x => !isLocked(x)).map(x => ({ id: x.id, x: x.x, y: x.y }))
   };
   refreshAll();
 }
@@ -175,7 +175,6 @@ function updateMove(p, e) {
   drag.orig.forEach(s => {
     const o = byId(s.id); if (!o) return;
     o.x = s.x + dx; o.y = s.y + dy;
-    if (o.kind === 'line') { o.x1 = s.x1 + dx; o.x2 = s.x2 + dx; o.y1 = s.y1 + dy; o.y2 = s.y2 + dy; }
   });
   render();
 }
@@ -224,11 +223,8 @@ function updateDraw(p, e) {
   if (d.tool === 'line') {
     if (e.shiftKey) cur = constrainAngle(d.start, cur);
     let o = d.id ? byId(d.id) : null;
-    if (!o) {
-      o = newShape('line', { x1: d.start.x, y1: d.start.y, x2: cur.x, y2: cur.y });
-      doc.objects.push(o); d.id = o.id; S.sel = new Set([o.id]);
-    }
-    o.x2 = cur.x; o.y2 = cur.y; refresh(o);
+    if (!o) { o = makeLine(d.start, cur); doc.objects.push(o); d.id = o.id; S.sel = new Set([o.id]); }
+    else setLineEnds(o, d.start, cur);
   } else {
     let x = Math.min(d.start.x, cur.x), y = Math.min(d.start.y, cur.y), w = Math.abs(cur.x - d.start.x), h = Math.abs(cur.y - d.start.y);
     if (e.shiftKey) {
@@ -247,7 +243,7 @@ function finishDraw(d, e) {
     // a plain click: drop a default-sized shape centered on the click
     const c = d.start, s = 120;
     let o;
-    if (d.tool === 'line') o = newShape('line', { x1: c.x - 80, y1: c.y, x2: c.x + 80, y2: c.y });
+    if (d.tool === 'line') o = makeLine({ x: c.x - 80, y: c.y }, { x: c.x + 80, y: c.y });
     else o = makeDrawn(d.tool, { x: c.x - s / 2, y: c.y - s / 2, w: s, h: s });
     if (!o) return;
     doc.objects.push(o); S.sel = new Set([o.id]);
@@ -308,8 +304,8 @@ function beginHandle(h, p, e) {
   if (h === 'rot') {
     const c = centerOf(o);
     drag = { type: 'rotate', id: o.id, c, a0: Math.atan2(p.y - c.y, p.x - c.x) / D2R, rot0: o.rot };
-  } else if (h === 'p1' || h === 'p2') {
-    drag = { type: 'lineend', id: o.id, end: h };
+  } else if ((h === 'p1' || h === 'p2') && lineEnds(o)) {
+    drag = { type: 'lineend', id: o.id, end: h === 'p1' ? 0 : 1 };
   } else {
     drag = { type: 'resize', id: o.id, h, o0: { x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot, size: o.size }, pic0: o.pic ? Object.assign({}, o.pic) : null };
   }
@@ -353,12 +349,12 @@ function updateRotate(p, e) {
   render();
 }
 function updateLineEnd(p, e) {
-  const o = byId(drag.id); if (!o) return;
-  const other = drag.end === 'p1' ? { x: o.x2, y: o.y2 } : { x: o.x1, y: o.y1 };
+  const o = byId(drag.id), ends = o && lineEnds(o); if (!ends) return;
+  const pt = v => ({ x: v[0], y: v[1] }), other = pt(ends[1 - drag.end]);
   let q = snapPt(p);
   if (e.shiftKey) q = constrainAngle(other, q);
-  if (drag.end === 'p1') { o.x1 = q.x; o.y1 = q.y; } else { o.x2 = q.x; o.y2 = q.y; }
-  refresh(o); render();
+  if (drag.end === 0) setLineEnds(o, q, other); else setLineEnds(o, other, q);
+  render();
 }
 function updateResize(p, e) {
   const o = byId(drag.id); if (!o) return;
@@ -372,7 +368,7 @@ function updateResize(p, e) {
   if (hx === 1) R = Math.max(ux, L + MIN); else if (hx === 0) L = Math.min(ux, R - MIN);
   if (hy === 1) B = Math.max(uy, T + MIN); else if (hy === 0) T = Math.min(uy, B - MIN);
   let w = R - L, h = B - T;
-  const uniform = e.shiftKey || o.kind === 'text' || o.kind === 'image';
+  const uniform = e.shiftKey || keepsRatio(o);
   if (uniform) {
     let s;
     if (hx !== 0.5 && hy !== 0.5) s = Math.max(w / o0.w, h / o0.h);
