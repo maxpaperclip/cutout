@@ -89,3 +89,45 @@ test('what each kind can do (KIND_INFO)', async (t) => {
     assert.equal(m.kindInfo({ kind: 'nonsense' }).label, undefined);
   });
 });
+
+test('one description for the canvas and export (objView)', async (t) => {
+  await t.test('a plain shape is one element in a group with no settings, written as just the element', () => {
+    const m = loadCutoutModules();
+    const o = m.newShape('rect', { x: 10, y: 20, w: 30, h: 40, fill: '#ff0000' });
+    const v = m.objView(o, { grad: 'g', clip: 'c' });
+    assert.equal(v.defs.length, 0);
+    assert.equal(v.node.kids.length, 1);
+    assert.match(m.nodeToSVG(v.node), /^<rect [^>]*transform="translate\(10 20\)"[^>]*\/>$/);
+  });
+
+  await t.test('a photo fill has the fill, the clipped photo and the outline, and one clip definition', () => {
+    const m = loadCutoutModules();
+    m.images.set('p', { id: 'p', w: 10, h: 10, dataUrl: 'data:,' });
+    const o = m.newShape('ellipse', { w: 100, h: 100, fill: '#ff0000', stroke: '#000000', sw: 2 });
+    o.pic = { id: 'p', dx: 0, dy: 0, s: 1 };
+    const v = m.objView(o, { grad: 'g', clip: 'c9' });
+    assert.deepEqual(JSON.parse(JSON.stringify(v.defs.map((d) => d.tag))), ['clipPath']);
+    assert.deepEqual(JSON.parse(JSON.stringify(v.node.kids.map((k) => k.tag))), ['ellipse', 'g', 'ellipse']);
+    assert.equal(v.node.kids[1].a['clip-path'], 'url(#c9)');
+  });
+
+  await t.test('export leaves out hidden parts: a photo that covers its shape hides the fill underneath', () => {
+    const m = loadCutoutModules();
+    m.images.set('p', { id: 'p', w: 10, h: 10, dataUrl: 'data:,' });
+    const o = m.newShape('rect', { w: 100, h: 100, fill: '#ff0000', stroke: 'none' });
+    o.pic = { id: 'p', dx: 0, dy: 0, s: 20 };   // 200 x 200: covers the whole box
+    const svg = m.objToSVG(o, 'c', 'g');
+    assert.equal((svg.match(/<rect /g) || []).length, 1, 'only the clip shape, no fill or outline');
+    assert.match(svg, /<clipPath id="c"><rect /);
+  });
+
+  await t.test('a gradient becomes one definition with its stops', () => {
+    const m = loadCutoutModules();
+    const o = m.newShape('rect', { fill: '#ff0000', grad: m.makeGrad('radial') });
+    const v = m.objView(o, { grad: 'gr7', clip: 'c' });
+    assert.equal(v.defs[0].tag, 'radialGradient');
+    assert.equal(v.defs[0].a.id, 'gr7');
+    assert.equal(v.defs[0].kids.length, 2);
+    assert.equal(v.node.kids[0].a.fill, 'url(#gr7)');
+  });
+});

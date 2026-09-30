@@ -69,6 +69,7 @@ const EXPORT_NAMES = [
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',
   'buildSVG', 'rescalePic', 'gradSpec', 'gradToSVG', 'serOpen',
+  'objView', 'gradView', 'nodeToSVG',
   // 06-boolean-ops.js
   'combineShapes', 'replaceObjects', 'runBoolean', 'flattenSelected',
   'localPaper', 'worldPaper', 'lineToPaper', 'useAsMask', 'releaseMask',

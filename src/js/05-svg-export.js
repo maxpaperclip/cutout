@@ -78,11 +78,6 @@ function gradSpec(o) {
     x1: rnd(g.x1 * w, 3), y1: rnd(g.y1 * h, 3), x2: rnd(g.x2 * w, 3), y2: rnd(g.y2 * h, 3)
   } };
 }
-// The gradient as SVG markup, wrapped in <defs>, for export
-function gradToSVG(o, id) {
-  const g = gradSpec(o);
-  return '<defs>' + serOpen(g.tag, Object.assign({ id }, g.a)) + g.stops.map(s => ser('stop', s)).join('') + '</' + g.tag + '></defs>';
-}
 
 /* ---------- photo fills ---------- */
 // Where the photo sits inside a shape, in the shape's own box coordinates (0,0 = top-left of the box)
@@ -102,22 +97,50 @@ function serOpen(tag, attrs) {
   return s + '>';
 }
 function ser(tag, attrs) { return serOpen(tag, attrs).slice(0, -1) + '/>'; }
-function picToSVG(o, spec, clipId, gradId) {
-  const st = styleAttrs(o, gradId), pg = picGeom(o), sa = strokeAttrs(o);
-  let s = '<g' + (st.opacity !== undefined ? ' opacity="' + st.opacity + '"' : '') + '>';
-  if (st.fill !== 'none' && !picCovers(o)) s += (hasGrad(o) && gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
-  s += '<clipPath id="' + clipId + '">' + ser(spec.tag, spec.a) + '</clipPath>';
-  s += '<g clip-path="url(#' + clipId + ')">' + ser('image', { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform }) + '</g>';
-  if (sa.stroke !== 'none') s += ser(spec.tag, Object.assign({}, spec.a, { fill: 'none' }, sa));
-  return s + '</g>';
+/* =====================================================================
+   One description of each object, used by both the canvas and export
+   objView(o, ids) describes how an object is drawn as a small tree of plain nodes,
+   { tag, a: attributes, kids: [nodes] }, plus the definitions it needs (gradient, photo clip).
+   The canvas turns that into live elements (patchKids, in 08-rendering.js); export turns it into
+   SVG text (nodeToSVG). So there is one place that decides how an object looks.
+   ids: the ids to give its definitions, { grad, clip } (the canvas and export number them differently).
+   ===================================================================== */
+function gradView(o, id) {
+  const g = gradSpec(o);
+  return { tag: g.tag, a: Object.assign({ id }, g.a), kids: g.stops.map(st => ({ tag: 'stop', a: st })) };
 }
-function objToSVG(o, clipId, gradId) {
-  const spec = geomSpec(o);
-  gradId = hasGrad(o) ? (gradId || ('gr' + o.id)) : null;
-  const body = hasPic(o) ? picToSVG(o, spec, clipId || ('pc' + o.id), gradId)
-    : (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
+function objView(o, ids) {
+  const spec = geomSpec(o), defs = [], gid = hasGrad(o) ? ids.grad : null, st = styleAttrs(o, gid);
+  if (gid) defs.push(gradView(o, gid));
   const blend = blendOf(o);   // the whole object (fill, photo and outline) blends as one
-  return blend ? '<g style="mix-blend-mode:' + blend + '">' + body + '</g>' : body;
+  const node = { tag: 'g', a: { style: blend ? 'mix-blend-mode:' + blend : null }, kids: [] };
+  if (hasPic(o)) {
+    // photo fill: the fill underneath (unless the photo covers it), the photo clipped to the shape, the outline on top
+    const pg = picGeom(o), sa = strokeAttrs(o);
+    defs.push({ tag: 'clipPath', a: { id: ids.clip }, kids: [{ tag: spec.tag, a: spec.a }] });
+    node.a.opacity = st.opacity;
+    node.kids.push(
+      { tag: spec.tag, a: Object.assign({}, spec.a, { fill: st.fill, stroke: 'none', display: st.fill === 'none' || picCovers(o) ? 'none' : null }) },
+      { tag: 'g', a: { 'clip-path': 'url(#' + ids.clip + ')' }, kids: [
+        { tag: 'image', a: { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform } }] },
+      { tag: spec.tag, a: Object.assign({}, spec.a, { fill: 'none' }, sa, { display: sa.stroke === 'none' ? 'none' : null }) });
+  } else node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st) });
+  return { node, defs, spec };
+}
+// A node as SVG text. Hidden nodes are left out, and a group with no settings of its own is
+// written as just what's inside it.
+const hasAttrs = a => Object.keys(a).some(k => a[k] !== null && a[k] !== undefined && a[k] !== '');
+function nodeToSVG(n) {
+  if (!n || (n.a && n.a.display === 'none')) return '';
+  const kids = (n.kids || []).map(nodeToSVG).join('');
+  if (n.tag === 'g' && !hasAttrs(n.a || {})) return kids;
+  return kids ? serOpen(n.tag, n.a || {}) + kids + '</' + n.tag + '>' : ser(n.tag, n.a || {});
+}
+// The gradient as SVG markup, wrapped in <defs>
+const gradToSVG = (o, id) => '<defs>' + nodeToSVG(gradView(o, id)) + '</defs>';
+function objToSVG(o, clipId, gradId) {
+  const v = objView(o, { clip: clipId || ('pc' + o.id), grad: gradId || ('gr' + o.id) });
+  return (v.defs.length ? '<defs>' + v.defs.map(nodeToSVG).join('') + '</defs>' : '') + nodeToSVG(v.node);
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];

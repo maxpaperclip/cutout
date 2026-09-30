@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.14.0</title>
+<title>Cutout v1.14.1</title>
 <style>
 
 :root{
@@ -704,7 +704,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.14.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.14.1';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1664,11 +1664,6 @@ function gradSpec(o) {
     x1: rnd(g.x1 * w, 3), y1: rnd(g.y1 * h, 3), x2: rnd(g.x2 * w, 3), y2: rnd(g.y2 * h, 3)
   } };
 }
-// The gradient as SVG markup, wrapped in <defs>, for export
-function gradToSVG(o, id) {
-  const g = gradSpec(o);
-  return '<defs>' + serOpen(g.tag, Object.assign({ id }, g.a)) + g.stops.map(s => ser('stop', s)).join('') + '</' + g.tag + '></defs>';
-}
 
 /* ---------- photo fills ---------- */
 // Where the photo sits inside a shape, in the shape's own box coordinates (0,0 = top-left of the box)
@@ -1688,22 +1683,50 @@ function serOpen(tag, attrs) {
   return s + '>';
 }
 function ser(tag, attrs) { return serOpen(tag, attrs).slice(0, -1) + '/>'; }
-function picToSVG(o, spec, clipId, gradId) {
-  const st = styleAttrs(o, gradId), pg = picGeom(o), sa = strokeAttrs(o);
-  let s = '<g' + (st.opacity !== undefined ? ' opacity="' + st.opacity + '"' : '') + '>';
-  if (st.fill !== 'none' && !picCovers(o)) s += (hasGrad(o) && gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
-  s += '<clipPath id="' + clipId + '">' + ser(spec.tag, spec.a) + '</clipPath>';
-  s += '<g clip-path="url(#' + clipId + ')">' + ser('image', { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform }) + '</g>';
-  if (sa.stroke !== 'none') s += ser(spec.tag, Object.assign({}, spec.a, { fill: 'none' }, sa));
-  return s + '</g>';
+/* =====================================================================
+   One description of each object, used by both the canvas and export
+   objView(o, ids) describes how an object is drawn as a small tree of plain nodes,
+   { tag, a: attributes, kids: [nodes] }, plus the definitions it needs (gradient, photo clip).
+   The canvas turns that into live elements (patchKids, in 08-rendering.js); export turns it into
+   SVG text (nodeToSVG). So there is one place that decides how an object looks.
+   ids: the ids to give its definitions, { grad, clip } (the canvas and export number them differently).
+   ===================================================================== */
+function gradView(o, id) {
+  const g = gradSpec(o);
+  return { tag: g.tag, a: Object.assign({ id }, g.a), kids: g.stops.map(st => ({ tag: 'stop', a: st })) };
 }
-function objToSVG(o, clipId, gradId) {
-  const spec = geomSpec(o);
-  gradId = hasGrad(o) ? (gradId || ('gr' + o.id)) : null;
-  const body = hasPic(o) ? picToSVG(o, spec, clipId || ('pc' + o.id), gradId)
-    : (gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, styleAttrs(o, gradId)));
+function objView(o, ids) {
+  const spec = geomSpec(o), defs = [], gid = hasGrad(o) ? ids.grad : null, st = styleAttrs(o, gid);
+  if (gid) defs.push(gradView(o, gid));
   const blend = blendOf(o);   // the whole object (fill, photo and outline) blends as one
-  return blend ? '<g style="mix-blend-mode:' + blend + '">' + body + '</g>' : body;
+  const node = { tag: 'g', a: { style: blend ? 'mix-blend-mode:' + blend : null }, kids: [] };
+  if (hasPic(o)) {
+    // photo fill: the fill underneath (unless the photo covers it), the photo clipped to the shape, the outline on top
+    const pg = picGeom(o), sa = strokeAttrs(o);
+    defs.push({ tag: 'clipPath', a: { id: ids.clip }, kids: [{ tag: spec.tag, a: spec.a }] });
+    node.a.opacity = st.opacity;
+    node.kids.push(
+      { tag: spec.tag, a: Object.assign({}, spec.a, { fill: st.fill, stroke: 'none', display: st.fill === 'none' || picCovers(o) ? 'none' : null }) },
+      { tag: 'g', a: { 'clip-path': 'url(#' + ids.clip + ')' }, kids: [
+        { tag: 'image', a: { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform } }] },
+      { tag: spec.tag, a: Object.assign({}, spec.a, { fill: 'none' }, sa, { display: sa.stroke === 'none' ? 'none' : null }) });
+  } else node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st) });
+  return { node, defs, spec };
+}
+// A node as SVG text. Hidden nodes are left out, and a group with no settings of its own is
+// written as just what's inside it.
+const hasAttrs = a => Object.keys(a).some(k => a[k] !== null && a[k] !== undefined && a[k] !== '');
+function nodeToSVG(n) {
+  if (!n || (n.a && n.a.display === 'none')) return '';
+  const kids = (n.kids || []).map(nodeToSVG).join('');
+  if (n.tag === 'g' && !hasAttrs(n.a || {})) return kids;
+  return kids ? serOpen(n.tag, n.a || {}) + kids + '</' + n.tag + '>' : ser(n.tag, n.a || {});
+}
+// The gradient as SVG markup, wrapped in <defs>
+const gradToSVG = (o, id) => '<defs>' + nodeToSVG(gradView(o, id)) + '</defs>';
+function objToSVG(o, clipId, gradId) {
+  const v = objView(o, { clip: clipId || ('pc' + o.id), grad: gradId || ('gr' + o.id) });
+  return (v.defs.length ? '<defs>' + v.defs.map(nodeToSVG).join('') + '</defs>' : '') + nodeToSVG(v.node);
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
@@ -2001,86 +2024,50 @@ function resetHistory() { hist.stack = []; hist.ids = []; hist.idx = -1; commit(
    Rendering: canvas objects
    ===================================================================== */
 const stage = $('#stage'), world = $('#world'), layerG = $('#layer'), ov = $('#overlay');
-const els = new Map(), clipEls = new Map(), gradEls = new Map(), picDefs = $('#pic-defs');
-const ATTR_KEYS = ['fill', 'stroke', 'stroke-width', 'stroke-linejoin', 'stroke-dasharray', 'stroke-linecap', 'opacity', 'rx', 'transform', 'href', 'preserveAspectRatio'];
-function applyAttrs(e, attrs) {
-  ATTR_KEYS.forEach(k => { if (!(k in attrs)) setA(e, k, null); });
-  for (const k in attrs) setA(e, k, attrs[k]);
-}
+const els = new Map(), defEls = new Map(), picDefs = $('#pic-defs');
 
-// Keep an object's gradient definition in <defs> up to date; returns its id
-const GRAD_ATTRS = ['gradientUnits', 'x1', 'y1', 'x2', 'y2', 'cx', 'cy', 'r', 'fx', 'fy', 'gradientTransform'];
-function syncGrad(o) {
-  const spec = gradSpec(o), id = 'gr-' + o.id;
-  let ge = gradEls.get(o.id);
-  if (!ge || ge.tagName !== spec.tag) {
-    if (ge) ge.remove();
-    ge = svgEl(spec.tag, { id }); picDefs.appendChild(ge); gradEls.set(o.id, ge);
+/* Keeping live elements in step with objView (see 05-svg-export.js). Elements are reused whenever
+   the tag still matches, and setA only touches attributes that changed, so a drag stays cheap. */
+const blank = v => v === null || v === undefined || v === '';
+function patchAttrs(el, a) {
+  const had = el._keys, now = [];
+  for (const k in a) { const v = a[k]; if (blank(v)) continue; setA(el, k, v); now.push(k); }
+  if (had) for (let i = 0; i < had.length; i++) { const k = had[i]; if (blank(a[k])) setA(el, k, null); }   // settings that went away
+  el._keys = now;
+}
+function patchKids(parent, nodes) {
+  let el = parent.firstElementChild;
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i];
+    if (!el || el.tagName !== n.tag) { const fresh = svgEl(n.tag); if (el) parent.replaceChild(fresh, el); else parent.appendChild(fresh); el = fresh; }
+    patchAttrs(el, n.a || {});
+    if (n.kids) patchKids(el, n.kids); else while (el.firstElementChild) el.firstElementChild.remove();
+    el = el.nextElementSibling;
   }
-  GRAD_ATTRS.forEach(k => setA(ge, k, k in spec.a ? spec.a[k] : null));
-  const key = JSON.stringify(spec.stops);
-  if (ge._stops !== key) {
-    ge._stops = key; ge.textContent = '';
-    spec.stops.forEach(st => ge.appendChild(svgEl('stop', st)));
-  }
-  return id;
+  while (el) { const next = el.nextElementSibling; el.remove(); el = next; }   // anything left over
 }
 
 function syncObjects() {
-  const seen = new Set(), clipSeen = new Set(), gradSeen = new Set();
+  const seen = new Set();
   doc.objects.forEach(o => {
     seen.add(o.id);
     let g = els.get(o.id);
     if (!g) { g = svgEl('g'); g.dataset.id = o.id; els.set(o.id, g); }
-    const gid = hasGrad(o) ? syncGrad(o) : null;
-    if (gid) gradSeen.add(o.id);
-    const spec = geomSpec(o), st = styleAttrs(o, gid);
-    if (!g._main || g._main.tagName !== spec.tag) {
-      if (g._main) g._main.remove();
-      g._main = svgEl(spec.tag);
-      g.insertBefore(g._main, g.firstChild);
-    }
-    if (hasPic(o)) {
-      // photo fill: color underneath, photo clipped to the shape, outline on top
-      const pg = picGeom(o);
-      applyAttrs(g._main, Object.assign({}, spec.a, { fill: st.fill, stroke: 'none' }));
-      setA(g._main, 'display', picCovers(o) ? 'none' : null);
-      let cp = clipEls.get(o.id);
-      if (!cp) { cp = svgEl('clipPath', { id: 'pc-' + o.id }); picDefs.appendChild(cp); clipEls.set(o.id, cp); }
-      clipSeen.add(o.id);
-      if (!cp._shape || cp._shape.tagName !== spec.tag) { if (cp._shape) cp._shape.remove(); cp._shape = svgEl(spec.tag); cp.appendChild(cp._shape); }
-      applyAttrs(cp._shape, spec.a);
-      if (!g._pic) { g._pic = svgEl('g'); g._img = svgEl('image', { preserveAspectRatio: 'none' }); g._pic.appendChild(g._img); g.appendChild(g._pic); }
-      setA(g._pic, 'clip-path', 'url(#pc-' + o.id + ')');
-      setA(g._img, 'x', rnd(pg.x, 3)); setA(g._img, 'y', rnd(pg.y, 3));
-      setA(g._img, 'width', rnd(pg.w, 3)); setA(g._img, 'height', rnd(pg.h, 3));
-      setA(g._img, 'href', pg.rec.dataUrl); setA(g._img, 'transform', spec.a.transform);
-      if (g._edge && g._edge.tagName !== spec.tag) { g._edge.remove(); g._edge = null; }
-      if (!g._edge) { g._edge = svgEl(spec.tag); g.appendChild(g._edge); }
-      applyAttrs(g._edge, Object.assign({}, spec.a, { fill: 'none' }, strokeAttrs(o)));
-      setA(g._edge, 'display', st.stroke === 'none' ? 'none' : null);
-      setA(g, 'opacity', st.opacity !== undefined ? st.opacity : null);
-    } else {
-      applyAttrs(g._main, Object.assign({}, spec.a, st));
-      setA(g._main, 'display', null);
-      if (g._pic) { g._pic.remove(); g._pic = g._img = null; }
-      if (g._edge) { g._edge.remove(); g._edge = null; }
-      setA(g, 'opacity', null);
-    }
-    setA(g, 'display', isHidden(o) ? 'none' : null);   // hidden, or inside a hidden group
-    setA(g, 'style', blendOf(o) ? 'mix-blend-mode:' + blendOf(o) : null);
-    // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
+    const v = objView(o, { grad: 'gr-' + o.id, clip: 'pc-' + o.id });
+    // its definitions (gradient, photo clip) live in <defs>, in a holder of their own
+    let dg = defEls.get(o.id);
+    if (v.defs.length) { if (!dg) { dg = svgEl('g'); picDefs.appendChild(dg); defEls.set(o.id, dg); } patchKids(dg, v.defs); }
+    else if (dg) { dg.remove(); defEls.delete(o.id); }
+    patchAttrs(g, Object.assign({}, v.node.a, { display: isHidden(o) ? 'none' : null }));   // hidden, or inside a hidden group
+    // Anything drawn only as an outline (lines, drawn lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
-    const outlineOnly = hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none');
-    if (outlineOnly) {
-      if (g._hit && g._hit.tagName !== spec.tag) { g._hit.remove(); g._hit = null; }
-      if (!g._hit) { g._hit = svgEl(spec.tag, { class: 'obj-hit' }); g.appendChild(g._hit); }
-      applyAttrs(g._hit, Object.assign({}, spec.a, { fill: null, stroke: null, 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }));
-    } else if (g._hit) { g._hit.remove(); g._hit = null; }
+    const kids = v.node.kids.slice();
+    if (hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'))
+      kids.push({ tag: v.spec.tag, a: Object.assign({}, v.spec.a, { class: 'obj-hit', 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }) });
+    patchKids(g, kids);
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
-  clipEls.forEach((cp, id) => { if (!clipSeen.has(id)) { cp.remove(); clipEls.delete(id); } });
-  gradEls.forEach((ge, id) => { if (!gradSeen.has(id)) { ge.remove(); gradEls.delete(id); } });
+  defEls.forEach((dg, id) => { if (!seen.has(id)) { dg.remove(); defEls.delete(id); } });
   let ref = layerG.firstChild;
   doc.objects.forEach(o => {
     const g = els.get(o.id);
