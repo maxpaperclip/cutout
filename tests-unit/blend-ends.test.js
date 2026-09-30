@@ -54,12 +54,11 @@ test('blend modes', async (t) => {
     assert.doesNotMatch(m.objToSVG(o, 'p1', 'g1'), /mix-blend-mode/);
   });
 
-  await t.test('a blended gradient shape keeps its gradient inside the wrapper', () => {
+  await t.test('a blended gradient shape keeps its gradient, and the blended group uses it', () => {
     const m = loadCutoutModules();
     const o = m.newShape('rect', { fill: '#ff0000', grad: m.makeGrad('linear'), blend: 'multiply' });
     const svg = m.objToSVG(o, 'p1', 'g1');
-    assert.match(svg, /^<g style="mix-blend-mode:multiply"><defs><linearGradient id="g1"/);
-    assert.match(svg, /fill="url\(#g1\)"/);
+    assert.match(svg, /^<defs><linearGradient id="g1"[^]*<\/defs><g style="mix-blend-mode:multiply"><rect [^>]*fill="url\(#g1\)"/);
   });
 
   await t.test('combining keeps the bottom shape\'s blend mode and line ends', () => {
