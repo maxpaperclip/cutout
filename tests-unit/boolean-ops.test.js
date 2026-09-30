@@ -94,13 +94,15 @@ test('boolean-ops: edge cases', async (t) => {
     assert.ok(m._toasts.length > 0);
   });
 
-  await t.test('combining a rect with a line (closed vs open path) does not throw', () => {
+  await t.test('combining with a straight line is refused and explained, like any open line', () => {
     const m = loadCutoutModules({ recordToasts: true });
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
-    const line = m.newShape('line', { x1: 10, y1: 10, x2: 90, y2: 90 });
-    // Should either produce a sensible result or bail out via toast -
-    // the important thing is it doesn't crash the app.
-    assert.doesNotThrow(() => m.combineShapes('unite', [a, line]));
+    const line = m.makeLine({ x: 10, y: 10 }, { x: 90, y: 90 });
+    m.doc.objects.push(a, line);
+    m.S.sel = new Set([a.id, line.id]);
+    assert.doesNotThrow(() => m.runBoolean('unite'));
+    assert.equal(m.doc.objects.length, 2);
+    assert.match(m._toasts.join(' '), /no inside/);
   });
 });
 

@@ -99,7 +99,7 @@ test('pencil: open paths', async (t) => {
     m.S.sel = new Set([rect.id, line.id]);
     m.runBoolean('unite');
     assert.equal(m.doc.objects.length, 2);
-    assert.match(m._toasts.join(' '), /doesn.t join up/);
+    assert.match(m._toasts.join(' '), /no inside/);
   });
 
   await t.test('a closed drawn loop combines like any shape', () => {

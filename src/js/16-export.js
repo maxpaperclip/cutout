@@ -6,7 +6,7 @@ const MAX_DIM = 8192, MAX_PIXELS = 40e6;
 function exportBox() {
   const sel = selObjs();
   if (X.area === 'selection' && sel.length) {
-    const u = unionBox(sel), pad = Math.max(0, ...sel.map(o => o.kind !== 'image' && o.stroke && o.stroke !== 'none' ? o.sw : 0)) * 1.5 + 1;
+    const u = unionBox(sel), pad = Math.max(0, ...sel.map(o => hasPaint(o) && o.stroke && o.stroke !== 'none' ? o.sw : 0)) * 1.5 + 1;
     return { x: u.x - pad, y: u.y - pad, w: u.w + pad * 2, h: u.h + pad * 2, objs: sel };
   }
   return { x: 0, y: 0, w: doc.w, h: doc.h, objs: doc.objects };

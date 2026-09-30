@@ -47,9 +47,9 @@ const EXPORT_NAMES = [
   // 01-helpers.js
   'clamp', 'rnd', 'esc', 'rotPt', 'normDeg', 'APP_VERSION',
   // 04-document-model.js
-  'blankDoc', 'newShape', 'refresh', 'buildPolygon', 'syncLineBox',
+  'blankDoc', 'newShape', 'refresh', 'buildPolygon',
   'centerOf', 'aabb', 'unionBox', 'moveBy', 'labelOf', 'iconFor',
-  'KIND_LABEL', 'byId', 'selObjs', 'one', 'hasPic', 'docImageIds',
+  'byId', 'selObjs', 'one', 'hasPic', 'docImageIds',
   'hasGrad', 'makeGrad', 'cloneGrad', 'syncGradFill', 'gradAngle', 'setGradAngle',
   'reverseGrad', 'sanitizeGrad', 'shiftHue', 'normHex',
   'gradColorAt', 'addGradStop', 'removeGradStop', 'moveGradStop', 'GRAD_MAX_STOPS',
@@ -61,10 +61,14 @@ const EXPORT_NAMES = [
   'BLENDS', 'BLEND_IDS', 'CAPS', 'blendOf',
   'boxToWorld', 'worldToBox', 'editablePath', 'writePath', 'isSmoothPoint', 'setPointSmooth', 'moveHandle',
   'segmentAt', 'removePoints', 'insertPointNear', 'penGeometry', 'snap45',
+  'docJSON', 'rebuildOutlines',
+  'STYLE_KEYS', 'KIND_PARAMS', 'copyKeys', 'toPlainPath', 'makeImage',
+  'lineEnds', 'isStraightLine', 'lineGeometry', 'makeLine', 'setLineEnds',
+  'KIND_INFO', 'kindInfo', 'hasPixels', 'hasPaint', 'keepsRatio',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',
-  'buildSVG', 'rescalePic', 'drawOrigin', 'gradSpec', 'gradToSVG', 'serOpen',
+  'buildSVG', 'rescalePic', 'gradSpec', 'gradToSVG', 'serOpen',
   // 06-boolean-ops.js
   'combineShapes', 'replaceObjects', 'runBoolean', 'flattenSelected',
   'localPaper', 'worldPaper', 'lineToPaper', 'useAsMask', 'releaseMask',

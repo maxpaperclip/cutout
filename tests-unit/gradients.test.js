@@ -35,12 +35,11 @@ test('gradients: model helpers', async (t) => {
     assert.equal(m.shiftHue('#000000', 60), '#737373');
   });
 
-  await t.test('hasGrad is false for lines and photos even if they carry a grad', () => {
+  await t.test('hasGrad is false for photos even if they carry a grad', () => {
     const m = loadCutoutModules();
     const g = m.makeGrad('linear');
     assert.equal(m.hasGrad({ kind: 'rect', grad: g }), true);
     assert.equal(m.hasGrad({ kind: 'text', grad: g }), true);
-    assert.equal(m.hasGrad({ kind: 'line', grad: g }), false);
     assert.equal(m.hasGrad({ kind: 'image', grad: g }), false);
     assert.equal(m.hasGrad({ kind: 'rect' }), false);
   });
@@ -136,12 +135,13 @@ test('gradients: SVG output', async (t) => {
     assert.equal(m.styleAttrs(o, 'g7').fill, 'url(#g7)');
   });
 
-  await t.test('a rectangle (drawn in page coordinates) gets its gradient in page coordinates', () => {
+  await t.test('a rectangle, like every object, gets its gradient in its own box, placed on the page by translate', () => {
     const m = loadCutoutModules();
     const o = m.newShape('rect', { x: 100, y: 50, w: 200, h: 80, fill: '#ff0000', grad: m.makeGrad('linear', '#ff0000', '#0000ff') });
     const svg = m.objToSVG(o, 'pc1', 'gr1');
     assert.match(svg, /^<defs><linearGradient id="gr1" gradientUnits="userSpaceOnUse"/);
-    assert.deepEqual(['x1', 'y1', 'x2', 'y2'].map((k) => attr(svg, k)), ['100', '90', '300', '90']);
+    assert.deepEqual(['x1', 'y1', 'x2', 'y2'].map((k) => attr(svg, k)), ['0', '40', '200', '40']);
+    assert.match(svg, /<rect [^>]*transform="translate\(100 50\)"/);
     assert.match(svg, /<stop offset="0" stop-color="#ff0000"\/><stop offset="1" stop-color="#0000ff"\/>/);
     assert.match(svg, /<rect [^>]*fill="url\(#gr1\)"/);
   });
@@ -157,7 +157,8 @@ test('gradients: SVG output', async (t) => {
     const m = loadCutoutModules();
     const o = m.newShape('ellipse', { x: 10, y: 20, w: 200, h: 100, fill: '#ff0000', grad: m.makeGrad('radial') });
     const svg = m.objToSVG(o, 'pc1', 'gr1');
-    assert.match(svg, /<radialGradient id="gr1" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate\(110 70\) scale\(100 50\)">/);
+    assert.match(svg, /<radialGradient id="gr1" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="1" gradientTransform="translate\(100 50\) scale\(100 50\)">/);
+    assert.match(svg, /<ellipse [^>]*transform="translate\(10 20\)"/);
     assert.equal(attr(svg, 'fx'), null);
   });
 
@@ -197,12 +198,12 @@ test('gradients: SVG output', async (t) => {
     assert.equal(attr(m.objToSVG(o, 'p', 'g'), 'x2'), '250');
   });
 
-  await t.test('lines ignore a stray grad and export as before', () => {
+  await t.test('a new line never picks up the remembered gradient', () => {
     const m = loadCutoutModules();
-    const o = m.newShape('line', { x1: 0, y1: 0, x2: 10, y2: 10 });
-    const before = m.objToSVG(o, 'p', 'g');
-    o.grad = m.makeGrad('linear');
-    assert.equal(m.objToSVG(o, 'p', 'g'), before);
+    m.S.style.grad = m.makeGrad('linear');
+    const o = m.makeLine({ x: 0, y: 0 }, { x: 10, y: 10 });
+    assert.equal(o.grad, undefined);
+    assert.doesNotMatch(m.objToSVG(o, 'p', 'g'), /Gradient/);
   });
 
   await t.test('buildSVG gives each gradient its own id', () => {
@@ -247,7 +248,7 @@ test('gradients: document behavior', async (t) => {
     const m = loadCutoutModules();
     m.S.style.grad = m.makeGrad('linear');
     assert.equal(m.newShape('text', {}).grad, undefined);
-    assert.equal(m.newShape('line', {}).grad, undefined);
+    assert.equal(m.makeLine({ x: 0, y: 0 }, { x: 5, y: 5 }).grad, undefined);
     assert.equal(m.newShape('rect', { fill: '#00ff00' }).grad, undefined);
   });
 
@@ -277,9 +278,10 @@ test('gradients: document behavior', async (t) => {
     m.flattenSelected();
     const after = m.objToSVG(o, 'p', 'g');
     assert.equal(o.kind, 'path');
-    // rect: page coordinates, no translate.  path: box coordinates inside translate(100 50).
-    assert.deepEqual(['x1', 'x2'].map((k) => +attr(before, k)), [100, 300]);
+    // both are drawn in box coordinates inside translate(100 50), so the gradient doesn't change at all
+    assert.equal(before.slice(0, before.indexOf('</defs>')), after.slice(0, after.indexOf('</defs>')));
     assert.deepEqual(['x1', 'x2'].map((k) => +attr(after, k)), [0, 200]);
+    assert.match(before, /transform="translate\(100 50\)"/);
     assert.match(after, /transform="translate\(100 50\)"/);
   });
 });

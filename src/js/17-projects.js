@@ -1,7 +1,7 @@
 /* =====================================================================
    Projects: save, open, new, example
    ===================================================================== */
-const KINDS = ['rect', 'ellipse', 'polygon', 'line', 'text', 'path', 'image'];
+const KINDS = ['rect', 'ellipse', 'polygon', 'line', 'text', 'path', 'image'];   // 'line' only in files from before v1.14
 function sanitizeDoc(d) {
   const out = blankDoc();
   const num = (v, def, a, b) => { v = +v; return Number.isFinite(v) ? clamp(v, a, b) : def; };
@@ -26,28 +26,34 @@ function sanitizeDoc(d) {
       join: ['miter', 'round', 'bevel'].indexOf(r.join) >= 0 ? r.join : 'miter', dash: ['solid', 'dashed', 'dotted'].indexOf(r.dash) >= 0 ? r.dash : 'solid',
       hidden: !!r.hidden, locked: !!r.locked
     };
-    if (o.kind !== 'line') { if (r.fx) o.fx = true; if (r.fy) o.fy = true; }
+    if (r.fx) o.fx = true;
+    if (r.fy) o.fy = true;
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
-    if (o.kind !== 'image' && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
-    if (o.kind === 'image') {
+    if (hasPaint(o) && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
+    if (hasPixels(o)) {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
-    } else if (o.kind !== 'line' && r.pic) {
+    } else if (r.kind !== 'line' && r.pic) {
       if (typeof r.pic.id === 'string' && images.has(r.pic.id)) o.pic = { id: r.pic.id, dx: num(r.pic.dx, 0, -1e5, 1e5), dy: num(r.pic.dy, 0, -1e5, 1e5), s: num(r.pic.s, 1, 0.001, 100) };
       else missingPhoto = true;
     }
-    if (o.kind !== 'line' && o.kind !== 'image' && r.grad) { const g = sanitizeGrad(r.grad); if (g) { o.grad = g; o.fill = g.stops[0].c; } }
+    if (r.kind !== 'line' && hasPaint(o) && r.grad) { const g = sanitizeGrad(r.grad); if (g) { o.grad = g; o.fill = g.stops[0].c; } }
     if (o.kind === 'rect') o.r = num(r.r, 0, 0, 1e5);
     if (o.kind === 'polygon') { o.sides = Math.round(num(r.sides, 5, 3, 24)); o.star = !!r.star; o.inner = num(r.inner, 0.45, 0.1, 0.95); }
-    if (o.kind === 'line') { o.x1 = num(r.x1, 0, -1e6, 1e6); o.y1 = num(r.y1, 0, -1e6, 1e6); o.x2 = num(r.x2, 0, -1e6, 1e6); o.y2 = num(r.y2, 0, -1e6, 1e6); }
+    if (r.kind === 'line') {   // lines became two-point plain shapes in v1.14
+      const P = k => num(r[k], 0, -1e6, 1e6);
+      Object.assign(o, lineGeometry({ x: P('x1'), y: P('y1') }, { x: P('x2'), y: P('y2') }), { kind: 'path', rot: 0 });
+      delete o.fx; delete o.fy;
+      if (!r.fill || r.fill === 'none') o.fill = 'none';
+    }
     if (o.kind === 'text') {
       o.text = typeof r.text === 'string' ? r.text.slice(0, 5000) : 'Text';
       if (fonts[r.font]) o.font = r.font; else { o.font = DEFAULT_FONT; missingFont = true; }
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
     }
-    if (o.kind === 'path') {
+    if (r.kind === 'path') {   // (a converted old line already has its outline)
       if (!r.nat || typeof r.nat.d !== 'string') return;
       o.nat = { d: r.nat.d, w: num(r.nat.w, o.w, 0.001, 1e5), h: num(r.nat.h, o.h, 0.001, 1e5) };
     }
@@ -61,7 +67,7 @@ async function saveProject() {
   closeMenus();
   const pics = {};
   docImageIds(doc).forEach(id => { const r = images.get(id); if (r) pics[id] = { name: r.name, w: r.w, h: r.h, mime: r.mime, data: r.dataUrl }; });
-  const blob = new Blob([JSON.stringify({ app: 'cutout', version: 2, appVersion: APP_VERSION, doc, images: pics })], { type: 'application/json' });
+  const blob = new Blob(['{"app":"cutout","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
   try { const r = await saveFile(safeName(X.name) + '.cutout.json', blob); if (r === 'saved') toast('Project saved.'); }
   catch (err) { toast(err.message || 'The project could not be saved.'); }
 }

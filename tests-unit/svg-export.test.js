@@ -47,12 +47,14 @@ test('svg-export: strokeAttrs / styleAttrs', async (t) => {
 });
 
 test('svg-export: shapeSpec (geometry per object kind)', async (t) => {
-  await t.test('rect produces an SVG <rect> with rounded coordinates', () => {
+  await t.test('rect is drawn at its box origin and placed by a rounded translate', () => {
     const m = loadCutoutModules();
-    const spec = m.shapeSpec({ kind: 'rect', x: 1.23456, y: 2, w: 100, h: 50, r: 0 });
+    const o = { kind: 'rect', x: 1.23456, y: 2, w: 100, h: 50, r: 0 };
+    const spec = m.shapeSpec(o);
     assert.equal(spec.tag, 'rect');
-    assert.equal(spec.a.x, 1.235);
+    assert.equal(spec.a.x, undefined);
     assert.equal(spec.a.rx, null); // no rounding requested
+    assert.equal(m.geomSpec(o).a.transform, 'translate(1.235 2)');
   });
 
   await t.test('rect with a corner radius clamps rx to half the smaller side', () => {
@@ -71,13 +73,13 @@ test('svg-export: shapeSpec (geometry per object kind)', async (t) => {
     assert.equal(spec.a.ry, 20);
   });
 
-  await t.test('line produces x1/y1/x2/y2 directly from the endpoints', () => {
+  await t.test('a line is drawn as a two-point path in its box, placed by translate', () => {
     const m = loadCutoutModules();
-    const spec = m.shapeSpec({ kind: 'line', x1: 1, y1: 2, x2: 3, y2: 4 });
-    assert.equal(spec.a.x1, 1);
-    assert.equal(spec.a.y1, 2);
-    assert.equal(spec.a.x2, 3);
-    assert.equal(spec.a.y2, 4);
+    const l = m.makeLine({ x: 1, y: 2 }, { x: 3, y: 6 });
+    const spec = m.geomSpec(l);
+    assert.equal(spec.tag, 'path');
+    assert.equal(spec.a.d, 'M0 0L2 4');
+    assert.equal(spec.a.transform, 'translate(1 2)');
   });
 
   await t.test('an unknown/path kind falls back to a raw <path d=...>', () => {

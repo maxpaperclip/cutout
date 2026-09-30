@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.13.0</title>
+<title>Cutout v1.14.0</title>
 <style>
 
 :root{
@@ -704,7 +704,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.13.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.14.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -843,25 +843,42 @@ const images = new Map();        // id -> { id, blob, dataUrl, w, h, mime, bytes
 const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '').slice(0, 20) : Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
 function docImageIds(d) {
   const s = new Set();
-  d.objects.forEach(o => { if (o.kind === 'image' && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); });
+  d.objects.forEach(o => { if (hasPixels(o) && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); });
   return s;
 }
 // A shape (or text) whose fill is a photo
-const hasPic = o => !!(o.pic && o.kind !== 'line' && o.kind !== 'image' && images.has(o.pic.id));
+const hasPic = o => !!(o.pic && hasPaint(o) && images.has(o.pic.id));
 // A shape (or text) whose fill is a gradient (see "gradient fills" below)
-const hasGrad = o => !!(o && o.grad && o.kind !== 'line' && o.kind !== 'image');
+const hasGrad = o => !!(o && o.grad && hasPaint(o));
 const byId = id => doc.objects.find(o => o.id === id);
 const selObjs = () => doc.objects.filter(o => S.sel.has(o.id));
 const one = () => { const s = selObjs(); return s.length === 1 ? s[0] : null; };
 
-const KIND_LABEL = { image: 'Photo', rect: 'Rectangle', ellipse: 'Ellipse', polygon: 'Polygon', line: 'Line', text: 'Text', path: 'Shape' };
+/* What each kind of object is and can do. Code asks these questions (through the helpers below)
+   instead of naming kinds, so a new kind (paint layers, say) is one entry here.
+     pixels:     drawn from a stored picture (see images); has no fill, outline or gradient
+     keepsRatio: resizing keeps its proportions (text grows by font size, pictures don't stretch)
+     plain:      can become a plain shape (Convert to plain shape, Edit points) */
+const KIND_INFO = {
+  rect:    { label: 'Rectangle', plain: true },
+  ellipse: { label: 'Ellipse', plain: true },
+  polygon: { label: 'Polygon', plain: true },
+  text:    { label: 'Text', plain: true, keepsRatio: true },
+  path:    { label: 'Shape' },
+  image:   { label: 'Photo', pixels: true, keepsRatio: true }
+};
+const kindInfo = o => (o && KIND_INFO[o.kind]) || {};
+const hasPixels = o => !!kindInfo(o).pixels;      // a photo (no fill, outline or gradient of its own)
+const hasPaint = o => !!o && !hasPixels(o);       // has a fill, an outline, and maybe a gradient
+const keepsRatio = o => !!kindInfo(o).keepsRatio;
 function labelOf(o) {
   if (o.name) return o.name;
   if (o.kind === 'text') return (o.text || '').split('\n')[0].slice(0, 26) || 'Text';
   if (o.kind === 'polygon' && o.star) return 'Star';
-  return KIND_LABEL[o.kind] || 'Object';
+  if (isStraightLine(o)) return 'Line';
+  return kindInfo(o).label || 'Object';
 }
-const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : (o.kind !== 'line' && o.kind !== 'image' && o.pic ? 'image' : o.kind);
+const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : hasPaint(o) && o.pic ? 'image' : isStraightLine(o) ? 'line' : o.kind;
 
 /* ---------- blend modes and line ends ----------
    o.blend: how an object mixes with what's under it (absent = normal).
@@ -874,6 +891,31 @@ const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Scre
 const BLEND_IDS = BLENDS.map(b => b[0]);
 const CAPS = ['butt', 'round', 'square'];
 const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blend) >= 0 ? o.blend : null;
+
+/* ---------- shared field lists ----------
+   STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
+   KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
+const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls'] };
+// Copy the listed settings from one object to another, removing any the source doesn't have.
+// Gradients are copied, never shared, so editing one object's gradient can't change another's.
+function copyKeys(from, to, keys) {
+  keys.forEach(k => {
+    if (from[k] === undefined) delete to[k];
+    else to[k] = k === 'grad' ? cloneGrad(from[k]) : from[k];
+  });
+  return to;
+}
+// Turn an object into a plain shape with the given outline (box coordinates, already sized w x h)
+function toPlainPath(o, d, w, h) {
+  Object.keys(KIND_PARAMS).forEach(k => KIND_PARAMS[k].forEach(p => delete o[p]));
+  o.kind = 'path'; o.w = w; o.h = h; o.nat = { d, w, h }; o.d = d;
+  return o;
+}
+// A photo object showing the stored picture rec (see images); props sets or overrides anything
+function makeImage(rec, props) {
+  return Object.assign({ id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: 0, y: 0, w: rec.w, h: rec.h, rot: 0, opacity: 1, hidden: false, locked: false }, props);
+}
 
 /* ---------- gradient fills ----------
    o.grad = { type: 'linear' | 'radial', stops: [{ at, c, a }, ...],
@@ -1081,16 +1123,29 @@ function scaledPathD(nat, w, h) {
   c.scale(sx, sy, new paper.Point(0, 0));
   return c.pathData;
 }
-function syncLineBox(o) {
-  o.x = Math.min(o.x1, o.x2); o.y = Math.min(o.y1, o.y2);
-  o.w = Math.abs(o.x2 - o.x1); o.h = Math.abs(o.y2 - o.y1); o.rot = 0;
-}
 // Rebuild derived geometry after a parameter changed
+/* Derived outlines. o.d (the outline drawn for text, polygons and plain shapes) is always rebuilt
+   from the object's own settings, so it is never saved: not in undo steps, autosave or project
+   files (see docJSON). It is rebuilt by refresh() when a drawing is opened or an undo step is
+   restored. Text layout is the slow part, so recent layouts are kept here. */
+const textLayouts = new Map();
+function layoutText(o) {
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text;
+  let g = textLayouts.get(key);
+  if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
+  g = buildText(o);
+  textLayouts.set(key, g);
+  if (textLayouts.size > 400) textLayouts.delete(textLayouts.keys().next().value);
+  return g;
+}
+// The drawing as JSON, without derived outlines (the key 'd' on an object; a path's own nat.d is kept)
+const docJSON = d => JSON.stringify(d, function (k, v) { return k === 'd' && this && this.kind ? undefined : v; });
+function rebuildOutlines(d) { d.objects.forEach(o => { try { refresh(o); } catch (e) { /* drawn as nothing until fixed */ } }); }
+
 function refresh(o) {
-  if (o.kind === 'text') { const g = buildText(o); o.d = g.d; o.w = g.w; o.h = g.h; }
+  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; }
   else if (o.kind === 'polygon') o.d = buildPolygon(o);
   else if (o.kind === 'path') o.d = scaledPathD(o.nat, o.w, o.h);
-  else if (o.kind === 'line') syncLineBox(o);
 }
 function newShape(kind, props) {
   const st = S.style;
@@ -1101,15 +1156,9 @@ function newShape(kind, props) {
   const given = k => props && props[k] !== undefined;
   // New shapes pick up the last gradient used, just as they pick up the last fill color.
   // Each shape gets its own copy, so editing one shape's gradient never changes another's.
-  if (st.grad && !given('fill') && !given('grad') && kind !== 'line' && kind !== 'text' && kind !== 'image') { o.grad = cloneGrad(st.grad); o.fill = o.grad.stops[0].c; }
+  if (st.grad && !given('fill') && !given('grad') && kind !== 'text' && !KIND_INFO[kind].pixels) { o.grad = cloneGrad(st.grad); o.fill = o.grad.stops[0].c; }
   if (kind === 'rect' && o.r === undefined) o.r = 0;
   if (kind === 'polygon') { o.sides = o.sides || 6; o.star = !!o.star; o.inner = o.inner || 0.45; }
-  if (kind === 'line') {
-    if (!given('fill')) o.fill = 'none';
-    if (!given('stroke')) o.stroke = st.stroke === 'none' ? '#151936' : st.stroke;
-    if (!given('sw')) o.sw = Math.max(st.sw, 3);
-    o.x1 = o.x1 || 0; o.y1 = o.y1 || 0; o.x2 = o.x2 || 0; o.y2 = o.y2 || 0;
-  }
   if (kind === 'text') {
     o.text = o.text !== undefined ? o.text : 'Text'; o.font = o.font || DEFAULT_FONT; o.size = o.size || 64;
     o.align = o.align || 'left'; o.lh = o.lh || 1.2; o.ls = o.ls || 0;
@@ -1137,7 +1186,6 @@ function unionBox(list) {
 }
 function moveBy(o, dx, dy) {
   o.x += dx; o.y += dy;
-  if (o.kind === 'line') { o.x1 += dx; o.x2 += dx; o.y1 += dy; o.y2 += dy; }
 }
 
 /* =====================================================================
@@ -1315,10 +1363,6 @@ function groupsFilledBy(d, objs) {
    scale along with the shapes. */
 function scaleAbout(o, o0, ax, ay, k) {
   if (o0.sw !== undefined) o.sw = rnd(o0.sw * k, 3);
-  if (o.kind === 'line') {
-    o.x1 = ax + (o0.x1 - ax) * k; o.y1 = ay + (o0.y1 - ay) * k; o.x2 = ax + (o0.x2 - ax) * k; o.y2 = ay + (o0.y2 - ay) * k;
-    refresh(o); return;
-  }
   const cx = ax + (o0.x + o0.w / 2 - ax) * k, cy = ay + (o0.y + o0.h / 2 - ay) * k;
   if (o.kind === 'text') { o.size = Math.max(1, rnd(o0.size * k, 3)); refresh(o); }
   else {
@@ -1330,10 +1374,6 @@ function scaleAbout(o, o0, ax, ay, k) {
   if (o0.pic && o.pic) rescalePic(o, o0.pic, k, k);
 }
 function rotateAbout(o, o0, cx, cy, deg) {
-  if (o.kind === 'line') {
-    const a = rotPt(o0.x1, o0.y1, cx, cy, deg), b = rotPt(o0.x2, o0.y2, cx, cy, deg);
-    o.x1 = a.x; o.y1 = a.y; o.x2 = b.x; o.y2 = b.y; refresh(o); return;
-  }
   const c = rotPt(o0.x + o0.w / 2, o0.y + o0.h / 2, cx, cy, deg);
   o.x = c.x - o0.w / 2; o.y = c.y - o0.h / 2;
   o.rot = rnd(normDeg((o0.rot || 0) + deg), 2);
@@ -1409,8 +1449,7 @@ function writePath(o, o0, path) {
   const p = path.clone({ insert: false });
   p.translate(new paper.Point(-b.x, -b.y));
   const d = p.pathData;
-  o.kind = 'path'; o.w = w; o.h = h; o.x = c[0] - w / 2; o.y = c[1] - h / 2;
-  o.nat = { d, w, h }; o.d = d; o.rot = o0.rot || 0;
+  toPlainPath(o, d, w, h); o.x = c[0] - w / 2; o.y = c[1] - h / 2; o.rot = o0.rot || 0;
   if (o0.fx) o.fx = true; else delete o.fx;
   if (o0.fy) o.fy = true; else delete o.fy;
   if (o0.pic && o.pic) o.pic = Object.assign({}, o0.pic, { dx: o0.pic.dx - shift.x, dy: o0.pic.dy - shift.y });
@@ -1506,6 +1545,45 @@ function snap45(a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
   return { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
 }
+
+/* ---------- straight lines ----------
+   A line is a plain shape (path) with just two points and no curve: there is no separate kind.
+   The Line tool makes one, and anything with that outline (a pen line with two clicks, say) gets
+   the line's endpoint handles and X1 / Y1 / X2 / Y2 fields. */
+const lineCache = new Map();   // outline -> its two ends in box coordinates, or null
+function lineEnds(o) {
+  if (!o || o.kind !== 'path' || typeof o.d !== 'string') return null;
+  let e = lineCache.get(o.d);
+  if (e === undefined) {
+    e = null;
+    try {
+      const p = new paper.CompoundPath({ pathData: o.d, insert: false }), c = p.children;
+      if (c.length === 1 && !c[0].closed && c[0].segments.length === 2 && c[0].segments.every(s => !hasHandle(s.handleIn) && !hasHandle(s.handleOut)))
+        e = c[0].segments.map(s => [s.point.x, s.point.y]);
+    } catch (err) { e = null; }
+    lineCache.set(o.d, e);
+    if (lineCache.size > 500) lineCache.delete(lineCache.keys().next().value);
+  }
+  return e ? e.map(p => boxToWorld(o, p[0], p[1])) : null;   // page coordinates, through flip and turn
+}
+const isStraightLine = o => !!lineEnds(o);
+// The box and outline for a line from a to b (page coordinates)
+function lineGeometry(a, b) {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y), w = Math.abs(b.x - a.x), h = Math.abs(b.y - a.y);
+  const d = 'M' + rnd(a.x - x, 3) + ' ' + rnd(a.y - y, 3) + 'L' + rnd(b.x - x, 3) + ' ' + rnd(b.y - y, 3);
+  const W = Math.max(w, 0.01), H = Math.max(h, 0.01);   // a flat line still has a (very thin) box
+  return { x, y, w: W, h: H, nat: { d, w: W, h: H } };
+}
+// A new line with the line tool's usual look (an outline, never a fill); props can override it
+function makeLine(a, b, props) {
+  const st = S.style;
+  return newShape('path', Object.assign({ fill: 'none', stroke: st.stroke === 'none' ? '#151936' : st.stroke, sw: Math.max(st.sw, 3) }, lineGeometry(a, b), props || {}));
+}
+// Move a line's ends (page coordinates). Any turn or flip is built into the new ends.
+function setLineEnds(o, a, b) {
+  Object.assign(o, lineGeometry(a, b)); o.rot = 0; delete o.fx; delete o.fy;
+  refresh(o);
+}
 /* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
    ===================================================================== */
@@ -1517,7 +1595,7 @@ function strokeAttrs(o) {
     a['stroke-linejoin'] = o.join || 'miter';
     if (o.dash === 'dashed') a['stroke-dasharray'] = rnd(Math.max(sw, 1) * 3, 2) + ' ' + rnd(Math.max(sw, 1) * 2, 2);
     else if (o.dash === 'dotted') a['stroke-dasharray'] = '0 ' + rnd(Math.max(sw, 1) * 2, 2);
-    const auto = (o.kind === 'line' || isOpenPath(o)) && o.dash === 'solid' ? 'round' : 'butt';
+    const auto = isOpenPath(o) && o.dash === 'solid' ? 'round' : 'butt';   // lines and drawn lines
     const cap = CAPS.indexOf(o.cap) >= 0 ? o.cap : auto;
     // dots are drawn as zero-length dashes, which only show with round or square ends
     a['stroke-linecap'] = o.dash === 'dotted' ? (cap === 'square' ? 'square' : 'round') : cap;
@@ -1526,7 +1604,7 @@ function strokeAttrs(o) {
 }
 // gradId: the id of this object's gradient definition, when it has one (see gradSpec)
 function styleAttrs(o, gradId) {
-  if (o.kind === 'image') return o.opacity < 1 ? { opacity: rnd(o.opacity, 3) } : {};
+  if (hasPixels(o)) return o.opacity < 1 ? { opacity: rnd(o.opacity, 3) } : {};
   const fill = gradId && hasGrad(o) ? 'url(#' + gradId + ')' : o.fill && o.fill !== 'none' ? o.fill : 'none';
   const a = Object.assign({ fill }, strokeAttrs(o));
   if (o.opacity < 1) a.opacity = rnd(o.opacity, 3);
@@ -1540,24 +1618,22 @@ function centerXf(o, cx, cy) {
   return 'translate(' + rnd(cx, 3) + ' ' + rnd(cy, 3) + ')' + (o.rot ? ' rotate(' + rnd(o.rot, 3) + ')' : '') +
     ' scale(' + (o.fx ? -1 : 1) + ' ' + (o.fy ? -1 : 1) + ') translate(' + rnd(-cx, 3) + ' ' + rnd(-cy, 3) + ')';
 }
-// Geometry only (no transform), in the object's own drawing coordinates
+// Geometry only (no transform). Every object is drawn in its own box coordinates
+// (0,0 = top-left of its box); objXf then places the box on the page.
 function shapeSpec(o) {
   switch (o.kind) {
-    case 'rect': return { tag: 'rect', a: { x: rnd(o.x, 3), y: rnd(o.y, 3), width: rnd(o.w, 3), height: rnd(o.h, 3), rx: o.r > 0 ? rnd(Math.min(o.r, o.w / 2, o.h / 2), 3) : null } };
-    case 'ellipse': return { tag: 'ellipse', a: { cx: rnd(o.x + o.w / 2, 3), cy: rnd(o.y + o.h / 2, 3), rx: rnd(o.w / 2, 3), ry: rnd(o.h / 2, 3) } };
-    case 'line': return { tag: 'line', a: { x1: rnd(o.x1, 3), y1: rnd(o.y1, 3), x2: rnd(o.x2, 3), y2: rnd(o.y2, 3) } };
+    case 'rect': return { tag: 'rect', a: { width: rnd(o.w, 3), height: rnd(o.h, 3), rx: o.r > 0 ? rnd(Math.min(o.r, o.w / 2, o.h / 2), 3) : null } };
+    case 'ellipse': return { tag: 'ellipse', a: { cx: rnd(o.w / 2, 3), cy: rnd(o.h / 2, 3), rx: rnd(o.w / 2, 3), ry: rnd(o.h / 2, 3) } };
     case 'image': {
       const rec = images.get(o.img);
-      if (!rec) return { tag: 'rect', a: { x: rnd(o.x, 3), y: rnd(o.y, 3), width: rnd(o.w, 3), height: rnd(o.h, 3), fill: '#cfd3e0' } };
-      return { tag: 'image', a: { x: rnd(o.x, 3), y: rnd(o.y, 3), width: rnd(o.w, 3), height: rnd(o.h, 3), href: rec.dataUrl, preserveAspectRatio: 'none' } };
+      if (!rec) return { tag: 'rect', a: { width: rnd(o.w, 3), height: rnd(o.h, 3), fill: '#cfd3e0' } };
+      return { tag: 'image', a: { width: rnd(o.w, 3), height: rnd(o.h, 3), href: rec.dataUrl, preserveAspectRatio: 'none' } };
     }
     default: return { tag: 'path', a: { d: o.d } };
   }
 }
-// Transform that places the object on the page
+// Transform that places the object's box on the page
 function objXf(o) {
-  if (o.kind === 'line') return null;
-  if (o.kind === 'rect' || o.kind === 'ellipse' || o.kind === 'image') return centerXf(o, o.x + o.w / 2, o.y + o.h / 2);
   const local = centerXf(o, o.w / 2, o.h / 2);
   return 'translate(' + rnd(o.x, 3) + ' ' + rnd(o.y, 3) + ')' + (local ? ' ' + local : '');
 }
@@ -1573,19 +1649,19 @@ function geomSpec(o) {
    the gradient line on any box. Radial gradients are drawn as a unit circle scaled to the box,
    so they stretch into an ellipse that fits the shape. */
 function gradSpec(o) {
-  const g = o.grad, org = drawOrigin(o), w = o.w, h = o.h;
+  const g = o.grad, w = o.w, h = o.h;
   const stops = g.stops.map(s => ({ offset: rnd(s.at, 4), 'stop-color': s.c, 'stop-opacity': s.a < 1 ? rnd(s.a, 3) : null }));
   if (g.type === 'radial') {
     const sx = Math.max(g.r * w, 1e-3), sy = Math.max(g.r * h, 1e-3), focal = g.fx !== undefined && g.fy !== undefined;
     return { tag: 'radialGradient', stops, a: {
       gradientUnits: 'userSpaceOnUse', cx: 0, cy: 0, r: 1,
       fx: focal ? rnd((g.fx - g.cx) / g.r, 4) : null, fy: focal ? rnd((g.fy - g.cy) / g.r, 4) : null,
-      gradientTransform: 'translate(' + rnd(org.x + g.cx * w, 3) + ' ' + rnd(org.y + g.cy * h, 3) + ') scale(' + rnd(sx, 4) + ' ' + rnd(sy, 4) + ')'
+      gradientTransform: 'translate(' + rnd(g.cx * w, 3) + ' ' + rnd(g.cy * h, 3) + ') scale(' + rnd(sx, 4) + ' ' + rnd(sy, 4) + ')'
     } };
   }
   return { tag: 'linearGradient', stops, a: {
     gradientUnits: 'userSpaceOnUse',
-    x1: rnd(org.x + g.x1 * w, 3), y1: rnd(org.y + g.y1 * h, 3), x2: rnd(org.x + g.x2 * w, 3), y2: rnd(org.y + g.y2 * h, 3)
+    x1: rnd(g.x1 * w, 3), y1: rnd(g.y1 * h, 3), x2: rnd(g.x2 * w, 3), y2: rnd(g.y2 * h, 3)
   } };
 }
 // The gradient as SVG markup, wrapped in <defs>, for export
@@ -1602,8 +1678,6 @@ function picGeom(o) {
 }
 // True when the photo covers the whole shape box, so the fill color underneath is never visible
 function picCovers(o) { const g = picGeom(o); return g.x <= 0.05 && g.y <= 0.05 && g.x + g.w >= o.w - 0.05 && g.y + g.h >= o.h - 0.05; }
-// rect / ellipse are drawn in page coordinates, everything else in box coordinates
-const drawOrigin = o => (o.kind === 'rect' || o.kind === 'ellipse') ? { x: o.x, y: o.y } : { x: 0, y: 0 };
 const coverScale = (o, rec) => Math.max(o.w / rec.w, o.h / rec.h);
 // Scale the photo along with its shape when the shape is resized
 function rescalePic(o, pic0, sx, sy) { o.pic = { id: pic0.id, dx: pic0.dx * sx, dy: pic0.dy * sy, s: pic0.s * Math.max(sx, sy) }; }
@@ -1615,11 +1689,11 @@ function serOpen(tag, attrs) {
 }
 function ser(tag, attrs) { return serOpen(tag, attrs).slice(0, -1) + '/>'; }
 function picToSVG(o, spec, clipId, gradId) {
-  const st = styleAttrs(o, gradId), pg = picGeom(o), org = drawOrigin(o), sa = strokeAttrs(o);
+  const st = styleAttrs(o, gradId), pg = picGeom(o), sa = strokeAttrs(o);
   let s = '<g' + (st.opacity !== undefined ? ' opacity="' + st.opacity + '"' : '') + '>';
   if (st.fill !== 'none' && !picCovers(o)) s += (hasGrad(o) && gradId ? gradToSVG(o, gradId) : '') + ser(spec.tag, Object.assign({}, spec.a, { fill: st.fill }));
   s += '<clipPath id="' + clipId + '">' + ser(spec.tag, spec.a) + '</clipPath>';
-  s += '<g clip-path="url(#' + clipId + ')">' + ser('image', { x: rnd(org.x + pg.x, 3), y: rnd(org.y + pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform }) + '</g>';
+  s += '<g clip-path="url(#' + clipId + ')">' + ser('image', { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform }) + '</g>';
   if (sa.stroke !== 'none') s += ser(spec.tag, Object.assign({}, spec.a, { fill: 'none' }, sa));
   return s + '</g>';
 }
@@ -1643,18 +1717,12 @@ function buildSVG(objs, box, outW, outH, bg) {
 /* =====================================================================
    Boolean operations (paper.js)
    ===================================================================== */
-function lineToPaper(o) {
-  const dx = o.x2 - o.x1, dy = o.y2 - o.y1, len = Math.hypot(dx, dy) || 1;
-  const nx = -dy / len * Math.max(o.sw, 1) / 2, ny = dx / len * Math.max(o.sw, 1) / 2;
-  return new paper.Path({ segments: [[o.x1 + nx, o.y1 + ny], [o.x2 + nx, o.y2 + ny], [o.x2 - nx, o.y2 - ny], [o.x1 - nx, o.y1 - ny]], closed: true, insert: false });
-}
 function localPaper(o) {
   if (o.kind === 'rect') return new paper.Path.Rectangle({ point: [0, 0], size: [o.w, o.h], radius: Math.min(o.r || 0, o.w / 2, o.h / 2), insert: false });
   if (o.kind === 'ellipse') return new paper.Path.Ellipse({ center: [o.w / 2, o.h / 2], radius: [o.w / 2, o.h / 2], insert: false });
   return new paper.CompoundPath({ pathData: o.d, insert: false });
 }
 function worldPaper(o) {
-  if (o.kind === 'line') return lineToPaper(o);
   const item = localPaper(o);
   if (o.fx || o.fy) item.scale(o.fx ? -1 : 1, o.fy ? -1 : 1, new paper.Point(o.w / 2, o.h / 2));
   if (o.rot) item.rotate(o.rot, new paper.Point(o.w / 2, o.h / 2));
@@ -1680,15 +1748,9 @@ function combineShapes(op, list) {
     }
     acc.translate(new paper.Point(-bn.x, -bn.y));
     const base = list[0], d = acc.pathData;
-    const res = newShape('path', {
-      name: BOOL_NAME[op], x: bn.x, y: bn.y, w: bn.width, h: bn.height, nat: { d, w: bn.width, h: bn.height },
-      fill: base.fill, stroke: base.stroke, sw: base.sw, opacity: base.opacity, join: base.join, dash: base.dash
-    });
-    // The bottom shape's gradient comes along, stretched over the combined shape's box
-    if (hasGrad(base)) res.grad = cloneGrad(base.grad);
-    if (blendOf(base)) res.blend = base.blend;
-    if (base.cap) res.cap = base.cap;
-    return res;
+    const res = newShape('path', { name: BOOL_NAME[op], x: bn.x, y: bn.y, w: bn.width, h: bn.height, nat: { d, w: bn.width, h: bn.height } });
+    // The result looks like the bottom shape; its gradient is stretched over the combined shape's box
+    return copyKeys(base, res, STYLE_KEYS);
   } catch (err) {
     console.error(err);
     toast('Those shapes could not be combined. Try simplifying them first.');
@@ -1706,8 +1768,8 @@ function replaceObjects(list, res) {
 function runBoolean(op) {
   const list = doc.objects.filter(o => S.sel.has(o.id));
   if (list.length < 2) { toast('Select two or more shapes first.'); return; }
-  if (list.some(o => o.kind === 'image')) { toast('Photos can\u2019t be combined like shapes. Use \u201cUse shapes as mask\u201d to put a photo inside a shape.'); return; }
-  if (list.some(isOpenPath)) { toast('A drawn line that doesn\u2019t join up has no inside, so it can\u2019t be combined. To draw a shape, end the line where it started.'); return; }
+  if (list.some(hasPixels)) { toast('Photos can\u2019t be combined like shapes. Use \u201cUse shapes as mask\u201d to put a photo inside a shape.'); return; }
+  if (list.some(isOpenPath)) { toast('Lines have no inside, so they can\u2019t be combined. To draw a shape, end a drawn line where it started, or use the Pen and click the first point.'); return; }
   const res = combineShapes(op, list);
   if (!res) return;
   const hadPhoto = list.some(hasPic);
@@ -1717,11 +1779,9 @@ function runBoolean(op) {
 }
 function flattenSelected() {
   const o = one();
-  if (!o || o.kind === 'path' || o.kind === 'line' || o.kind === 'image') return;
-  let d = o.d;
-  if (o.kind === 'rect' || o.kind === 'ellipse') d = localPaper(o).pathData;
-  ['r', 'sides', 'star', 'inner', 'text', 'font', 'size', 'align', 'lh', 'ls'].forEach(k => delete o[k]);
-  o.kind = 'path'; o.nat = { d, w: o.w, h: o.h }; o.d = d;
+  if (!o || !kindInfo(o).plain) return;
+  const d = o.kind === 'rect' || o.kind === 'ellipse' ? localPaper(o).pathData : o.d;
+  toPlainPath(o, d, o.w, o.h);
   if (!o.name) o.name = 'Shape';
   commit();
   toast('Converted to a plain shape.');
@@ -1732,9 +1792,9 @@ function flattenSelected() {
 // on the page when the shape and photo are lined up the same way; otherwise it is centered.
 function useAsMask() {
   const sel = doc.objects.filter(o => S.sel.has(o.id));
-  const pics = sel.filter(o => o.kind === 'image'), shapes = sel.filter(o => o.kind !== 'image');
+  const pics = sel.filter(hasPixels), shapes = sel.filter(hasPaint);
   if (pics.length !== 1 || !shapes.length) { toast('Select one photo and the shape or text you want to use as the mask.'); return; }
-  if (shapes.some(o => o.kind === 'line' || isOpenPath(o))) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
+  if (shapes.some(isOpenPath)) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
   const im = pics[0], rec = images.get(im.img);
   if (!rec) { toast('That photo is not available any more.'); return; }
   let target = shapes[0];
@@ -1759,10 +1819,8 @@ function releaseMask() {
   if (!o || !hasPic(o)) return;
   const rec = images.get(o.pic.id), pw = rec.w * o.pic.s, ph = rec.h * o.pic.s;
   const r = rotPt(o.fx ? -o.pic.dx : o.pic.dx, o.fy ? -o.pic.dy : o.pic.dy, 0, 0, o.rot), c = centerOf(o);
-  const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: c.x + r.x - pw / 2, y: c.y + r.y - ph / 2, w: pw, h: ph, rot: o.rot, opacity: 1, hidden: false, locked: false };
-  if (o.fx) im.fx = true;
-  if (o.fy) im.fy = true;
-  if (o.parent !== undefined) im.parent = o.parent;
+  const im = makeImage(rec, { x: c.x + r.x - pw / 2, y: c.y + r.y - ph / 2, w: pw, h: ph, rot: o.rot });
+  copyKeys(o, im, ['fx', 'fy', 'parent']);
   delete o.pic;
   doc.objects.splice(doc.objects.indexOf(o), 0, im);
   S.sel = new Set([im.id, o.id]);
@@ -1917,7 +1975,7 @@ async function restoreSession() {
 
 function commit() {
   normalizeGroups(doc);   // every change passes through here, so groups always stay tidy
-  const s = JSON.stringify(doc);
+  const s = docJSON(doc);   // without derived outlines; loadSnapshot rebuilds them
   if (hist.stack[hist.idx] !== s) {
     hist.stack.length = hist.idx + 1; hist.ids.length = hist.idx + 1;
     hist.stack.push(s); hist.ids.push(docImageIds(doc));
@@ -1930,6 +1988,7 @@ function commit() {
 function loadSnapshot(str) {
   doc = JSON.parse(str);
   if (!Array.isArray(doc.groups)) doc.groups = [];   // snapshots from before groups existed
+  rebuildOutlines(doc);
   S.sel = new Set(Array.from(S.sel).filter(id => byId(id)));
   refreshAll();
 }
@@ -1983,7 +2042,7 @@ function syncObjects() {
     }
     if (hasPic(o)) {
       // photo fill: color underneath, photo clipped to the shape, outline on top
-      const pg = picGeom(o), org = drawOrigin(o);
+      const pg = picGeom(o);
       applyAttrs(g._main, Object.assign({}, spec.a, { fill: st.fill, stroke: 'none' }));
       setA(g._main, 'display', picCovers(o) ? 'none' : null);
       let cp = clipEls.get(o.id);
@@ -1993,7 +2052,7 @@ function syncObjects() {
       applyAttrs(cp._shape, spec.a);
       if (!g._pic) { g._pic = svgEl('g'); g._img = svgEl('image', { preserveAspectRatio: 'none' }); g._pic.appendChild(g._img); g.appendChild(g._pic); }
       setA(g._pic, 'clip-path', 'url(#pc-' + o.id + ')');
-      setA(g._img, 'x', rnd(org.x + pg.x, 3)); setA(g._img, 'y', rnd(org.y + pg.y, 3));
+      setA(g._img, 'x', rnd(pg.x, 3)); setA(g._img, 'y', rnd(pg.y, 3));
       setA(g._img, 'width', rnd(pg.w, 3)); setA(g._img, 'height', rnd(pg.h, 3));
       setA(g._img, 'href', pg.rec.dataUrl); setA(g._img, 'transform', spec.a.transform);
       if (g._edge && g._edge.tagName !== spec.tag) { g._edge.remove(); g._edge = null; }
@@ -2012,7 +2071,7 @@ function syncObjects() {
     setA(g, 'style', blendOf(o) ? 'mix-blend-mode:' + blendOf(o) : null);
     // Anything drawn only as an outline (lines, pencil lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
-    const outlineOnly = o.kind === 'line' || (o.kind !== 'image' && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'));
+    const outlineOnly = hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none');
     if (outlineOnly) {
       if (g._hit && g._hit.tagName !== spec.tag) { g._hit.remove(); g._hit = null; }
       if (!g._hit) { g._hit = svgEl(spec.tag, { class: 'obj-hit' }); g.appendChild(g._hit); }
@@ -2077,15 +2136,15 @@ function drawOverlay() {
   if (!sel.length || (drag && drag.type === 'marquee')) return;
   const hs = 9 / z;
   if (sel.length === 1) {
-    const o = sel[0];
-    if (o.kind === 'line') {
-      ov.appendChild(svgEl('line', { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, class: 'ov-line ov-dash' }));
-      [['p1', o.x1, o.y1], ['p2', o.x2, o.y2]].forEach(h => ov.appendChild(svgEl('circle', { cx: h[1], cy: h[2], r: 6 / z, class: 'handle', 'data-h': h[0] })));
+    const o = sel[0], ends = lineEnds(o);
+    if (ends) {   // a straight line: a handle on each end instead of a box
+      ov.appendChild(svgEl('line', { x1: ends[0][0], y1: ends[0][1], x2: ends[1][0], y2: ends[1][1], class: 'ov-line ov-dash' }));
+      ends.forEach((q, i) => ov.appendChild(svgEl('circle', { cx: q[0], cy: q[1], r: 6 / z, class: 'handle', 'data-h': 'p' + (i + 1) })));
     } else {
       const c = centerOf(o);
       const g = svgEl('g', { transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null });
       g.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line' }));
-      const names = (o.kind === 'text' || o.kind === 'image') ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+      const names = keepsRatio(o) ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       names.forEach(n => {
         const hx = n.includes('e') ? 1 : n.includes('w') ? 0 : 0.5, hy = n.includes('s') ? 1 : n.includes('n') ? 0 : 0.5;
         g.appendChild(svgEl('rect', { x: o.x + hx * o.w - hs / 2, y: o.y + hy * o.h - hs / 2, width: hs, height: hs, rx: hs * 0.18, class: 'handle', 'data-h': n }));
@@ -2101,7 +2160,8 @@ function drawOverlay() {
     // together and the round handle turns it (see "moving several objects as one").
     const units = selectionUnits(doc, new Set(sel.map(o => o.id))), oneGroup = units.length === 1 && !!units[0].g;
     if (!oneGroup) sel.forEach(o => {
-      if (o.kind === 'line') { ov.appendChild(svgEl('line', { x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, class: 'ov-line' })); return; }
+      const ends = lineEnds(o);
+      if (ends) { ov.appendChild(svgEl('line', { x1: ends[0][0], y1: ends[0][1], x2: ends[1][0], y2: ends[1][1], class: 'ov-line' })); return; }
       const c = centerOf(o);
       ov.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line', transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null }));
     });
@@ -2284,7 +2344,7 @@ function beginMove(o, p, e) {
   else if (selectionUnits(doc, S.sel).length > 1) collapseTo = whole ? unit : [o.id];
   drag = {
     type: 'move', start: p, sx: e.clientX, sy: e.clientY, moved: false, shift: multi, collapseTo,
-    orig: selObjs().filter(x => !isLocked(x)).map(x => ({ id: x.id, x: x.x, y: x.y, x1: x.x1, y1: x.y1, x2: x.x2, y2: x.y2 }))
+    orig: selObjs().filter(x => !isLocked(x)).map(x => ({ id: x.id, x: x.x, y: x.y }))
   };
   refreshAll();
 }
@@ -2297,7 +2357,6 @@ function updateMove(p, e) {
   drag.orig.forEach(s => {
     const o = byId(s.id); if (!o) return;
     o.x = s.x + dx; o.y = s.y + dy;
-    if (o.kind === 'line') { o.x1 = s.x1 + dx; o.x2 = s.x2 + dx; o.y1 = s.y1 + dy; o.y2 = s.y2 + dy; }
   });
   render();
 }
@@ -2346,11 +2405,8 @@ function updateDraw(p, e) {
   if (d.tool === 'line') {
     if (e.shiftKey) cur = constrainAngle(d.start, cur);
     let o = d.id ? byId(d.id) : null;
-    if (!o) {
-      o = newShape('line', { x1: d.start.x, y1: d.start.y, x2: cur.x, y2: cur.y });
-      doc.objects.push(o); d.id = o.id; S.sel = new Set([o.id]);
-    }
-    o.x2 = cur.x; o.y2 = cur.y; refresh(o);
+    if (!o) { o = makeLine(d.start, cur); doc.objects.push(o); d.id = o.id; S.sel = new Set([o.id]); }
+    else setLineEnds(o, d.start, cur);
   } else {
     let x = Math.min(d.start.x, cur.x), y = Math.min(d.start.y, cur.y), w = Math.abs(cur.x - d.start.x), h = Math.abs(cur.y - d.start.y);
     if (e.shiftKey) {
@@ -2369,7 +2425,7 @@ function finishDraw(d, e) {
     // a plain click: drop a default-sized shape centered on the click
     const c = d.start, s = 120;
     let o;
-    if (d.tool === 'line') o = newShape('line', { x1: c.x - 80, y1: c.y, x2: c.x + 80, y2: c.y });
+    if (d.tool === 'line') o = makeLine({ x: c.x - 80, y: c.y }, { x: c.x + 80, y: c.y });
     else o = makeDrawn(d.tool, { x: c.x - s / 2, y: c.y - s / 2, w: s, h: s });
     if (!o) return;
     doc.objects.push(o); S.sel = new Set([o.id]);
@@ -2430,8 +2486,8 @@ function beginHandle(h, p, e) {
   if (h === 'rot') {
     const c = centerOf(o);
     drag = { type: 'rotate', id: o.id, c, a0: Math.atan2(p.y - c.y, p.x - c.x) / D2R, rot0: o.rot };
-  } else if (h === 'p1' || h === 'p2') {
-    drag = { type: 'lineend', id: o.id, end: h };
+  } else if ((h === 'p1' || h === 'p2') && lineEnds(o)) {
+    drag = { type: 'lineend', id: o.id, end: h === 'p1' ? 0 : 1 };
   } else {
     drag = { type: 'resize', id: o.id, h, o0: { x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot, size: o.size }, pic0: o.pic ? Object.assign({}, o.pic) : null };
   }
@@ -2475,12 +2531,12 @@ function updateRotate(p, e) {
   render();
 }
 function updateLineEnd(p, e) {
-  const o = byId(drag.id); if (!o) return;
-  const other = drag.end === 'p1' ? { x: o.x2, y: o.y2 } : { x: o.x1, y: o.y1 };
+  const o = byId(drag.id), ends = o && lineEnds(o); if (!ends) return;
+  const pt = v => ({ x: v[0], y: v[1] }), other = pt(ends[1 - drag.end]);
   let q = snapPt(p);
   if (e.shiftKey) q = constrainAngle(other, q);
-  if (drag.end === 'p1') { o.x1 = q.x; o.y1 = q.y; } else { o.x2 = q.x; o.y2 = q.y; }
-  refresh(o); render();
+  if (drag.end === 0) setLineEnds(o, q, other); else setLineEnds(o, other, q);
+  render();
 }
 function updateResize(p, e) {
   const o = byId(drag.id); if (!o) return;
@@ -2494,7 +2550,7 @@ function updateResize(p, e) {
   if (hx === 1) R = Math.max(ux, L + MIN); else if (hx === 0) L = Math.min(ux, R - MIN);
   if (hy === 1) B = Math.max(uy, T + MIN); else if (hy === 0) T = Math.min(uy, B - MIN);
   let w = R - L, h = B - T;
-  const uniform = e.shiftKey || o.kind === 'text' || o.kind === 'image';
+  const uniform = e.shiftKey || keepsRatio(o);
   if (uniform) {
     let s;
     if (hx !== 0.5 && hy !== 0.5) s = Math.max(w / o0.w, h / o0.h);
@@ -2618,7 +2674,7 @@ function penOverlay() {
 /* ---------- editing points ---------- */
 const peObj = () => { const o = pe && byId(pe.id); return o && o.kind === 'path' && !isLocked(o) && !isHidden(o) ? o : null; };
 function enterPointEdit(o) {
-  if (!o || o.kind === 'line' || o.kind === 'image' || isLocked(o)) return;
+  if (!o || !(o.kind === 'path' || kindInfo(o).plain) || isLocked(o)) return;
   if (pen) penFinish(false);
   if (S.tool !== 'select') setTool('select');
   S.sel = new Set([o.id]);
@@ -2948,7 +3004,7 @@ function photoTexture(rec) {
 }
 
 /* ---------- the session ---------- */
-const geomSnap = o => ({ kind: o.kind, x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot || 0, fx: !!o.fx, fy: !!o.fy, x1: o.x1, y1: o.y1, x2: o.x2, y2: o.y2, d: o.d, img: o.img, pic: o.pic ? o.pic.id + ',' + o.pic.dx + ',' + o.pic.dy + ',' + o.pic.s : '' });
+const geomSnap = o => ({ kind: o.kind, x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot || 0, fx: !!o.fx, fy: !!o.fy, d: o.d, img: o.img, pic: o.pic ? o.pic.id + ',' + o.pic.dx + ',' + o.pic.dy + ',' + o.pic.s : '' });
 const sameGeom = (a, b) => { for (const k in a) if (a[k] !== b[k]) return false; return true; };
 const PERSP_HINT = 'Drag a corner to tilt the selection. Hold Shift to move two corners together.';
 
@@ -2956,7 +3012,7 @@ function perspEligible() {
   const sel = selObjs();
   if (!sel.length) return { why: 'Select a shape, some text, a photo or a few objects, then drag a corner to tilt them.' };
   if (sel.some(isLocked)) return { why: 'Unlock the selected objects first.' };
-  if (sel.some(o => o.kind === 'image' && !images.has(o.img))) return { why: 'That photo is not available any more.' };
+  if (sel.some(o => hasPixels(o) && !images.has(o.img))) return { why: 'That photo is not available any more.' };
   if (sel.some(o => hasPic(o) && !picCovers(o) && o.fill && o.fill !== 'none')) return { why: 'The photo has to fill the shape before it can be tilted. Choose Fit photo first.' };
   if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
   return { objs: sel };
@@ -2964,7 +3020,7 @@ function perspEligible() {
 // (boxToWorld, box coordinates to page coordinates, is in 04c-path-edit.js)
 // Where a photo sits on the page, as a 3x3 matrix from photo pixels to page coordinates
 function perspPhotoInfo(o) {
-  const masked = o.kind !== 'image', rec = images.get(masked ? o.pic.id : o.img);
+  const masked = !hasPixels(o), rec = images.get(masked ? o.pic.id : o.img);
   const g = masked ? picGeom(o) : { x: 0, y: 0, w: o.w, h: o.h };
   const p0 = boxToWorld(o, 0, 0), p1 = boxToWorld(o, 1, 0), p2 = boxToWorld(o, 0, 1);
   const A = [p1[0] - p0[0], p1[1] - p0[1], p2[0] - p0[0], p2[1] - p0[1], p0[0], p0[1]];
@@ -2981,9 +3037,10 @@ function perspBuild(objs) {
   const grow = (x, y) => { x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); };
   const items = objs.map(o => {
     const it = { id: o.id, o0: JSON.parse(JSON.stringify(o)), last: geomSnap(o) };
-    if (o.kind === 'line') { it.line = [o.x1, o.y1, o.x2, o.y2]; grow(o.x1, o.y1); grow(o.x2, o.y2); return it; }
-    if (o.kind === 'image' || hasPic(o)) it.photo = perspPhotoInfo(o);
-    if (o.kind === 'image') {
+    const ends = lineEnds(o);   // a straight line stays straight when tilted, so just its ends move
+    if (ends) { it.line = ends[0].concat(ends[1]); ends.forEach(q => grow(q[0], q[1])); return it; }
+    if (hasPixels(o) || hasPic(o)) it.photo = perspPhotoInfo(o);
+    if (hasPixels(o)) {
       const P = it.photo.P;
       [[0, 0], [it.photo.W, 0], [it.photo.W, it.photo.H], [0, it.photo.H]].forEach(c => grow(P[0] * c[0] + P[1] * c[1] + P[2], P[3] * c[0] + P[4] * c[1] + P[5]));
       return it;
@@ -3091,17 +3148,16 @@ function perspWrite(results) {
   results.forEach(r => {
     const o = byId(r.it.id); if (!o || r.photoOnly) return;
     if (r.line) {
-      o.x1 = rnd(r.line[0], 3); o.y1 = rnd(r.line[1], 3); o.x2 = rnd(r.line[2], 3); o.y2 = rnd(r.line[3], 3);
-      refresh(o);
+      setLineEnds(o, { x: rnd(r.line[0], 3), y: rnd(r.line[1], 3) }, { x: rnd(r.line[2], 3), y: rnd(r.line[3], 3) });
     } else {
       if (!r.contours.length) return;
       const bb = perspBounds(r.contours), f = v => rnd(v, 2);
       const w = Math.max(rnd(bb.width, 3), 0.01), h = Math.max(rnd(bb.height, 3), 0.01);
       const d = r.contours.map(c => 'M' + f(c.cub[0][0][0] - bb.x) + ' ' + f(c.cub[0][0][1] - bb.y) +
         c.cub.map(q => 'C' + f(q[1][0] - bb.x) + ' ' + f(q[1][1] - bb.y) + ' ' + f(q[2][0] - bb.x) + ' ' + f(q[2][1] - bb.y) + ' ' + f(q[3][0] - bb.x) + ' ' + f(q[3][1] - bb.y)).join('') + (c.closed ? 'Z' : '')).join('');
-      ['r', 'sides', 'star', 'inner', 'text', 'font', 'size', 'align', 'lh', 'ls', 'fx', 'fy'].forEach(k => delete o[k]);
+      delete o.fx; delete o.fy;
       if (!r.it.photo) delete o.pic;
-      o.kind = 'path'; o.rot = 0; o.x = rnd(bb.x, 3); o.y = rnd(bb.y, 3); o.w = w; o.h = h; o.nat = { d, w, h }; o.d = d;
+      toPlainPath(o, d, w, h); o.rot = 0; o.x = rnd(bb.x, 3); o.y = rnd(bb.y, 3);
       if (!o.name) { o.name = r.it.o0.kind === 'text' ? labelOf(r.it.o0) : 'Shape'; r.it.auto = o.name; }
     }
   });
@@ -3139,7 +3195,7 @@ function perspPhotoPlan(P, it, preview) {
 }
 // Make the object show a new picture (of `pxW` pixels across) that covers plan.R
 function perspSetPhoto(o, plan, recId, pxW) {
-  if (o.kind === 'image') {
+  if (hasPixels(o)) {
     o.img = recId; o.x = rnd(plan.R.x, 3); o.y = rnd(plan.R.y, 3); o.w = rnd(plan.R.w, 3); o.h = rnd(plan.R.h, 3); o.rot = 0;
     delete o.fx; delete o.fy;
   } else {
@@ -3312,13 +3368,13 @@ function perspOverlay() {
   });
 }
 // Put the selection back the way it was when tilting began (text is editable text again)
-const PERSP_KEEP = ['fill', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend', 'hidden', 'locked'];
+const PERSP_KEEP = STYLE_KEYS.concat(['hidden', 'locked']);   // changes made while tilted are kept
 function perspReset() {
   const P = perspState().P; if (!P) return;
   P.items.forEach(it => {
     const i = doc.objects.findIndex(x => x.id === it.id); if (i < 0) return;
     const cur = doc.objects[i], back = JSON.parse(JSON.stringify(it.o0));
-    PERSP_KEEP.forEach(k => { if (k in cur) back[k] = cur[k]; });
+    copyKeys(cur, back, PERSP_KEEP);
     if (cur.name !== it.auto) back.name = cur.name;
     doc.objects[i] = back; it.last = geomSnap(back); images.delete('ptmp' + it.id);
   });
@@ -3398,10 +3454,6 @@ function mirrorSelected(axis) {
   const sel = selObjs(); if (!sel.length) return;
   const u = unionBox(sel), ux = u.x + u.w / 2, uy = u.y + u.h / 2;
   sel.forEach(o => {
-    if (o.kind === 'line') {
-      if (axis === 'h') { o.x1 = 2 * ux - o.x1; o.x2 = 2 * ux - o.x2; } else { o.y1 = 2 * uy - o.y1; o.y2 = 2 * uy - o.y2; }
-      refresh(o); return;
-    }
     const c = centerOf(o);
     if (axis === 'h') { o.x = 2 * ux - c.x - o.w / 2; o.fx = !o.fx; } else { o.y = 2 * uy - c.y - o.h / 2; o.fy = !o.fy; }
     o.rot = rnd(normDeg(-o.rot), 2);   // a mirror image turns the other way
@@ -3446,8 +3498,8 @@ function updateInspector() {
   show('#sec-text', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
   show('#sec-app', n > 0);
-  const nPhotoSel = sel.filter(x => x.kind === 'image').length;
-  show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(x => x.kind === 'image')));
+  const nPhotoSel = sel.filter(hasPixels).length;
+  show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(hasPixels)));
   show('#sec-combine', !(n === 1 && nPhotoSel === 1));
   show('#sec-arrange', n > 0);
   $('#empty-hint').hidden = n > 0;
@@ -3455,10 +3507,10 @@ function updateInspector() {
   const units = n ? selectionUnits(doc, S.sel) : [];
   $('#btn-group').disabled = units.length < 2;
   $('#btn-ungroup').disabled = !units.some(u => u.g);
-  $('#btn-flatten').disabled = !(o && o.kind !== 'path' && o.kind !== 'line' && o.kind !== 'image');
-  $('#btn-points').disabled = !(o && o.kind !== 'line' && o.kind !== 'image' && !isLocked(o));
+  $('#btn-flatten').disabled = !(o && kindInfo(o).plain);
+  $('#btn-points').disabled = !(o && (o.kind === 'path' || kindInfo(o).plain) && !isLocked(o));
   // photo mask controls
-  const nPhoto = sel.filter(x => x.kind === 'image').length, nShape = n - nPhoto;
+  const nPhoto = sel.filter(hasPixels).length, nShape = n - nPhoto;
   $('#btn-mask').disabled = !(nPhoto === 1 && nShape >= 1);
   const masked = o && hasPic(o) ? o : null;
   $('#mask-controls').hidden = !masked;
@@ -3474,13 +3526,13 @@ function updateInspector() {
   }
   $('#btn-panel').setAttribute('aria-pressed', $('#panel').classList.contains('open') ? 'true' : 'false');
   if (o) {
-    const line = o.kind === 'line';
-    $('#lb-x').textContent = line ? 'X1' : 'X'; $('#lb-y').textContent = line ? 'Y1' : 'Y';
-    $('#lb-w').textContent = line ? 'X2' : 'W'; $('#lb-h').textContent = line ? 'Y2' : 'H';
-    $('#wrap-rot').hidden = line;
+    const ends = lineEnds(o);   // a straight line shows its two ends instead of a box
+    $('#lb-x').textContent = ends ? 'X1' : 'X'; $('#lb-y').textContent = ends ? 'Y1' : 'Y';
+    $('#lb-w').textContent = ends ? 'X2' : 'W'; $('#lb-h').textContent = ends ? 'Y2' : 'H';
+    $('#wrap-rot').hidden = !!ends;
     $('#wrap-r').hidden = o.kind !== 'rect';
-    setNum(F.x, line ? o.x1 : o.x); setNum(F.y, line ? o.y1 : o.y);
-    setNum(F.w, line ? o.x2 : o.w); setNum(F.h, line ? o.y2 : o.h);
+    setNum(F.x, ends ? ends[0][0] : o.x); setNum(F.y, ends ? ends[0][1] : o.y);
+    setNum(F.w, ends ? ends[1][0] : o.w); setNum(F.h, ends ? ends[1][1] : o.h);
     setNum(F.rot, o.rot);
     if (o.kind === 'rect') setNum(F.r, o.r || 0);
     if (o.kind === 'text') {
@@ -3495,7 +3547,7 @@ function updateInspector() {
     }
   }
   if (n) {
-    const a = sel.find(x => x.kind !== 'image') || sel[0], onlyLines = sel.every(x => x.kind === 'line'), onlyPhotos = sel.every(x => x.kind === 'image');
+    const a = sel.find(hasPaint) || sel[0], onlyLines = sel.every(isStraightLine), onlyPhotos = sel.every(hasPixels);
     const noFill = onlyLines || onlyPhotos, g = hasGrad(a) ? a.grad : null;
     $('#row-filltype').hidden = noFill; $('#row-fill').hidden = noFill || !!g; $('#palette').hidden = noFill || !!g;
     $('#grad-controls').hidden = noFill || !g;
@@ -3535,12 +3587,13 @@ function cssRgba(hex, a) {
 function forSel(fn) { selObjs().forEach(fn); }
 function rememberStyle(o) {
   if (!o) return;
-  if (o.kind !== 'line' && o.kind !== 'text') { S.style.fill = o.fill; S.style.grad = hasGrad(o) ? cloneGrad(o.grad) : null; }
-  S.style.stroke = o.stroke === 'none' && o.kind === 'line' ? S.style.stroke : o.stroke;
+  const line = isStraightLine(o);
+  if (!line && o.kind !== 'text') { S.style.fill = o.fill; S.style.grad = hasGrad(o) ? cloneGrad(o.grad) : null; }
+  S.style.stroke = o.stroke === 'none' && line ? S.style.stroke : o.stroke;
   S.style.sw = o.sw || S.style.sw; S.style.join = o.join; S.style.dash = o.dash;
 }
 // Choosing a plain fill color (or None) turns a gradient fill back into a solid one
-function styleSet(k, v) { forSel(o => { if (o.kind === 'image' && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(o => o.kind !== 'image')); render(); }
+function styleSet(k, v) { forSel(o => { if (hasPixels(o) && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(hasPaint)); render(); }
 
 // Geometry fields
 function onNum(inp, fn, resizes) {
@@ -3553,18 +3606,26 @@ function onNum(inp, fn, resizes) {
     commit();
   });
 }
-onNum(F.x, (o, v) => { if (o.kind === 'line') { o.x1 = v; } else o.x = v; });
-onNum(F.y, (o, v) => { if (o.kind === 'line') { o.y1 = v; } else o.y = v; });
+// For a straight line the four fields are its ends: X1, Y1 (end 0) and X2, Y2 (end 1)
+function setLineField(o, end, axis, v) {
+  const e = lineEnds(o); if (!e) return false;
+  const a = { x: e[0][0], y: e[0][1] }, b = { x: e[1][0], y: e[1][1] };
+  (end ? b : a)[axis] = v;
+  setLineEnds(o, a, b);
+  return true;
+}
+onNum(F.x, (o, v) => { if (!setLineField(o, 0, 'x', v)) o.x = v; });
+onNum(F.y, (o, v) => { if (!setLineField(o, 0, 'y', v)) o.y = v; });
 onNum(F.w, (o, v) => {
-  if (o.kind === 'line') o.x2 = v;
+  if (setLineField(o, 1, 'x', v)) return;
   else if (o.kind === 'text') { o.size = Math.max(4, o.size * Math.max(v, 1) / o.w); }
-  else if (o.kind === 'image') { const k = Math.max(v, 1) / o.w; o.w *= k; o.h *= k; }
+  else if (keepsRatio(o)) { const k = Math.max(v, 1) / o.w; o.w *= k; o.h *= k; }
   else o.w = Math.max(v, 1);
 }, true);
 onNum(F.h, (o, v) => {
-  if (o.kind === 'line') o.y2 = v;
+  if (setLineField(o, 1, 'y', v)) return;
   else if (o.kind === 'text') { o.size = Math.max(4, o.size * Math.max(v, 1) / o.h); }
-  else if (o.kind === 'image') { const k = Math.max(v, 1) / o.h; o.w *= k; o.h *= k; }
+  else if (keepsRatio(o)) { const k = Math.max(v, 1) / o.h; o.w *= k; o.h *= k; }
   else o.h = Math.max(v, 1);
 }, true);
 onNum(F.rot, (o, v) => { o.rot = rnd(normDeg(v), 2); });
@@ -3624,7 +3685,7 @@ wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
 // Gradient fills. Gradient edits apply to every selected shape that has a gradient.
 const gradTargets = () => selObjs().filter(hasGrad);
 // The shape whose gradient the editor shows (the same one the rest of Appearance shows)
-const gradPrimary = () => { const a = selObjs().find(x => x.kind !== 'image'); return a && hasGrad(a) ? a : null; };
+const gradPrimary = () => { const a = selObjs().find(hasPaint); return a && hasGrad(a) ? a : null; };
 
 /* ---------- gradient color editor ----------
    A bar showing the gradient, with a marker under it for each color. Click the bar to add a color,
@@ -3744,7 +3805,7 @@ $('#gs-remove').addEventListener('click', removeSelectedStop);
 // Arrow keys on a slider move the slider, not the selected shape
 ['#gs-alpha', '#opacity'].forEach(id => $(id).addEventListener('keydown', e => { if (e.key.startsWith('Arrow')) e.stopPropagation(); }));
 function setFillType(ft) {
-  const list = selObjs().filter(o => o.kind !== 'line' && o.kind !== 'image');
+  const list = selObjs().filter(o => hasPaint(o) && !isStraightLine(o));
   if (!list.length) return;
   list.forEach(o => {
     if (ft === 'solid') { delete o.grad; return; }   // o.fill already holds the first gradient color
@@ -3776,7 +3837,7 @@ $('#stroke-join').addEventListener('change', e => { styleSet('join', e.target.va
 // Line ends: Automatic is stored as no setting at all, so older drawings look exactly as before
 $('#stroke-cap').addEventListener('change', e => {
   const v = e.target.value;
-  forSel(o => { if (o.kind === 'image') return; if (v) o.cap = v; else delete o.cap; });
+  forSel(o => { if (!hasPaint(o)) return; if (v) o.cap = v; else delete o.cap; });
   commit();
 });
 // Blend mode (photos too); Normal is stored as no setting
@@ -4070,7 +4131,7 @@ const MAX_DIM = 8192, MAX_PIXELS = 40e6;
 function exportBox() {
   const sel = selObjs();
   if (X.area === 'selection' && sel.length) {
-    const u = unionBox(sel), pad = Math.max(0, ...sel.map(o => o.kind !== 'image' && o.stroke && o.stroke !== 'none' ? o.sw : 0)) * 1.5 + 1;
+    const u = unionBox(sel), pad = Math.max(0, ...sel.map(o => hasPaint(o) && o.stroke && o.stroke !== 'none' ? o.sw : 0)) * 1.5 + 1;
     return { x: u.x - pad, y: u.y - pad, w: u.w + pad * 2, h: u.h + pad * 2, objs: sel };
   }
   return { x: 0, y: 0, w: doc.w, h: doc.h, objs: doc.objects };
@@ -4175,7 +4236,7 @@ $('#ex-go').addEventListener('click', async () => {
 /* =====================================================================
    Projects: save, open, new, example
    ===================================================================== */
-const KINDS = ['rect', 'ellipse', 'polygon', 'line', 'text', 'path', 'image'];
+const KINDS = ['rect', 'ellipse', 'polygon', 'line', 'text', 'path', 'image'];   // 'line' only in files from before v1.14
 function sanitizeDoc(d) {
   const out = blankDoc();
   const num = (v, def, a, b) => { v = +v; return Number.isFinite(v) ? clamp(v, a, b) : def; };
@@ -4200,28 +4261,34 @@ function sanitizeDoc(d) {
       join: ['miter', 'round', 'bevel'].indexOf(r.join) >= 0 ? r.join : 'miter', dash: ['solid', 'dashed', 'dotted'].indexOf(r.dash) >= 0 ? r.dash : 'solid',
       hidden: !!r.hidden, locked: !!r.locked
     };
-    if (o.kind !== 'line') { if (r.fx) o.fx = true; if (r.fy) o.fy = true; }
+    if (r.fx) o.fx = true;
+    if (r.fy) o.fy = true;
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
-    if (o.kind !== 'image' && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
-    if (o.kind === 'image') {
+    if (hasPaint(o) && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
+    if (hasPixels(o)) {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
-    } else if (o.kind !== 'line' && r.pic) {
+    } else if (r.kind !== 'line' && r.pic) {
       if (typeof r.pic.id === 'string' && images.has(r.pic.id)) o.pic = { id: r.pic.id, dx: num(r.pic.dx, 0, -1e5, 1e5), dy: num(r.pic.dy, 0, -1e5, 1e5), s: num(r.pic.s, 1, 0.001, 100) };
       else missingPhoto = true;
     }
-    if (o.kind !== 'line' && o.kind !== 'image' && r.grad) { const g = sanitizeGrad(r.grad); if (g) { o.grad = g; o.fill = g.stops[0].c; } }
+    if (r.kind !== 'line' && hasPaint(o) && r.grad) { const g = sanitizeGrad(r.grad); if (g) { o.grad = g; o.fill = g.stops[0].c; } }
     if (o.kind === 'rect') o.r = num(r.r, 0, 0, 1e5);
     if (o.kind === 'polygon') { o.sides = Math.round(num(r.sides, 5, 3, 24)); o.star = !!r.star; o.inner = num(r.inner, 0.45, 0.1, 0.95); }
-    if (o.kind === 'line') { o.x1 = num(r.x1, 0, -1e6, 1e6); o.y1 = num(r.y1, 0, -1e6, 1e6); o.x2 = num(r.x2, 0, -1e6, 1e6); o.y2 = num(r.y2, 0, -1e6, 1e6); }
+    if (r.kind === 'line') {   // lines became two-point plain shapes in v1.14
+      const P = k => num(r[k], 0, -1e6, 1e6);
+      Object.assign(o, lineGeometry({ x: P('x1'), y: P('y1') }, { x: P('x2'), y: P('y2') }), { kind: 'path', rot: 0 });
+      delete o.fx; delete o.fy;
+      if (!r.fill || r.fill === 'none') o.fill = 'none';
+    }
     if (o.kind === 'text') {
       o.text = typeof r.text === 'string' ? r.text.slice(0, 5000) : 'Text';
       if (fonts[r.font]) o.font = r.font; else { o.font = DEFAULT_FONT; missingFont = true; }
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
     }
-    if (o.kind === 'path') {
+    if (r.kind === 'path') {   // (a converted old line already has its outline)
       if (!r.nat || typeof r.nat.d !== 'string') return;
       o.nat = { d: r.nat.d, w: num(r.nat.w, o.w, 0.001, 1e5), h: num(r.nat.h, o.h, 0.001, 1e5) };
     }
@@ -4235,7 +4302,7 @@ async function saveProject() {
   closeMenus();
   const pics = {};
   docImageIds(doc).forEach(id => { const r = images.get(id); if (r) pics[id] = { name: r.name, w: r.w, h: r.h, mime: r.mime, data: r.dataUrl }; });
-  const blob = new Blob([JSON.stringify({ app: 'cutout', version: 2, appVersion: APP_VERSION, doc, images: pics })], { type: 'application/json' });
+  const blob = new Blob(['{"app":"cutout","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
   try { const r = await saveFile(safeName(X.name) + '.cutout.json', blob); if (r === 'saved') toast('Project saved.'); }
   catch (err) { toast(err.message || 'The project could not be saved.'); }
 }
@@ -4357,7 +4424,7 @@ async function importFiles(list) {
       images.set(rec.id, rec);
       if (DB.ok) { try { await idbPut('images', { id: rec.id, blob: rec.blob, w: rec.w, h: rec.h, mime: rec.mime, name: rec.name }); rec.stored = true; } catch (e) { /* retried when autosaving */ } }
       const k = Math.min(1, (doc.w * 0.8) / rec.w, (doc.h * 0.8) / rec.h), w = rnd(rec.w * k, 2), h = rnd(rec.h * k, 2);
-      const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: rnd((doc.w - w) / 2 + off, 2), y: rnd((doc.h - h) / 2 + off, 2), w, h, rot: 0, opacity: 1, hidden: false, locked: false };
+      const im = makeImage(rec, { x: rnd((doc.w - w) / 2 + off, 2), y: rnd((doc.h - h) / 2 + off, 2), w, h });
       doc.objects.push(im); S.sel = new Set([im.id]); added++; off += 24;
     }
   } finally { importing--; }
@@ -4763,7 +4830,7 @@ async function importSVGFile(file) {
     let w = b.w * k, h = b.h * k;
     if (info.fit) { const s = Math.min(w / rec.w, h / rec.h); w = rec.w * s; h = rec.h * s; }   // SVG pictures keep their shape unless told not to
     const cx = b.cx * k + dx, cy = b.cy * k + dy;
-    const im = { id: doc.nextId++, kind: 'image', img: rec.id, name: rec.name, x: cx - w / 2, y: cy - h / 2, w, h, rot: b.rot, opacity: 1, hidden: false, locked: false };
+    const im = makeImage(rec, { x: cx - w / 2, y: cy - h / 2, w, h, rot: b.rot });
     if (b.flip) im.fy = true;
     if (p.blend) im.blend = p.blend;
     const parent = p.parent !== null ? p.parent : top ? top.id : null;

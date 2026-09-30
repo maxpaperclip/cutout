@@ -69,10 +69,6 @@ function mirrorSelected(axis) {
   const sel = selObjs(); if (!sel.length) return;
   const u = unionBox(sel), ux = u.x + u.w / 2, uy = u.y + u.h / 2;
   sel.forEach(o => {
-    if (o.kind === 'line') {
-      if (axis === 'h') { o.x1 = 2 * ux - o.x1; o.x2 = 2 * ux - o.x2; } else { o.y1 = 2 * uy - o.y1; o.y2 = 2 * uy - o.y2; }
-      refresh(o); return;
-    }
     const c = centerOf(o);
     if (axis === 'h') { o.x = 2 * ux - c.x - o.w / 2; o.fx = !o.fx; } else { o.y = 2 * uy - c.y - o.h / 2; o.fy = !o.fy; }
     o.rot = rnd(normDeg(-o.rot), 2);   // a mirror image turns the other way
