@@ -561,3 +561,17 @@ function perspReset() {
   commit();
 }
 
+
+/* ---------- registering the Perspective tool ---------- */
+TOOLS.perspective = {
+  key: 'd', cursor: 'select',
+  down: (e, p) => perspDown(e, p),
+  keys(e) {
+    if (e.key !== 'Enter' || e.target.closest('button')) return false;
+    e.preventDefault(); setTool('select'); refreshAll(); return true;
+  },
+  overlay() { perspOverlay(); return true; },
+  enter() { $('#persp-bar').hidden = false; },
+  leave() { psn = null; $('#persp-bar').hidden = true; }
+};
+DRAGS.persp = { move: (p, e) => updatePersp(p, e), end: d => perspRelease(d) };

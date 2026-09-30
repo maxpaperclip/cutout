@@ -105,8 +105,7 @@ function penOverlay() {
 const peObj = () => { const o = pe && byId(pe.id); return o && o.kind === 'path' && !isLocked(o) && !isHidden(o) ? o : null; };
 function enterPointEdit(o) {
   if (!o || !(o.kind === 'path' || kindInfo(o).plain) || isLocked(o)) return;
-  if (pen) penFinish(false);
-  if (S.tool !== 'select') setTool('select');
+  if (S.tool !== 'select') setTool('select');   // finishes a line being drawn with the pen
   S.sel = new Set([o.id]);
   if (o.kind !== 'path') flattenSelected();   // shapes and text become plain shapes, so their points can be moved
   pe = { id: o.id, sel: new Set() };
@@ -232,12 +231,17 @@ function peNudge(dx, dy) {
 
 /* ---------- keys ---------- */
 // Returns true when the pen or point editing used the key
-function pathKeys(e) {
+// Keys while drawing with the pen (returns true when a key was used)
+function penKeys(e) {
   const k = e.key;
-  if (pen && pen.pts.length) {
-    if (k === 'Enter' || k === 'Escape') { e.preventDefault(); if (pen.pts.length >= 2) penFinish(false); else { pen = null; refreshAll(); } return true; }
-    if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); penUndoPoint(); return true; }
-  }
+  if (!pen || !pen.pts.length) return false;
+  if (k === 'Enter' || k === 'Escape') { e.preventDefault(); if (pen.pts.length >= 2) penFinish(false); else { pen = null; refreshAll(); } return true; }
+  if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); penUndoPoint(); return true; }
+  return false;
+}
+// Keys while editing points (the Select tool asks this while pe is set)
+function peKeys(e) {
+  const k = e.key;
   if (pe) {
     if (k === 'Enter' || k === 'Escape') { e.preventDefault(); exitPointEdit(); return true; }
     if (k === 'Backspace' || k === 'Delete') { e.preventDefault(); peRemove(); return true; }
@@ -250,3 +254,24 @@ function pathKeys(e) {
   }
   return false;
 }
+
+/* ---------- registering the Pen and its drags ---------- */
+TOOLS.pen = {
+  key: 'b', cursor: 'draw',
+  down: (e, p) => penDown(e, p),
+  hover: (e, p) => penHover(p, e),
+  dblclick() {
+    // a double-click finishes an open line; its second click placed a point on top of the last one
+    if (!pen || pen.pts.length < 2) return;
+    const a = pen.pts[pen.pts.length - 1], b = pen.pts[pen.pts.length - 2];
+    if (Math.hypot(a.x - b.x, a.y - b.y) * view.z < 4) pen.pts.pop();
+    penFinish(false);
+  },
+  keys: e => penKeys(e),
+  overlay() { penOverlay(); return true; },
+  leave() { if (pen) penFinish(false); }   // switching tools finishes the line being drawn
+};
+DRAGS.pen = { move: (p, e) => updatePenDrag(p, e), end: () => drawOverlay() };
+const peDragEnd = d => { if (d.moved) commit(); else drawOverlay(); };
+DRAGS.pepoint = { move: (p, e) => updatePePoint(p, e), end: peDragEnd };
+DRAGS.pehandle = { move: (p, e) => updatePeHandle(p, e), end: peDragEnd };

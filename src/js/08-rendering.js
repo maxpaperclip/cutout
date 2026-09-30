@@ -85,13 +85,14 @@ function zoomAt(f, sx, sy) {
 function zoomCenter(f) { userView = true; const s = stageSize(); zoomAt(f, s.w / 2, s.h / 2); }
 
 /* ---------- selection overlay ---------- */
+// What's drawn over the canvas: whatever the current drag or tool draws, or else the selection
+// handles (see TOOLS and DRAGS in 09-pointer-interaction.js)
 function drawOverlay() {
-  if (S.tool === 'perspective') { perspOverlay(); return; }
   ov.textContent = '';
   showPathBar();
-  if (drag && drag.type === 'pencil') { pencilPreview(); return; }
-  if (S.tool === 'pen') { penOverlay(); return; }
-  if (pe && peOverlay()) return;
+  const k = drag && DRAGS[drag.type], t = tool();
+  if (k && k.overlay && k.overlay()) return;
+  if (t.overlay && t.overlay()) return;
   const z = view.z;
   if (drag && drag.type === 'marquee' && drag.cur) {
     const r = drag.rect();

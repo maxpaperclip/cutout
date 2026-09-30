@@ -3,7 +3,7 @@
    ===================================================================== */
 function refreshAll() {
   drawArtboard(); syncObjects(); drawOverlay(); renderLayers(); updateInspector(); updatePageTab(); updateEmpty();
-  $('#btn-undo').disabled = hist.idx <= 0; $('#btn-redo').disabled = hist.idx >= hist.stack.length - 1;
+  $('#btn-undo').disabled = !canUndo(); $('#btn-redo').disabled = !canRedo();
 }
 function render() { syncObjects(); drawOverlay(); updateInspector(); }
 
@@ -41,7 +41,8 @@ window.addEventListener('keydown', e => {
   if (psnBusy) { e.preventDefault(); return; }
   if (!$('#export-overlay').hidden) { if (e.key === 'Escape') closeExport(); return; }
   if (isTyping(e)) return;
-  if (pathKeys(e)) return;   // the pen and point editing use Enter, Esc, Delete and the arrows
+  const t = tool();
+  if (t.keys && t.keys(e)) return;   // keys the current tool uses (the pen and point editing use Enter, Esc, Delete, the arrows)
   const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
   if (e.code === 'Space' && !e.target.closest('button')) { if (!spaceDown) { spaceDown = true; stage.classList.add('panning'); } e.preventDefault(); return; }
   if (mod) {
@@ -55,11 +56,9 @@ window.addEventListener('keydown', e => {
     return;
   }
   if (e.shiftKey && (k === 'h' || k === 'v')) { e.preventDefault(); mirrorSelected(k); return; }
-  const map = { v: 'select', h: 'hand', r: 'rect', e: 'ellipse', p: 'polygon', s: 'star', l: 'line', n: 'pencil', b: 'pen', t: 'text', d: 'perspective' };
-  if (map[k]) { setTool(map[k]); e.preventDefault(); return; }
-  if (k === 'enter' && S.tool === 'perspective' && !e.target.closest('button')) { e.preventDefault(); setTool('select'); refreshAll(); }
-  else if (k === 'enter' && S.tool === 'select' && one() && one().kind === 'path' && !e.target.closest('button')) { e.preventDefault(); enterPointEdit(one()); }
-  else if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
+  const byKey = Object.keys(TOOLS).find(n => TOOLS[n].key === k);   // each tool's own shortcut
+  if (byKey) { setTool(byKey); e.preventDefault(); return; }
+  if (k === 'delete' || k === 'backspace') { e.preventDefault(); deleteSelected(); }
   else if (k === 'escape') { S.sel = new Set(); setTool('select'); refreshAll(); }
   else if (k.startsWith('arrow')) {
     const st = e.shiftKey ? 10 : 1;
