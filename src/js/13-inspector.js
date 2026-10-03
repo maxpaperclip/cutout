@@ -18,6 +18,7 @@ function updateInspector() {
   show('#sec-app', n > 0);
   show('#sec-erase', !!o && canErase(o));
   $('#btn-erase-reset').disabled = !(o && o.erase);
+  if (o && canErase(o)) $('#erase-help').textContent = o.paint ? 'Rub out paint with the Eraser. Undo brings it back.' : 'Erasing only hides parts of the photo, so nothing is lost. Hold Alt while erasing to bring parts back.';
   const nPhotoSel = sel.filter(hasPixels).length;
   show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(hasPixels)));
   show('#sec-combine', !(n === 1 && nPhotoSel === 1));

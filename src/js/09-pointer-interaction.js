@@ -188,7 +188,7 @@ function updateMarquee(p) {
   drag.cur = p;
   const r = drag.rect(), sel = new Set(drag.base);
   doc.objects.forEach(o => {
-    if (isHidden(o) || isLocked(o)) return;
+    if (isHidden(o) || isLocked(o) || o.paint) return;   // a paint layer covers the page, so dragging a box would always pick it
     const b = aabb(o);
     // touching any part of a group picks up the whole group
     if (b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y) clickUnit(doc, o).forEach(x => { if (!isHidden(x) && !isLocked(x)) sel.add(x.id); });

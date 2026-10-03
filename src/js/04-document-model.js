@@ -29,10 +29,10 @@ function docImageIds(d) {
   d.objects.forEach(o => { if (hasPixels(o) && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); if (o.erase) s.add(o.erase); });
   return s;
 }
-// Only the photos: erase masks are bookkeeping, so they don't count toward LIMITS.photos
+// Only the photos: erase masks and paint layers are bookkeeping, so they don't count toward LIMITS.photos
 function docPhotoIds(d) {
   const s = docImageIds(d);
-  d.objects.forEach(o => { if (o.erase) s.delete(o.erase); });
+  d.objects.forEach(o => { if (o.erase) s.delete(o.erase); if (o.paint) s.delete(o.img); });
   return s;
 }
 // A shape (or text) whose fill is a photo
@@ -45,7 +45,8 @@ const one = () => { const s = selObjs(); return s.length === 1 ? s[0] : null; };
 
 /* What each kind of object is and can do. Code asks these questions (through the helpers below)
    instead of naming kinds, so a new kind (paint layers, say) is one entry here.
-     pixels:     drawn from a stored picture (see images); has no fill, outline or gradient
+     pixels:     drawn from a stored picture (see images); has no fill, outline or gradient.
+                 A photo, or a paint layer (o.paint: true), whose picture the Brush tool repaints (see 04d-erase.js)
      keepsRatio: resizing keeps its proportions (text grows by font size, pictures don't stretch)
      plain:      can become a plain shape (Convert to plain shape, Edit points) */
 const KIND_INFO = {
@@ -67,7 +68,7 @@ function labelOf(o) {
   if (isStraightLine(o)) return 'Line';
   return kindInfo(o).label || 'Object';
 }
-const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : hasPaint(o) && o.pic ? 'image' : isStraightLine(o) ? 'line' : o.kind;
+const iconFor = o => o.paint ? 'brush' : o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : hasPaint(o) && o.pic ? 'image' : isStraightLine(o) ? 'line' : o.kind;
 
 /* ---------- blend modes and line ends ----------
    o.blend: how an object mixes with what's under it (absent = normal).

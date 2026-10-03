@@ -119,6 +119,12 @@ const rawImageIds = d => {
   });
   return s;
 };
+// The pictures of paint layers (they don't count as photos either)
+const rawPaintIds = d => {
+  const s = new Set();
+  (Array.isArray(d && d.objects) ? d.objects : []).forEach(o => { if (o && o.paint && typeof o.img === 'string') s.add(o.img); });
+  return s;
+};
 // Just the erase masks among them (they don't count as photos)
 const rawEraseIds = d => {
   const s = new Set();

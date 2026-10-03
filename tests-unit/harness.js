@@ -69,7 +69,8 @@ const EXPORT_NAMES = [
   'KIND_INFO', 'kindInfo', 'hasPixels', 'hasPaint', 'keepsRatio',
   // 04d-erase.js
   'ERASE', 'eraseLive', 'eraseBusy', 'canErase', 'eraseView', 'eraseStrokeParts', 'eraseStrokeSVG',
-  'erasePathStart', 'erasePathMore', 'eraseSigma',
+  'erasePathStart', 'erasePathMore', 'eraseSigma', 'strokeBegin', 'strokeAdd', 'strokeEnd',
+  'paintView', 'paintSize', 'PAINT', 'isBlankPaint',
   // 17-projects.js
   'sanitizeDoc',
   // 05-svg-export.js

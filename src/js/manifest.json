@@ -14,6 +14,7 @@
   "js/09-pointer-interaction.js",
   "js/09b-pen.js",
   "js/09c-eraser.js",
+  "js/09d-brush.js",
   "js/10-perspective.js",
   "js/11-editing-commands.js",
   "js/12-ui-chrome.js",

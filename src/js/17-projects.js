@@ -35,6 +35,7 @@ function sanitizeDoc(d) {
     if (hasPixels(o)) {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
+      if (r.paint) o.paint = true;   // a layer painted with the Brush tool
     } else if (r.kind !== 'line' && r.pic) {
       if (typeof r.pic.id === 'string' && images.has(r.pic.id)) o.pic = { id: r.pic.id, dx: num(r.pic.dx, 0, -1e5, 1e5), dy: num(r.pic.dy, 0, -1e5, 1e5), s: num(r.pic.s, 1, 0.001, 100) };
       else missingPhoto = true;
@@ -98,12 +99,12 @@ async function openProject(file) {
     const raw = data && data.doc ? data.doc : data, pics = data && data.images && typeof data.images === 'object' ? data.images : {};
     const map = new Map();
     let dropped = 0;
-    const maskIds = rawEraseIds(raw);   // erase masks come along with their photos and don't count against the photo limit
+    const maskIds = rawEraseIds(raw), paintIds = rawPaintIds(raw);   // erase masks and paint layers don't count against the photo limit
     let nPhotos = 0;
     for (const id of rawImageIds(raw)) {
-      const isMask = maskIds.has(id);
-      const rec = isMask || nPhotos < LIMITS.photos ? await adoptProjectPhoto(pics[id], isMask) : null;
-      if (rec) { map.set(id, rec); if (!isMask) nPhotos++; } else dropped++;
+      const isMask = maskIds.has(id), free = isMask || paintIds.has(id);
+      const rec = free || nPhotos < LIMITS.photos ? await adoptProjectPhoto(pics[id], isMask) : null;
+      if (rec) { map.set(id, rec); if (!free) nPhotos++; } else dropped++;
     }
     // point the drawing at the freshly registered photo ids
     (Array.isArray(raw.objects) ? raw.objects : []).forEach(o => {

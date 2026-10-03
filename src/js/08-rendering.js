@@ -36,7 +36,7 @@ function syncObjects() {
     let dg = defEls.get(o.id);
     if (v.defs.length) { if (!dg) { dg = svgEl('g'); picDefs.appendChild(dg); defEls.set(o.id, dg); } patchKids(dg, v.defs); }
     else if (dg) { dg.remove(); defEls.delete(o.id); }
-    patchAttrs(g, Object.assign({}, v.node.a, { display: isHidden(o) ? 'none' : null }));   // hidden, or inside a hidden group
+    patchAttrs(g, Object.assign({}, v.node.a, { display: isHidden(o) ? 'none' : null, 'pointer-events': o.paint ? 'none' : null }));   // a paint layer covers the page, so clicks go through it (pick it in Layers)   // hidden, or inside a hidden group
     // Anything drawn only as an outline (lines, drawn lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
     const kids = v.node.kids.slice();

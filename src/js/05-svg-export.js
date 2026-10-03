@@ -127,6 +127,8 @@ function objView(o, ids) {
         { tag: 'image', a: { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform } }] },
       { tag: spec.tag, a: Object.assign({}, spec.a, { fill: 'none' }, sa, { display: sa.stroke === 'none' ? 'none' : null }) });
   } else node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st) });
+  const pv = hasPixels(o) ? paintView(o, ids.mask || 'em' + o.id) : null;   // brush strokes not yet saved into a paint layer
+  if (pv) { defs.push(...pv.defs); node.kids.push(...pv.kids); }
   return { node, defs, spec };
 }
 // A node as SVG text. Hidden nodes are left out, and a group with no settings of its own is
