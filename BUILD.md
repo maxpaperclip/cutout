@@ -34,6 +34,7 @@ src/
     09c-eraser.js       Eraser tool: pointer handling, the brush bar, and baking strokes into a mask or layer picture
     09d-brush.js        Brush tool and paint layers (shares its strokes, bar and baking with the Eraser)
     09e-eyedropper.js   Eyedropper: a temporary tool started from a color field, reads the whole drawing as it looks on screen
+    09f-text-edit.js    Typing text in place: a see-through text box laid over the text object being edited
     10-perspective.js
     11-editing-commands.js
     12-ui-chrome.js
@@ -223,3 +224,20 @@ you were using, and goes back to it after a pick, Esc or Cancel.
 - A pick fills the field the dropper was started from by setting its value and sending the same `input` and
   `change` events a person's own choice sends, so each field's existing code applies it and records one undo step.
 - A spot with nothing there (outside the page, or an empty page with no color) picks nothing and keeps the tool.
+
+## How in-place text editing works
+
+Text objects are drawn as outlines (`buildText`), so there is no text on the canvas to type into. While one is
+edited (`startTextEdit` in `09f-text-edit.js`: double-click, Enter on a selected text, or placing new text with
+the Text tool), `#text-edit`, a transparent `<textarea>`, is laid over it by `tePlace` using the object's box,
+the canvas zoom and the object's angle, with the same font (the embedded font data is loaded as a `FontFace`),
+size, line height, letter spacing and alignment. The browser draws the caret and selection and handles the
+keyboard, input methods and mobile keyboards. Each `input` event sets `o.text`, calls `refresh(o)` and redraws,
+so the outlines underneath update as you type.
+
+- Editing ends on Esc, Ctrl+Enter, or the box losing focus (any click elsewhere); that is one undo step. A new
+  text object is only committed to the history at that point, so Undo removes it whole; text left empty is deleted.
+- The browser lays text out slightly differently from opentype.js, so the caret can sit a little off the outlines
+  (up to about 1% of the line's length in the bundled fonts; most are under 0.5%).
+- Mirrored text (`fx`/`fy`), locked and hidden text fall back to the Design tab's text box.
+- The Design tab's text box and this one never edit at once: focusing the other one ends the edit.

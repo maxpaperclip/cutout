@@ -107,7 +107,7 @@ TOOLS.select = {
     if (!o || isLocked(o) || isHidden(o)) return;
     // Double-click picks just this object, even inside a group; for text it also opens the editor,
     // and for a plain shape it shows its points for editing
-    if (o.kind === 'text') { S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText(); }
+    if (o.kind === 'text') startTextEdit(o, false);   // typed in place (see 09f-text-edit.js)
     else if (o.kind === 'path') { revealInLayers(o); enterPointEdit(o); }
     else if (o.parent !== undefined) { S.sel = new Set([o.id]); revealInLayers(o); refreshAll(); }
   },
@@ -115,9 +115,11 @@ TOOLS.select = {
     if (pe) return peKeys(e);
     // Enter on a plain shape shows its points
     if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.target.closest('button') && one() && one().kind === 'path') { e.preventDefault(); enterPointEdit(one()); return true; }
+    // Enter on a text shows its caret, to type in place
+    if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey && !e.target.closest('button') && one() && one().kind === 'text') { e.preventDefault(); startTextEdit(one(), false); return true; }
     return false;
   },
-  overlay: () => !!(pe && peOverlay()),
+  overlay: () => !!((pe && peOverlay()) || (te && teOverlay())),
   leave() { pe = null; }
 };
 
@@ -288,7 +290,7 @@ function createText(p) {
   const sp = snapPt(p);
   const o = newShape('text', { x: sp.x, y: sp.y });
   doc.objects.push(o); S.sel = new Set([o.id]);
-  setTool('select'); commit(); openPanel(); focusText();
+  setTool('select'); startTextEdit(o, true);   // joins the history when the typing ends
 }
 function focusText() {
   switchTab('design');
