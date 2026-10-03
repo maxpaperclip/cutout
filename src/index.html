@@ -57,6 +57,7 @@
     <button class="tool" data-tool="line" title="Line (L)" aria-label="Line tool"><span class="ico" data-icon="line"></span></button>
     <button class="tool" data-tool="pen" title="Pen (B). Click for corners, drag for curves; click the first point to close." aria-label="Pen tool"><span class="ico" data-icon="pen"></span></button>
     <button class="tool" data-tool="pencil" title="Pencil (N). Draw freely; end where you started to make a filled shape." aria-label="Pencil tool"><span class="ico" data-icon="pencil"></span></button>
+    <button class="tool" data-tool="brush" title="Brush (K). Paint with a soft or hard brush. A paint layer is made for you." aria-label="Brush tool"><span class="ico" data-icon="brush"></span></button>
     <button class="tool" data-tool="eraser" title="Eraser (X). Select a photo, then drag to hide parts of it. Hold Alt to bring them back." aria-label="Eraser tool"><span class="ico" data-icon="eraser"></span></button>
     <div class="tool-sep"></div>
     <button class="tool" data-tool="text" title="Text (T)" aria-label="Text tool"><span class="ico" data-icon="text"></span></button>
@@ -100,9 +101,11 @@
     </div>
     <div id="erase-bar" role="group" aria-label="Eraser" hidden>
       <span id="erase-hint"></span>
-      <label class="er-f">Size <input type="range" id="er-size" min="2" max="200" aria-label="Eraser size"><output id="er-size-out"></output></label>
-      <label class="er-f">Soft <input type="range" id="er-soft" min="0" max="100" aria-label="Eraser softness"></label>
-      <button class="chip" id="er-restore" aria-pressed="false" title="Paint the photo back in instead of erasing it (or hold Alt)">Restore</button>
+      <label class="er-f">Size <input type="range" id="er-size" min="2" max="200" aria-label="Size"><output id="er-size-out"></output></label>
+      <label class="er-f">Soft <input type="range" id="er-soft" min="0" max="100" aria-label="Softness"></label>
+      <label class="er-f br-only" hidden>Opacity <input type="range" id="br-alpha" min="5" max="100" aria-label="Brush opacity"></label>
+      <input type="color" class="br-only" id="br-color" aria-label="Brush color" hidden>
+      <button class="chip er-only" id="er-restore" aria-pressed="false" title="Paint the photo back in instead of erasing it (or hold Alt)">Restore</button>
       <button class="btn primary" id="erase-done">Done</button>
     </div>
     <div id="persp-bar" role="group" aria-label="Perspective" hidden>
@@ -170,7 +173,7 @@
           <button class="btn line" id="btn-erase-tool" style="flex:1" title="Drag over the photo to hide parts of it">Erase parts</button>
           <button class="btn line" id="btn-erase-reset" style="flex:1" disabled title="Bring back everything that was erased">Restore all</button>
         </div>
-        <p class="help">Erasing only hides parts of the photo, so nothing is lost. Hold Alt while erasing to bring parts back.</p>
+        <p class="help" id="erase-help">Erasing only hides parts of the photo, so nothing is lost. Hold Alt while erasing to bring parts back.</p>
       </section>
 
       <section class="sec" id="sec-mask" hidden>

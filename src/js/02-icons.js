@@ -13,6 +13,7 @@ const ICONS = {
   chev: '<path d="M9 6l6 6-6 6"/>',
   pen: '<path d="M12 3l6 7-6 11-6-11z"/><circle cx="12" cy="12" r="1.6"/>',
   pencil: '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/>',
+  brush: '<path d="M19 4.5a1.6 1.6 0 0 1 0 2.3l-7 7-2.5-2.5 7-7a1.6 1.6 0 0 1 2.5.2z"/><path d="M9.4 12.4c-2.3-.3-4 1.3-4 3.2 0 1.3-.7 2.2-1.9 2.7 3.4 1.5 8 .8 8.2-3.1"/>',
   eraser: '<path d="M4.5 14.5l9-9a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L12 20H8z"/><path d="M9.5 10l6.2 6.2"/><path d="M12 20h8"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
   perspective: '<path d="M8.5 5h7l4.5 14H4z"/><path d="M12 5v14" stroke-dasharray="2 2.4" opacity=".55"/>',

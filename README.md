@@ -1,7 +1,7 @@
 # Cutout
 
 - Cutout is an in-browser vector and bitmap graphics editor for classroom use.
-- Current functionality includes drawing shapes, drawing with the pen and pencil, editing the points and curves of any shape, editing text, solid fills and linear or radial gradients with up to eight colors (including see-through ones), blend modes, combining shapes (unite, subtract, intersect, exclude), grouping (shown as folders in the Layers tab), mirror, import photos and use shapes or text as photo masks, erase parts of a photo with a soft or hard brush (and bring them back again, since nothing is deleted), import SVG drawings as editable shapes, then export PNG, JPG, WebP or SVG.
+- Current functionality includes drawing shapes, drawing with the pen and pencil, editing the points and curves of any shape, editing text, solid fills and linear or radial gradients with up to eight colors (including see-through ones), blend modes, combining shapes (unite, subtract, intersect, exclude), grouping (shown as folders in the Layers tab), mirror, import photos and use shapes or text as photo masks, paint with a soft or hard brush on paint layers, erase parts of a photo (and bring them back again, since nothing is deleted) or rub out paint, import SVG drawings as editable shapes, then export PNG, JPG, WebP or SVG.
 - Privacy is a design goal (COPPA/FERPA-conscious): no accounts, no servers, no analytics, no uploads. Drawings and photos live only in the student's browser (IndexedDB).
 
 ## Using Cutout

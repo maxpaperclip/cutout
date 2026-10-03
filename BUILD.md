@@ -30,7 +30,8 @@ src/
     08-rendering.js
     09-pointer-interaction.js
     09b-pen.js          Pen tool and point editing (pointer and keyboard handling)
-    09c-eraser.js       Eraser tool: pointer handling, the brush bar, and baking strokes into a mask picture
+    09c-eraser.js       Eraser tool: pointer handling, the brush bar, and baking strokes into a mask or layer picture
+    09d-brush.js        Brush tool and paint layers (shares its strokes, bar and baking with the Eraser)
     10-perspective.js
     11-editing-commands.js
     12-ui-chrome.js
@@ -179,3 +180,23 @@ and PNG/JPG/WebP export all share one description (`04d-erase.js`).
   `LIMITS.photos` (`docPhotoIds`).
 - Not supported yet, with a message instead: tilting an erased photo (Perspective) and using one as a photo
   mask. Both would need to bake the erasing into the photo's pixels first.
+
+## How painting works
+
+The Brush paints on a **paint layer**: an object like a photo (`kind: 'image'`) with `o.paint: true`, as big as the
+page, whose picture each stroke repaints. It reuses everything the Eraser does:
+
+- A stroke is a vector path in `eraseLive` while it is drawn (a colored path over the layer's picture, see
+  `paintView` in `04d-erase.js`), then `09c-eraser.js` renders the same SVG on top of the layer's old picture
+  into a canvas, encodes a new PNG, points `o.img` at it and records one undo step. Old pictures stay until the
+  history drops them. A new layer is made at pointer-down but joins the history together with its first stroke, so
+  Undo takes both away. Until then it shows a clear 1 x 1 stand-in picture.
+- Strokes are smooth (`strokeAdd` curves through the midpoints between pointer positions) and a whole stroke has
+  one opacity, so it doesn't build up where it crosses itself.
+- The picture has `PAINT.density` (2) pixels per page unit, at most `LIMITS.edge` on the long side.
+- The Eraser on a paint layer removes paint from the picture (`destination-out`) instead of using an erase mask,
+  so painting over an erased spot works. Restore only exists for masks, so it's refused on paint layers.
+- Paint layers cover the page, so clicks go through them (`pointer-events: none`) and a marquee skips them; choose
+  one in the Layers tab, or just keep painting (the brush reuses the selected paint layer, or the one on top when
+  nothing is selected).
+- Their pictures are stored and saved like photos but don't count toward `LIMITS.photos` (`docPhotoIds`).

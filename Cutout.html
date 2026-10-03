@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.15.0</title>
+<title>Cutout v1.16.0</title>
 <style>
 
 :root{
@@ -359,6 +359,7 @@ input:disabled,select:disabled{opacity:.45}
     <button class="tool" data-tool="line" title="Line (L)" aria-label="Line tool"><span class="ico" data-icon="line"></span></button>
     <button class="tool" data-tool="pen" title="Pen (B). Click for corners, drag for curves; click the first point to close." aria-label="Pen tool"><span class="ico" data-icon="pen"></span></button>
     <button class="tool" data-tool="pencil" title="Pencil (N). Draw freely; end where you started to make a filled shape." aria-label="Pencil tool"><span class="ico" data-icon="pencil"></span></button>
+    <button class="tool" data-tool="brush" title="Brush (K). Paint with a soft or hard brush. A paint layer is made for you." aria-label="Brush tool"><span class="ico" data-icon="brush"></span></button>
     <button class="tool" data-tool="eraser" title="Eraser (X). Select a photo, then drag to hide parts of it. Hold Alt to bring them back." aria-label="Eraser tool"><span class="ico" data-icon="eraser"></span></button>
     <div class="tool-sep"></div>
     <button class="tool" data-tool="text" title="Text (T)" aria-label="Text tool"><span class="ico" data-icon="text"></span></button>
@@ -402,9 +403,11 @@ input:disabled,select:disabled{opacity:.45}
     </div>
     <div id="erase-bar" role="group" aria-label="Eraser" hidden>
       <span id="erase-hint"></span>
-      <label class="er-f">Size <input type="range" id="er-size" min="2" max="200" aria-label="Eraser size"><output id="er-size-out"></output></label>
-      <label class="er-f">Soft <input type="range" id="er-soft" min="0" max="100" aria-label="Eraser softness"></label>
-      <button class="chip" id="er-restore" aria-pressed="false" title="Paint the photo back in instead of erasing it (or hold Alt)">Restore</button>
+      <label class="er-f">Size <input type="range" id="er-size" min="2" max="200" aria-label="Size"><output id="er-size-out"></output></label>
+      <label class="er-f">Soft <input type="range" id="er-soft" min="0" max="100" aria-label="Softness"></label>
+      <label class="er-f br-only" hidden>Opacity <input type="range" id="br-alpha" min="5" max="100" aria-label="Brush opacity"></label>
+      <input type="color" class="br-only" id="br-color" aria-label="Brush color" hidden>
+      <button class="chip er-only" id="er-restore" aria-pressed="false" title="Paint the photo back in instead of erasing it (or hold Alt)">Restore</button>
       <button class="btn primary" id="erase-done">Done</button>
     </div>
     <div id="persp-bar" role="group" aria-label="Perspective" hidden>
@@ -472,7 +475,7 @@ input:disabled,select:disabled{opacity:.45}
           <button class="btn line" id="btn-erase-tool" style="flex:1" title="Drag over the photo to hide parts of it">Erase parts</button>
           <button class="btn line" id="btn-erase-reset" style="flex:1" disabled title="Bring back everything that was erased">Restore all</button>
         </div>
-        <p class="help">Erasing only hides parts of the photo, so nothing is lost. Hold Alt while erasing to bring parts back.</p>
+        <p class="help" id="erase-help">Erasing only hides parts of the photo, so nothing is lost. Hold Alt while erasing to bring parts back.</p>
       </section>
 
       <section class="sec" id="sec-mask" hidden>
@@ -729,7 +732,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.15.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.16.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -774,6 +777,7 @@ const ICONS = {
   chev: '<path d="M9 6l6 6-6 6"/>',
   pen: '<path d="M12 3l6 7-6 11-6-11z"/><circle cx="12" cy="12" r="1.6"/>',
   pencil: '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/>',
+  brush: '<path d="M19 4.5a1.6 1.6 0 0 1 0 2.3l-7 7-2.5-2.5 7-7a1.6 1.6 0 0 1 2.5.2z"/><path d="M9.4 12.4c-2.3-.3-4 1.3-4 3.2 0 1.3-.7 2.2-1.9 2.7 3.4 1.5 8 .8 8.2-3.1"/>',
   eraser: '<path d="M4.5 14.5l9-9a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L12 20H8z"/><path d="M9.5 10l6.2 6.2"/><path d="M12 20h8"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
   perspective: '<path d="M8.5 5h7l4.5 14H4z"/><path d="M12 5v14" stroke-dasharray="2 2.4" opacity=".55"/>',
@@ -873,10 +877,10 @@ function docImageIds(d) {
   d.objects.forEach(o => { if (hasPixels(o) && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); if (o.erase) s.add(o.erase); });
   return s;
 }
-// Only the photos: erase masks are bookkeeping, so they don't count toward LIMITS.photos
+// Only the photos: erase masks and paint layers are bookkeeping, so they don't count toward LIMITS.photos
 function docPhotoIds(d) {
   const s = docImageIds(d);
-  d.objects.forEach(o => { if (o.erase) s.delete(o.erase); });
+  d.objects.forEach(o => { if (o.erase) s.delete(o.erase); if (o.paint) s.delete(o.img); });
   return s;
 }
 // A shape (or text) whose fill is a photo
@@ -889,7 +893,8 @@ const one = () => { const s = selObjs(); return s.length === 1 ? s[0] : null; };
 
 /* What each kind of object is and can do. Code asks these questions (through the helpers below)
    instead of naming kinds, so a new kind (paint layers, say) is one entry here.
-     pixels:     drawn from a stored picture (see images); has no fill, outline or gradient
+     pixels:     drawn from a stored picture (see images); has no fill, outline or gradient.
+                 A photo, or a paint layer (o.paint: true), whose picture the Brush tool repaints (see 04d-erase.js)
      keepsRatio: resizing keeps its proportions (text grows by font size, pictures don't stretch)
      plain:      can become a plain shape (Convert to plain shape, Edit points) */
 const KIND_INFO = {
@@ -911,7 +916,7 @@ function labelOf(o) {
   if (isStraightLine(o)) return 'Line';
   return kindInfo(o).label || 'Object';
 }
-const iconFor = o => o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : hasPaint(o) && o.pic ? 'image' : isStraightLine(o) ? 'line' : o.kind;
+const iconFor = o => o.paint ? 'brush' : o.kind === 'polygon' ? (o.star ? 'star' : 'polygon') : hasPaint(o) && o.pic ? 'image' : isStraightLine(o) ? 'line' : o.kind;
 
 /* ---------- blend modes and line ends ----------
    o.blend: how an object mixes with what's under it (absent = normal).
@@ -1628,12 +1633,18 @@ function setLineEnds(o, a, b) {
    While a stroke is being drawn (or waiting to be saved) it lives in eraseLive and is drawn inside the
    mask as a plain vector path, so what you see while drawing is exactly what gets baked.
    The pointer handling and the baking are in 09c-eraser.js; this file is only the description.
+
+   The Brush tool paints with the same machinery. A paint layer is a photo-like object (kind 'image',
+   o.paint: true) covering the page, whose picture each stroke repaints: the stroke is drawn as a
+   colored vector path over the layer while it is pending, then baked into a new picture. The Eraser
+   on a paint layer removes paint from that picture instead of using a mask.
    ===================================================================== */
 const ERASE = {
   feather: 0.2,     // blur (as a fraction of the brush size) at full softness
   minSize: 2, maxSize: 200
 };
-// object id -> strokes drawn but not yet saved into its mask: { d (box coordinates), size, soft, restore, open }
+// object id -> strokes drawn but not yet saved: { d (box coordinates), size, soft, open } plus
+//   eraser strokes: restore (true brings parts back)      paint strokes: paint: true, color, alpha, smooth
 const eraseLive = new Map();
 const eraseBusy = () => eraseLive.size > 0;
 // What can be erased (today: photos; the mask itself works on any object)
@@ -1642,24 +1653,45 @@ const canErase = o => !!o && hasPixels(o);
 // A stroke's outline in the object's own box coordinates. A dot is a zero-length line, drawn with round ends.
 const erasePathStart = (x, y) => { const p = rnd(x, 2) + ' ' + rnd(y, 2); return 'M' + p + 'L' + p; };
 const erasePathMore = (x, y) => 'L' + rnd(x, 2) + ' ' + rnd(y, 2);
+// A stroke's outline as it grows. A smooth stroke curves through the midpoints between the pointer's
+// positions (so it has no corners at the pointer's own sampling rate) and runs out to the last position
+// when it ends; a plain one just joins the positions with lines.
+function strokeBegin(s, x, y) { s.d = erasePathStart(x, y); s.last = [x, y]; }
+function strokeAdd(s, x, y) {
+  const l = s.last;
+  s.d += s.smooth ? 'Q' + rnd(l[0], 2) + ' ' + rnd(l[1], 2) + ' ' + rnd((l[0] + x) / 2, 2) + ' ' + rnd((l[1] + y) / 2, 2) : erasePathMore(x, y);
+  s.last = [x, y];
+}
+function strokeEnd(s) { if (s.smooth) s.d += erasePathMore(s.last[0], s.last[1]); }
 const eraseSigma = s => rnd(clamp(s.soft || 0, 0, 1) * s.size * ERASE.feather, 3);
 // Room around the object's box in which the mask is defined (an outline can reach past the box)
 const erasePad = o => Math.max(o.sw || 0, 0) * 2 + 24;
+// A paint layer's picture has this many pixels per page unit (less when the page is big, so a layer
+// never needs more than LIMITS.edge pixels on its long side)
+const PAINT = { density: 2 };
+const paintSize = o => {
+  const k = Math.min(PAINT.density, LIMITS.edge / Math.max(o.w, o.h, 1));
+  return [Math.max(1, Math.round(o.w * k)), Math.max(1, Math.round(o.h * k))];
+};
+// A layer picture that has never been painted on is a 1 x 1 clear stand-in (see 09d-brush.js)
+const isBlankPaint = rec => !rec || rec.blank || (rec.w === 1 && rec.h === 1);
 
-// One stroke as a path (and the blur it needs, if soft). Black hides, white brings back.
+// One stroke as a path (and the blur it needs, if soft). In a mask, black hides and white brings back;
+// a paint stroke is in its own color and opacity.
 // fid: the id for its blur definition.
 function eraseStrokeParts(s, fid, o) {
   const sigma = eraseSigma(s), m = rnd(s.size + 3 * sigma, 2), defs = [];
   if (sigma >= 0.05) defs.push({ tag: 'filter', a: { id: fid, filterUnits: 'userSpaceOnUse', x: -m, y: -m, width: rnd(o.w + 2 * m, 2), height: rnd(o.h + 2 * m, 2), 'color-interpolation-filters': 'sRGB' },
     kids: [{ tag: 'feGaussianBlur', a: { stdDeviation: sigma } }] });
-  return { defs, a: { d: s.d, fill: 'none', stroke: s.restore ? '#fff' : '#000', 'stroke-width': rnd(s.size, 2), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', filter: defs.length ? 'url(#' + fid + ')' : null } };
+  const color = s.paint ? s.color : s.restore ? '#fff' : '#000';
+  return { defs, a: { d: s.d, fill: 'none', stroke: color, 'stroke-width': rnd(s.size, 2), 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: s.paint && s.alpha < 1 ? rnd(s.alpha, 3) : null, filter: defs.length ? 'url(#' + fid + ')' : null } };
 }
 
 // The mask for an object, as definitions for objView: null when nothing is erased.
 // The mask covers the page area around the object: white behind everything (so outlines past the box
 // stay visible), then the saved mask picture in the object's box, then any strokes not yet saved.
 function eraseView(o, id) {
-  const rec = o.erase ? images.get(o.erase) : null, live = eraseLive.get(o.id) || [];
+  const rec = o.erase ? images.get(o.erase) : null, live = (eraseLive.get(o.id) || []).filter(s => !s.paint);
   if (!rec && !live.length) return null;
   const b = aabb(o), pad = erasePad(o), xf = objXf(o);
   const region = { x: rnd(b.x - pad, 2), y: rnd(b.y - pad, 2), width: rnd(b.w + pad * 2, 2), height: rnd(b.h + pad * 2, 2) };
@@ -1672,6 +1704,20 @@ function eraseView(o, id) {
   });
   defs.push({ tag: 'mask', a: Object.assign({ id, maskUnits: 'userSpaceOnUse' }, region), kids });
   return { id, defs };
+}
+
+// Paint strokes not yet saved into a paint layer's picture, drawn over it as colored paths (for objView).
+// A layer's own opacity is applied to them too, so the stroke looks the way it will once it is saved.
+function paintView(o, id) {
+  const live = (eraseLive.get(o.id) || []).filter(s => s.paint);
+  if (!live.length) return null;
+  const xf = objXf(o), lo = o.opacity < 1 ? o.opacity : 1, defs = [], kids = [];
+  live.forEach((s, i) => {
+    const p = eraseStrokeParts(s, id + '-p' + i, o), a = rnd(s.alpha * lo, 3);
+    defs.push(...p.defs);
+    kids.push({ tag: 'path', a: Object.assign({}, p.a, { transform: xf, opacity: a < 1 ? a : null }) });
+  });
+  return { defs, kids };
 }
 
 // Strokes as a stand-alone SVG, w x h pixels, covering the object's box (for baking into a mask picture)
@@ -1810,6 +1856,8 @@ function objView(o, ids) {
         { tag: 'image', a: { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform } }] },
       { tag: spec.tag, a: Object.assign({}, spec.a, { fill: 'none' }, sa, { display: sa.stroke === 'none' ? 'none' : null }) });
   } else node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st) });
+  const pv = hasPixels(o) ? paintView(o, ids.mask || 'em' + o.id) : null;   // brush strokes not yet saved into a paint layer
+  if (pv) { defs.push(...pv.defs); node.kids.push(...pv.kids); }
   return { node, defs, spec };
 }
 // A node as SVG text. Hidden nodes are left out, and a group with no settings of its own is
@@ -2078,6 +2126,12 @@ const rawImageIds = d => {
   });
   return s;
 };
+// The pictures of paint layers (they don't count as photos either)
+const rawPaintIds = d => {
+  const s = new Set();
+  (Array.isArray(d && d.objects) ? d.objects : []).forEach(o => { if (o && o.paint && typeof o.img === 'string') s.add(o.img); });
+  return s;
+};
 // Just the erase masks among them (they don't count as photos)
 const rawEraseIds = d => {
   const s = new Set();
@@ -2191,7 +2245,7 @@ function syncObjects() {
     let dg = defEls.get(o.id);
     if (v.defs.length) { if (!dg) { dg = svgEl('g'); picDefs.appendChild(dg); defEls.set(o.id, dg); } patchKids(dg, v.defs); }
     else if (dg) { dg.remove(); defEls.delete(o.id); }
-    patchAttrs(g, Object.assign({}, v.node.a, { display: isHidden(o) ? 'none' : null }));   // hidden, or inside a hidden group
+    patchAttrs(g, Object.assign({}, v.node.a, { display: isHidden(o) ? 'none' : null, 'pointer-events': o.paint ? 'none' : null }));   // a paint layer covers the page, so clicks go through it (pick it in Layers)   // hidden, or inside a hidden group
     // Anything drawn only as an outline (lines, drawn lines, shapes with no fill) gets a wider,
     // invisible outline to click on, so thin strokes are easy to select
     const kids = v.node.kids.slice();
@@ -2491,7 +2545,7 @@ function updateMarquee(p) {
   drag.cur = p;
   const r = drag.rect(), sel = new Set(drag.base);
   doc.objects.forEach(o => {
-    if (isHidden(o) || isLocked(o)) return;
+    if (isHidden(o) || isLocked(o) || o.paint) return;   // a paint layer covers the page, so dragging a box would always pick it
     const b = aabb(o);
     // touching any part of a group picks up the whole group
     if (b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y) clickUnit(doc, o).forEach(x => { if (!isHidden(x) && !isLocked(x)) sel.add(x.id); });
@@ -2981,13 +3035,15 @@ const peDragEnd = d => { if (d.moved) commit(); else drawOverlay(); };
 DRAGS.pepoint = { move: (p, e) => updatePePoint(p, e), end: peDragEnd };
 DRAGS.pehandle = { move: (p, e) => updatePeHandle(p, e), end: peDragEnd };
 /* =====================================================================
-   Eraser tool
+   Eraser tool (and the stroke machinery the Brush tool shares, see 09d-brush.js)
    Select a photo and drag over it to hide parts of it; hold Alt (or turn on Restore) to bring parts
    back. Nothing is ever deleted from the photo: the strokes go into a mask picture kept beside it
    (see 04d-erase.js for how that is described and drawn).
    A stroke is shown as a vector path inside the mask while it is drawn. When the pointer lifts it is
    baked into a new mask picture, the object points at that picture, and one undo step is recorded.
    Strokes are baked one at a time, in order, so a fast second stroke just waits its turn.
+   On a paint layer the eraser removes paint from the layer's own picture instead (there is nothing
+   underneath to restore), and Brush strokes are baked into that picture the same way.
    ===================================================================== */
 const ER = { size: 40, soft: 0.35, restore: false };   // the brush; size is in page units, soft is 0 (hard) to 1
 let eraserPos = null;                                   // where the pointer is, in page coordinates (for the brush ring)
@@ -3007,7 +3063,9 @@ function eraserDown(e, p) {
   if (isLocked(o) || isHidden(o)) { toast(isHidden(o) ? 'Show this photo to erase parts of it.' : 'Unlock this photo to erase parts of it.'); return; }
   if (S.sel.size !== 1 || !S.sel.has(o.id)) { S.sel = new Set([o.id]); renderLayers(); updateInspector(); }
   const q = worldToBox(o, p.x, p.y);
-  const stroke = { d: erasePathStart(q[0], q[1]), size: ER.size, soft: ER.soft, restore: ER.restore !== e.altKey, open: true };   // Alt flips Restore
+  const stroke = { size: ER.size, soft: ER.soft, restore: ER.restore !== e.altKey, open: true };   // Alt flips Restore
+  if (o.paint && stroke.restore) { toast('Erased paint can\u2019t be brought back. Use Undo, or paint it again.'); return; }
+  strokeBegin(stroke, q[0], q[1]);
   if (!eraseLive.has(o.id)) eraseLive.set(o.id, []);
   eraseLive.get(o.id).push(stroke);
   drag = { type: 'eraser', id: o.id, stroke, last: q };
@@ -3020,14 +3078,14 @@ function eraserMove(p) {
   if (o) {
     const q = worldToBox(o, p.x, p.y), l = drag.last;
     if (Math.hypot(q[0] - l[0], q[1] - l[1]) * view.z >= ER_MIN_STEP) {
-      drag.last = q; drag.stroke.d += erasePathMore(q[0], q[1]);
+      drag.last = q; strokeAdd(drag.stroke, q[0], q[1]);
       syncObjects();
     }
   }
   drawOverlay();
 }
 function eraserEnd(d) {
-  d.stroke.open = false;
+  strokeEnd(d.stroke); d.stroke.open = false;
   runEraseQueue();
   drawOverlay();
 }
@@ -3058,15 +3116,19 @@ async function bakeStroke(id, s) {
   try {
     const o = byId(id);
     if (!o) { dropStroke(id, s); return; }
-    const rec = await makeEraseRecord(o, [s]);
+    const onLayer = s.paint || o.paint;   // paint, and erasing on a paint layer, go into the layer's picture
+    const rec = await (onLayer ? makeLayerRecord(o, s) : makeEraseRecord(o, [s]));
     const o2 = byId(id);
     if (doc !== d0 || !o2) { dropStroke(id, s); return; }   // the drawing was swapped for another while this was saved
     images.set(rec.id, rec);
-    o2.erase = rec.id;
+    if (onLayer) o2.img = rec.id; else o2.erase = rec.id;
     dropStroke(id, s);
     commit({ bytes: rec.bytes * 3 });   // the file and its data URL are both held in memory until the step is dropped
   } catch (err) {
-    dropStroke(id, s); syncObjects();
+    dropStroke(id, s);
+    const bad = byId(id);
+    if (bad && bad.paint && isBlankPaint(images.get(bad.img))) { doc.objects = doc.objects.filter(x => x.id !== id); S.sel.delete(id); refreshAll(); }   // a layer made for this stroke goes with it
+    else syncObjects();
     toast('That stroke could not be saved. Try a smaller photo or a smaller brush.');
   }
 }
@@ -3087,6 +3149,22 @@ async function makeEraseRecord(o, strokes) {
     return { id: uid(), blob, dataUrl: await readDataUrl(blob), w, h, mime: 'image/png', bytes: blob.size, name: 'Erased areas', stored: false, mask: true };
   } finally { cv.width = cv.height = 0; }
 }
+// A paint layer's picture with one stroke applied: paint goes on top, an eraser stroke removes what is
+// under it. The stroke is drawn by the browser from the same SVG the canvas shows, so it matches the preview.
+async function makeLayerRecord(o, s) {
+  const old = images.get(o.img), fresh = isBlankPaint(old);
+  const [w, h] = fresh ? paintSize(o) : [old.w, old.h];
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  try {
+    const ctx = cv.getContext('2d');
+    if (!fresh) ctx.drawImage(await loadPicture(old.dataUrl), 0, 0, w, h);
+    ctx.globalCompositeOperation = s.paint ? 'source-over' : 'destination-out';
+    ctx.drawImage(await loadPicture(svgDataUrl(eraseStrokeSVG(o, [s], w, h))), 0, 0, w, h);
+    const blob = await canvasBlob(cv, 'image/png');
+    if (!blob) throw new Error('The layer could not be saved.');
+    return { id: uid(), blob, dataUrl: await readDataUrl(blob), w, h, mime: 'image/png', bytes: blob.size, name: 'Paint layer', stored: false };
+  } finally { cv.width = cv.height = 0; }
+}
 // Bring everything back
 function restoreAllErased() {
   const o = one();
@@ -3099,31 +3177,42 @@ function restoreAllErased() {
 // The brush ring, and an outline around the photo being erased (called from drawOverlay)
 function eraserOverlay() {
   const o = one() && canErase(one()) ? one() : null;
-  $('#erase-hint').textContent = !o ? 'Select a photo to erase parts of it.'
+  $('#erase-hint').textContent = !o ? 'Select a photo or a paint layer to erase parts of it.'
+    : o.paint ? 'Drag to rub out paint. Undo brings it back.'
     : ER.restore ? 'Drag to bring erased parts back. Hold Alt to erase instead.'
     : 'Drag to erase. Hold Alt, or turn on Restore, to bring erased parts back.';
   if (o) {
     const c = centerOf(o);
     ov.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line ov-dash', transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null }));
   }
-  if (eraserPos) {
-    const live = drag && drag.type === 'eraser' ? drag.stroke : null, restore = live ? live.restore : ER.restore, dash = restore ? '5 4' : null;
-    const at = { cx: eraserPos.x, cy: eraserPos.y, r: ER.size / 2, 'stroke-dasharray': dash };
-    ov.appendChild(svgEl('circle', Object.assign({ class: 'er-ring-a' }, at)));
-    ov.appendChild(svgEl('circle', Object.assign({ class: 'er-ring-b' }, at)));
-  }
+  strokeRing();
   return true;   // no selection handles while erasing
+}
+// The brush ring at the pointer (dashed while restoring), for both tools
+function strokeRing() {
+  if (!eraserPos) return;
+  const live = drag && drag.stroke ? drag.stroke : null, restore = live ? live.restore : S.tool === 'eraser' && ER.restore;
+  const at = { cx: eraserPos.x, cy: eraserPos.y, r: ER.size / 2, 'stroke-dasharray': restore ? '5 4' : null };
+  ov.appendChild(svgEl('circle', Object.assign({ class: 'er-ring-a' }, at)));
+  ov.appendChild(svgEl('circle', Object.assign({ class: 'er-ring-b' }, at)));
+}
+// The bar the Eraser and the Brush share: size and softness, plus Restore or color and opacity
+function openStrokeBar(mode) {
+  const bar = $('#erase-bar'); bar.hidden = false;
+  bar.setAttribute('aria-label', mode === 'brush' ? 'Brush' : 'Eraser');
+  $$('#erase-bar .br-only').forEach(e => { e.hidden = mode !== 'brush'; });
+  $$('#erase-bar .er-only').forEach(e => { e.hidden = mode !== 'eraser'; });
 }
 TOOLS.eraser = {
   key: 'x', cursor: 'draw',
   down: eraserDown,
   hover(e, p) { eraserPos = p; drawOverlay(); },
   overlay: eraserOverlay,
-  enter() { $('#erase-bar').hidden = false; },
+  enter() { openStrokeBar('eraser'); },
   leave() { $('#erase-bar').hidden = true; eraserPos = null; }
 };
 DRAGS.eraser = { move: p => eraserMove(p), end: d => eraserEnd(d), cancel: d => eraserCancel(d) };
-stage.addEventListener('pointerleave', () => { if (S.tool === 'eraser' && !drag && eraserPos) { eraserPos = null; drawOverlay(); } });
+stage.addEventListener('pointerleave', () => { if ((S.tool === 'eraser' || S.tool === 'brush') && !drag && eraserPos) { eraserPos = null; drawOverlay(); } });
 
 /* ---------- controls ---------- */
 const showEraseSize = () => { $('#er-size-out').textContent = ER.size; };
@@ -3134,6 +3223,74 @@ $('#er-restore').addEventListener('click', () => { ER.restore = !ER.restore; $('
 $('#erase-done').addEventListener('click', () => { setTool('select'); refreshAll(); });
 $('#btn-erase-tool').addEventListener('click', () => setTool('eraser'));
 $('#btn-erase-reset').addEventListener('click', restoreAllErased);
+/* =====================================================================
+   Brush tool
+   Paints with a soft or hard brush on a paint layer. A paint layer is a picture the size of the page
+   that sits in the drawing like a photo; if no paint layer is selected (and none is on top), the first
+   stroke makes one. Strokes are drawn and saved exactly as the Eraser's are (see 09c-eraser.js and
+   04d-erase.js): a colored vector path while it is drawn, baked into the layer's picture when the
+   pointer lifts, one undo step each. Size and softness are shared with the Eraser; the color and
+   opacity are the Brush's own. The Eraser rubs paint back out of a paint layer.
+   ===================================================================== */
+const PB = { color: '#3b3bf5', alpha: 1 };   // opacity is 0 to 1, for the whole stroke (overlaps within a stroke don't add up)
+
+// A new layer shows this clear 1 x 1 picture until its first stroke has been saved
+const BLANK_PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
+function blankPaintRecord() {
+  const bin = atob(BLANK_PNG), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  const blob = new Blob([u], { type: 'image/png' });
+  return { id: uid(), blob, dataUrl: 'data:image/png;base64,' + BLANK_PNG, w: 1, h: 1, mime: 'image/png', bytes: blob.size, name: 'Paint layer', stored: false, blank: true };
+}
+// A paint layer covering the page, on top of everything. It joins the undo history with its first stroke.
+function newPaintLayer() {
+  const rec = blankPaintRecord();
+  images.set(rec.id, rec);
+  const o = makeImage(rec, { name: 'Paint layer', x: 0, y: 0, w: doc.w, h: doc.h, paint: true });
+  doc.objects.push(o);
+  return o;
+}
+// Where the next stroke goes: the selected paint layer, or, with nothing selected, the paint layer on top.
+// Anything else (a photo or shape selected, or several things) gets a new layer.
+function brushTarget() {
+  const sel = selObjs();
+  if (sel.length === 1) return sel[0].paint ? sel[0] : null;
+  const top = doc.objects[doc.objects.length - 1];
+  return !sel.length && top && top.paint && !isLocked(top) && !isHidden(top) ? top : null;
+}
+function brushDown(e, p) {
+  let o = brushTarget();
+  if (o && (isLocked(o) || isHidden(o))) { toast(isHidden(o) ? 'Show this layer to paint on it.' : 'Unlock this layer to paint on it.'); return; }
+  if (!o) o = newPaintLayer();
+  if (S.sel.size !== 1 || !S.sel.has(o.id)) { S.sel = new Set([o.id]); renderLayers(); updateInspector(); }
+  const q = worldToBox(o, p.x, p.y);
+  const stroke = { paint: true, smooth: true, color: PB.color, alpha: PB.alpha, size: ER.size, soft: ER.soft, open: true };
+  strokeBegin(stroke, q[0], q[1]);
+  if (!eraseLive.has(o.id)) eraseLive.set(o.id, []);
+  eraseLive.get(o.id).push(stroke);
+  drag = { type: 'brush', id: o.id, stroke, last: q };
+  eraserPos = p;
+  syncObjects(); drawOverlay();
+}
+function brushOverlay() {
+  $('#erase-hint').textContent = brushTarget() ? 'Drag to paint on the selected layer.' : 'Drag to paint. A new paint layer is made for you.';
+  strokeRing();
+  return true;   // no selection handles while painting
+}
+TOOLS.brush = {
+  key: 'k', cursor: 'draw',
+  down: brushDown,
+  hover(e, p) { eraserPos = p; drawOverlay(); },
+  overlay: brushOverlay,
+  enter() { openStrokeBar('brush'); },
+  leave() { $('#erase-bar').hidden = true; eraserPos = null; }
+};
+DRAGS.brush = { move: p => eraserMove(p), end: d => eraserEnd(d), cancel: d => eraserCancel(d) };
+
+/* ---------- controls (the bar itself is shared with the Eraser, see openStrokeBar) ---------- */
+$('#br-color').value = PB.color; $('#br-alpha').value = Math.round(PB.alpha * 100);
+$('#br-color').addEventListener('input', e => { PB.color = e.target.value; });
+$('#br-alpha').addEventListener('input', e => { PB.alpha = clamp((+e.target.value || 100) / 100, 0.05, 1); });
 /* =====================================================================
    Perspective
    Tilts the selection as if it were seen from an angle. The selection's bounding box is
@@ -3829,6 +3986,7 @@ function updateInspector() {
   show('#sec-app', n > 0);
   show('#sec-erase', !!o && canErase(o));
   $('#btn-erase-reset').disabled = !(o && o.erase);
+  if (o && canErase(o)) $('#erase-help').textContent = o.paint ? 'Rub out paint with the Eraser. Undo brings it back.' : 'Erasing only hides parts of the photo, so nothing is lost. Hold Alt while erasing to bring parts back.';
   const nPhotoSel = sel.filter(hasPixels).length;
   show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(hasPixels)));
   show('#sec-combine', !(n === 1 && nPhotoSel === 1));
@@ -4601,6 +4759,7 @@ function sanitizeDoc(d) {
     if (hasPixels(o)) {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
+      if (r.paint) o.paint = true;   // a layer painted with the Brush tool
     } else if (r.kind !== 'line' && r.pic) {
       if (typeof r.pic.id === 'string' && images.has(r.pic.id)) o.pic = { id: r.pic.id, dx: num(r.pic.dx, 0, -1e5, 1e5), dy: num(r.pic.dy, 0, -1e5, 1e5), s: num(r.pic.s, 1, 0.001, 100) };
       else missingPhoto = true;
@@ -4664,12 +4823,12 @@ async function openProject(file) {
     const raw = data && data.doc ? data.doc : data, pics = data && data.images && typeof data.images === 'object' ? data.images : {};
     const map = new Map();
     let dropped = 0;
-    const maskIds = rawEraseIds(raw);   // erase masks come along with their photos and don't count against the photo limit
+    const maskIds = rawEraseIds(raw), paintIds = rawPaintIds(raw);   // erase masks and paint layers don't count against the photo limit
     let nPhotos = 0;
     for (const id of rawImageIds(raw)) {
-      const isMask = maskIds.has(id);
-      const rec = isMask || nPhotos < LIMITS.photos ? await adoptProjectPhoto(pics[id], isMask) : null;
-      if (rec) { map.set(id, rec); if (!isMask) nPhotos++; } else dropped++;
+      const isMask = maskIds.has(id), free = isMask || paintIds.has(id);
+      const rec = free || nPhotos < LIMITS.photos ? await adoptProjectPhoto(pics[id], isMask) : null;
+      if (rec) { map.set(id, rec); if (!free) nPhotos++; } else dropped++;
     }
     // point the drawing at the freshly registered photo ids
     (Array.isArray(raw.objects) ? raw.objects : []).forEach(o => {

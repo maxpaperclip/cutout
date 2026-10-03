@@ -215,3 +215,179 @@ test('erase: things that cannot carry an erased photo yet say so', async (t) => 
     assert.equal(r.pic, undefined);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Brush / paint layers
+// ---------------------------------------------------------------------------
+// A paint layer covering a 800 x 600 page, with a picture of its own
+function withLayer(m, props) {
+  m.images.set('L1', { id: 'L1', w: 1600, h: 1200, dataUrl: 'data:image/png;base64,LL==' });
+  const o = m.makeImage(m.images.get('L1'), Object.assign({ name: 'Paint layer', x: 0, y: 0, w: 800, h: 600, paint: true }, props));
+  m.doc.objects.push(o);
+  return o;
+}
+const paint = (extra) => Object.assign({ d: 'M10 10L10 10Q10 10 15 12', size: 30, soft: 0, alpha: 1, color: '#3b3bf5', paint: true, smooth: true, open: false }, extra);
+
+test('paint: smooth strokes', async (t) => {
+  await t.test('a new stroke starts as a dot', () => {
+    const m = loadCutoutModules();
+    const s = { smooth: true };
+    m.strokeBegin(s, 10, 20);
+    assert.equal(s.d, 'M10 20L10 20');
+    assert.deepEqual(Array.from(s.last), [10, 20]);
+  });
+
+  await t.test('a smooth stroke curves through the midpoints between positions', () => {
+    const m = loadCutoutModules();
+    const s = { smooth: true };
+    m.strokeBegin(s, 0, 0);
+    m.strokeAdd(s, 10, 0);
+    m.strokeAdd(s, 10, 10);
+    assert.equal(s.d, 'M0 0L0 0Q0 0 5 0Q10 0 10 5');   // each curve is steered by the previous position and ends halfway to the next
+    m.strokeEnd(s);
+    assert.ok(s.d.endsWith('L10 10'), 'ends at the last position the pointer reached');
+  });
+
+  await t.test('a plain stroke (the eraser) just joins the positions, and ends where it is', () => {
+    const m = loadCutoutModules();
+    const s = {};
+    m.strokeBegin(s, 0, 0); m.strokeAdd(s, 10, 0); m.strokeEnd(s);
+    assert.equal(s.d, 'M0 0L0 0L10 0');
+  });
+
+  await t.test('a click without a drag is still a dot', () => {
+    const m = loadCutoutModules();
+    const s = { smooth: true }; m.strokeBegin(s, 4, 4); m.strokeEnd(s);
+    assert.equal(s.d, 'M4 4L4 4L4 4');
+  });
+});
+
+test('paint: how strokes are described', async (t) => {
+  await t.test('a paint stroke is drawn in its own color, with opacity only when it is below 100%', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    assert.equal(m.eraseStrokeParts(paint(), 'f', o).a.stroke, '#3b3bf5');
+    assert.equal(m.eraseStrokeParts(paint(), 'f', o).a.opacity, null);
+    assert.equal(m.eraseStrokeParts(paint({ alpha: 0.4 }), 'f', o).a.opacity, 0.4);
+    assert.equal(m.eraseStrokeParts({ d: 'M0 0', size: 5, soft: 0 }, 'f', o).a.stroke, '#000', 'erasing is still black');
+  });
+
+  await t.test('pending paint strokes are drawn over the layer, after its picture', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    m.eraseLive.set(o.id, [paint(), paint({ color: '#ff0000' })]);
+    const v = m.objView(o, { mask: 'em1' });
+    assert.deepEqual(Array.from(v.node.kids, k => k.tag), ['image', 'path', 'path']);
+    assert.equal(v.node.kids[1].a.stroke, '#3b3bf5'); assert.equal(v.node.kids[2].a.stroke, '#ff0000');
+    assert.equal(v.node.kids[1].a.transform, m.objXf(o), 'placed like the layer, so turns and flips carry over');
+    assert.equal(v.node.a.mask, undefined, 'painting needs no mask');
+  });
+
+  await t.test('the layer\'s own opacity shows in the preview, as it will once the stroke is saved', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m, { opacity: 0.5 });
+    m.eraseLive.set(o.id, [paint({ alpha: 0.5 })]);
+    assert.equal(m.paintView(o, 'x').kids[0].a.opacity, 0.25);
+  });
+
+  await t.test('soft paint strokes get a blur with an id of their own', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    m.eraseLive.set(o.id, [paint({ soft: 1 })]);
+    const pv = m.paintView(o, 'em1');
+    assert.equal(pv.defs[0].a.id, 'em1-p0');
+    assert.equal(pv.kids[0].a.filter, 'url(#em1-p0)');
+  });
+
+  await t.test('paint and erase strokes pending on one layer stay apart: erasing goes in the mask, paint over the picture', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    m.eraseLive.set(o.id, [paint(), { d: 'M1 1L1 1', size: 10, soft: 0, restore: false, open: false }]);
+    const v = m.objView(o, { mask: 'em1' });
+    const mask = v.defs.find(d => d.tag === 'mask');
+    assert.deepEqual(Array.from(mask.kids, k => k.tag), ['rect', 'path'], 'one erase stroke in the mask');
+    assert.equal(mask.kids[1].a.stroke, '#000');
+    assert.equal(v.node.kids.filter(k => k.tag === 'path').length, 1, 'one paint stroke over the picture');
+  });
+
+  await t.test('a photo with no pending strokes is described exactly as before', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    const v = m.objView(o, { mask: 'em1' });
+    assert.equal(v.node.kids.length, 1); assert.equal(v.defs.length, 0);
+  });
+
+  await t.test('pending paint strokes count as busy, so undo waits for them', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    assert.equal(m.eraseBusy(), false);
+    m.eraseLive.set(o.id, [paint()]);
+    assert.equal(m.eraseBusy(), true);
+  });
+
+  await t.test('paint strokes are exported into the stand-alone stroke SVG in color', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    const svg = m.eraseStrokeSVG(o, [paint({ alpha: 0.5 })], 1600, 1200);
+    assert.match(svg, /viewBox="0 0 800 600"/);
+    assert.ok(svg.includes('stroke="#3b3bf5"') && svg.includes('opacity="0.5"'));
+  });
+});
+
+test('paint: the layer itself', async (t) => {
+  await t.test('its picture has two pixels per page unit, up to 1600 on the long side', () => {
+    const m = loadCutoutModules();
+    assert.deepEqual(Array.from(m.paintSize({ w: 800, h: 600 })), [1600, 1200]);
+    assert.deepEqual(Array.from(m.paintSize({ w: 100, h: 100 })), [200, 200]);
+    assert.deepEqual(Array.from(m.paintSize({ w: 4000, h: 3000 })), [1600, 1200]);
+    assert.deepEqual(Array.from(m.paintSize({ w: 8000, h: 16 })), [1600, 3]);
+  });
+
+  await t.test('a layer that was never painted on is recognised by its 1 x 1 stand-in picture', () => {
+    const m = loadCutoutModules();
+    assert.equal(m.isBlankPaint({ w: 1, h: 1 }), true);
+    assert.equal(m.isBlankPaint({ w: 5, h: 1, blank: true }), true);
+    assert.equal(m.isBlankPaint(undefined), true);
+    assert.equal(m.isBlankPaint({ w: 1600, h: 1200 }), false);
+  });
+
+  await t.test('its picture is not a photo, so it does not use up the photo limit', () => {
+    const m = loadCutoutModules();
+    withLayer(m);
+    m.images.set('p1', { id: 'p1', w: 10, h: 10, dataUrl: 'data:,' });
+    m.doc.objects.push(m.makeImage(m.images.get('p1'), {}));
+    assert.deepEqual([...m.docImageIds(m.doc)].sort(), ['L1', 'p1']);
+    assert.deepEqual([...m.docPhotoIds(m.doc)], ['p1']);
+  });
+
+  await t.test('it shows a brush icon and a name in the Layers list', () => {
+    const m = loadCutoutModules();
+    const o = withLayer(m);
+    assert.equal(m.iconFor(o), 'brush');
+    assert.equal(m.labelOf(o), 'Paint layer');
+    assert.equal(m.iconFor(m.makeImage({ id: 'x', w: 1, h: 1, name: 'Cat' }, {})), 'image');
+  });
+
+  await t.test('opening a drawing keeps the layer a paint layer', () => {
+    const m = loadCutoutModules();
+    m.images.set('L1', { id: 'L1', w: 1600, h: 1200, dataUrl: 'data:,' });
+    const d = m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'image', img: 'L1', paint: true, x: 0, y: 0, w: 800, h: 600 }, { kind: 'image', img: 'L1', x: 0, y: 0, w: 5, h: 5 }] });
+    assert.equal(d.objects[0].paint, true);
+    assert.equal(d.objects[1].paint, undefined, 'only layers that were paint layers');
+  });
+
+  await t.test('a paint layer is saved with the drawing', () => {
+    const m = loadCutoutModules();
+    withLayer(m);
+    assert.equal(JSON.parse(m.docJSON(m.doc)).objects[0].paint, true);
+  });
+
+  await t.test('it can be used as a photo mask like any picture', () => {
+    const m = loadCutoutModules({ recordToasts: true });
+    const o = withLayer(m);
+    const r = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
+    m.doc.objects.push(r); m.S.sel = new Set([o.id, r.id]);
+    m.useAsMask();
+    assert.equal(r.pic.id, 'L1');
+  });
+});
