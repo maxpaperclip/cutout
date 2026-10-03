@@ -95,6 +95,8 @@ TOOLS.select = {
     if (h) { beginHandle(h.dataset.h, p, e); return; }
     const g = e.target.closest && e.target.closest('[data-id]');
     const o = g ? byId(+g.dataset.id) : null;
+    const pl = paintLayerAt(p, o && !isLocked(o) && !isHidden(o) ? o : null);   // paint above what was hit (see 09d-brush.js)
+    if (pl) { beginMove(pl, p, e); return; }
     if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
     beginMarquee(p, e);
   },
