@@ -31,8 +31,8 @@ function syncObjects() {
     seen.add(o.id);
     let g = els.get(o.id);
     if (!g) { g = svgEl('g'); g.dataset.id = o.id; els.set(o.id, g); }
-    const v = objView(o, { grad: 'gr-' + o.id, clip: 'pc-' + o.id });
-    // its definitions (gradient, photo clip) live in <defs>, in a holder of their own
+    const v = objView(o, { grad: 'gr-' + o.id, clip: 'pc-' + o.id, mask: 'em-' + o.id });
+    // its definitions (gradient, photo clip, erase mask) live in <defs>, in a holder of their own
     let dg = defEls.get(o.id);
     if (v.defs.length) { if (!dg) { dg = svgEl('g'); picDefs.appendChild(dg); defEls.set(o.id, dg); } patchKids(dg, v.defs); }
     else if (dg) { dg.remove(); defEls.delete(o.id); }

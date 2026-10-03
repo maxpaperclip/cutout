@@ -18,7 +18,8 @@ function toWorld(e) { const r = stage.getBoundingClientRect(); return { x: (e.cl
                     keys(e): return true when the key was used
                     overlay(): draw over the canvas; return true to skip the selection handles
                     enter(), leave(): when the tool is chosen, and when another is }
-     DRAGS.type = { move(p, e), end(d, e), overlay() }  for drag = { type, ... } */
+     DRAGS.type = { move(p, e), end(d, e), overlay(), cancel(d) }  for drag = { type, ... }
+                  (cancel: a second finger arrived and the drag is abandoned) */
 const TOOLS = {}, DRAGS = {};
 const tool = () => TOOLS[S.tool] || {};
 function setTool(t) {
@@ -125,6 +126,8 @@ function pinchState() {
 }
 function startPinch() {
   userView = true;
+  const k = drag && DRAGS[drag.type];
+  if (k && k.cancel) k.cancel(drag);   // a drag that keeps work outside the drawing (the eraser) drops it here
   if (drag && drag.type !== 'pan' && drag.type !== 'marquee') revertUncommitted();
   drag = null;
   const s = pinchState();

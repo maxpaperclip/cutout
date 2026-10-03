@@ -21,11 +21,18 @@ const LIMITS = {
   photos: 12                     // most different photos in one drawing
 };
 // Photos live here once; the drawing and the undo history only point at them by id.
-const images = new Map();        // id -> { id, blob, dataUrl, w, h, mime, bytes, name, stored }
+const images = new Map();        // id -> { id, blob, dataUrl, w, h, mime, bytes, name, stored, mask }   (mask: an erase mask, see 04d-erase.js)
 const uid = () => (window.crypto && crypto.randomUUID) ? crypto.randomUUID().replace(/-/g, '').slice(0, 20) : Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+// Every stored picture the drawing needs: photos, photo fills, and the erase masks kept beside them
 function docImageIds(d) {
   const s = new Set();
-  d.objects.forEach(o => { if (hasPixels(o) && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); });
+  d.objects.forEach(o => { if (hasPixels(o) && o.img) s.add(o.img); if (o.pic && o.pic.id) s.add(o.pic.id); if (o.erase) s.add(o.erase); });
+  return s;
+}
+// Only the photos: erase masks are bookkeeping, so they don't count toward LIMITS.photos
+function docPhotoIds(d) {
+  const s = docImageIds(d);
+  d.objects.forEach(o => { if (o.erase) s.delete(o.erase); });
   return s;
 }
 // A shape (or text) whose fill is a photo

@@ -35,8 +35,10 @@ const MODULE_FILES = [
   '04-document-model.js',
   '04b-groups.js',
   '04c-path-edit.js',
+  '04d-erase.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
+  '17-projects.js',
   '18b-svg-import.js',
 ];
 
@@ -49,7 +51,7 @@ const EXPORT_NAMES = [
   // 04-document-model.js
   'blankDoc', 'newShape', 'refresh', 'buildPolygon',
   'centerOf', 'aabb', 'unionBox', 'moveBy', 'labelOf', 'iconFor',
-  'byId', 'selObjs', 'one', 'hasPic', 'docImageIds',
+  'byId', 'selObjs', 'one', 'hasPic', 'docImageIds', 'docPhotoIds',
   'hasGrad', 'makeGrad', 'cloneGrad', 'syncGradFill', 'gradAngle', 'setGradAngle',
   'reverseGrad', 'sanitizeGrad', 'shiftHue', 'normHex',
   'gradColorAt', 'addGradStop', 'removeGradStop', 'moveGradStop', 'GRAD_MAX_STOPS',
@@ -65,6 +67,11 @@ const EXPORT_NAMES = [
   'STYLE_KEYS', 'KIND_PARAMS', 'copyKeys', 'toPlainPath', 'makeImage',
   'lineEnds', 'isStraightLine', 'lineGeometry', 'makeLine', 'setLineEnds',
   'KIND_INFO', 'kindInfo', 'hasPixels', 'hasPaint', 'keepsRatio',
+  // 04d-erase.js
+  'ERASE', 'eraseLive', 'eraseBusy', 'canErase', 'eraseView', 'eraseStrokeParts', 'eraseStrokeSVG',
+  'erasePathStart', 'erasePathMore', 'eraseSigma',
+  // 17-projects.js
+  'sanitizeDoc',
   // 05-svg-export.js
   'coverScale', 'picGeom', 'picCovers', 'shapeSpec', 'styleAttrs',
   'strokeAttrs', 'geomSpec', 'objXf', 'centerXf', 'ser', 'objToSVG',

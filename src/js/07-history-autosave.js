@@ -68,7 +68,7 @@ async function persistNow(str) {
     if (DB.ok) {
       for (const id of ids) {
         const r = images.get(id);
-        if (r && !r.stored) { await idbPut('images', { id: r.id, blob: r.blob, w: r.w, h: r.h, mime: r.mime, name: r.name }); r.stored = true; }
+        if (r && !r.stored) { await idbPut('images', { id: r.id, blob: r.blob, w: r.w, h: r.h, mime: r.mime, name: r.name, mask: !!r.mask }); r.stored = true; }
       }
       await idbPut('meta', { key: 'doc', json: str, at: Date.now() });
       try { localStorage.removeItem(AUTOSAVE_KEY); } catch (e) { /* ignore */ }
@@ -95,7 +95,7 @@ async function gcImages() {
   if (importing) return;
   const keep = new Set(docImageIds(doc));
   hist.steps.forEach(st => st.ids.forEach(id => keep.add(id)));
-  if (psn) psn.items.forEach(it => { if (it.o0.img) keep.add(it.o0.img); if (it.o0.pic && it.o0.pic.id) keep.add(it.o0.pic.id); });
+  if (psn) psn.items.forEach(it => { if (it.o0.img) keep.add(it.o0.img); if (it.o0.pic && it.o0.pic.id) keep.add(it.o0.pic.id); if (it.o0.erase) keep.add(it.o0.erase); });
   const drop = [];
   images.forEach((r, id) => { if (!keep.has(id)) drop.push(id); });
   for (const id of drop) {
@@ -115,7 +115,14 @@ const rawImageIds = d => {
   (Array.isArray(d && d.objects) ? d.objects : []).forEach(o => {
     if (o && typeof o.img === 'string') s.add(o.img);
     if (o && o.pic && typeof o.pic.id === 'string') s.add(o.pic.id);
+    if (o && typeof o.erase === 'string') s.add(o.erase);
   });
+  return s;
+};
+// Just the erase masks among them (they don't count as photos)
+const rawEraseIds = d => {
+  const s = new Set();
+  (Array.isArray(d && d.objects) ? d.objects : []).forEach(o => { if (o && typeof o.erase === 'string') s.add(o.erase); });
   return s;
 };
 function readDataUrl(blob) {
@@ -123,7 +130,7 @@ function readDataUrl(blob) {
 }
 async function registerStored(r) {
   const dataUrl = await readDataUrl(r.blob);
-  images.set(r.id, { id: r.id, blob: r.blob, dataUrl, w: r.w, h: r.h, mime: r.mime, bytes: r.blob.size, name: r.name || 'Photo', stored: true });
+  images.set(r.id, { id: r.id, blob: r.blob, dataUrl, w: r.w, h: r.h, mime: r.mime, bytes: r.blob.size, name: r.name || 'Photo', stored: true, mask: !!r.mask });
 }
 // Open the database and bring back the last drawing with its photos
 async function restoreSession() {
@@ -171,13 +178,13 @@ function loadSnapshot(str) {
 }
 const canUndo = () => hist.idx > 0, canRedo = () => hist.idx < hist.steps.length - 1;
 function undo() {
-  if (psnBusy || !canUndo()) return;
+  if (psnBusy || eraseBusy() || !canUndo()) return;
   const st = hist.steps[hist.idx];
   if (st.change && st.change.undo) st.change.undo();
   hist.idx--; loadSnapshot(hist.steps[hist.idx].json); scheduleSave(hist.steps[hist.idx].json);
 }
 function redo() {
-  if (psnBusy || !canRedo()) return;
+  if (psnBusy || eraseBusy() || !canRedo()) return;
   hist.idx++;
   const st = hist.steps[hist.idx];
   loadSnapshot(st.json);

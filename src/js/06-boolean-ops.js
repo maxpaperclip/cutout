@@ -81,6 +81,7 @@ function useAsMask() {
   if (shapes.some(isOpenPath)) { toast('Lines have no inside, so they can\u2019t be masks. Use a shape instead.'); return; }
   const im = pics[0], rec = images.get(im.img);
   if (!rec) { toast('That photo is not available any more.'); return; }
+  if (im.erase) { toast('Photos with erased parts can\u2019t be used as a mask yet. Choose Restore all in the Eraser section first.'); return; }
   let target = shapes[0];
   if (shapes.length > 1) { target = combineShapes('unite', shapes); if (!target) return; }
   let dx = 0, dy = 0, s = coverScale(target, rec);
