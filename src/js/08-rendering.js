@@ -69,6 +69,7 @@ function applyView() {
   setA(world, 'transform', 'translate(' + rnd(view.x, 2) + ' ' + rnd(view.y, 2) + ') scale(' + rnd(view.z, 5) + ')');
   $('#z-label').textContent = Math.round(view.z * 100) + '%';
   drawArtboard(); syncObjects(); drawOverlay();
+  if (te) tePlace();   // text being typed in place follows the canvas (09f-text-edit.js)
 }
 function stageSize() { const r = stage.getBoundingClientRect(); return { w: r.width, h: r.height, left: r.left, top: r.top }; }
 function fit() {
