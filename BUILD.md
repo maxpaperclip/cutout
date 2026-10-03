@@ -198,9 +198,12 @@ page, whose picture each stroke repaints. It reuses everything the Eraser does:
 - The picture has `PAINT.density` (2) pixels per page unit, at most `LIMITS.edge` on the long side.
 - The Eraser on a paint layer removes paint from the picture (`destination-out`) instead of using an erase mask,
   so painting over an erased spot works. Restore only exists for masks, so it's refused on paint layers.
-- Paint layers cover the page, so clicks go through them (`pointer-events: none`) and a marquee skips them; choose
-  one in the Layers tab, or just keep painting (the brush reuses the selected paint layer, or the one on top when
-  nothing is selected).
+- Paint layers cover the page, so clicks go through them (`pointer-events: none`) and a marquee skips them. The
+  Select tool takes a layer only where it has paint: `paintLayerAt` (`09d-brush.js`) checks the layer's picture
+  (an alpha copy kept in `paintHit`, refreshed by `warmPaintHits`) within a few screen pixels of the pointer, and
+  only for layers above whatever object was hit, so a click on a shape in front still gets the shape. You can also
+  choose one in the Layers tab, or just keep painting (the brush reuses the selected paint layer, or the one on top
+  when nothing is selected).
 - Their pictures are stored and saved like photos but don't count toward `LIMITS.photos` (`docPhotoIds`).
 
 ## How the eyedropper works

@@ -62,6 +62,56 @@ TOOLS.brush = {
 };
 DRAGS.brush = { move: p => eraserMove(p), end: d => eraserEnd(d), cancel: d => eraserCancel(d) };
 
+/* ---------- picking up paint ----------
+   A paint layer covers the page, so it can't take clicks over its whole box (nothing underneath could be
+   reached). Instead the Select tool asks whether the point is on paint: where the layer's picture is not clear,
+   and nothing above it is in the way, a click or drag takes the layer. */
+const paintHit = new Map();   // picture id -> { w, h, a: how opaque each pixel is }, or null while it is being read
+function warmPaintHits() {
+  const live = new Set();
+  doc.objects.forEach(o => {
+    if (!o.paint) return;
+    live.add(o.img);
+    const rec = images.get(o.img);
+    if (paintHit.has(o.img) || !rec || isBlankPaint(rec)) return;
+    paintHit.set(o.img, null);
+    const im = new Image();
+    im.onload = () => {
+      const cv = document.createElement('canvas'); cv.width = rec.w; cv.height = rec.h;
+      try {
+        const ctx = cv.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(im, 0, 0, rec.w, rec.h);
+        const px = ctx.getImageData(0, 0, rec.w, rec.h).data, a = new Uint8Array(rec.w * rec.h);
+        for (let i = 0; i < a.length; i++) a[i] = px[i * 4 + 3];
+        paintHit.set(o.img, { w: rec.w, h: rec.h, a });
+      } catch (_) { paintHit.delete(o.img); } finally { cv.width = cv.height = 0; }
+    };
+    im.onerror = () => paintHit.delete(o.img);
+    im.src = rec.dataUrl;
+  });
+  paintHit.forEach((v, id) => { if (!live.has(id)) paintHit.delete(id); });   // pictures no layer shows any more
+}
+// Is there paint on layer o within a few screen pixels of page point p?
+function onPaint(o, p) {
+  const h = paintHit.get(o.img);
+  if (!h) return false;
+  const q = worldToBox(o, p.x, p.y), kx = h.w / Math.max(o.w, 1), ky = h.h / Math.max(o.h, 1);
+  const rx = Math.ceil(4 / view.z * kx), ry = Math.ceil(4 / view.z * ky), cx = Math.floor(q[0] * kx), cy = Math.floor(q[1] * ky);
+  for (let y = Math.max(0, cy - ry); y <= Math.min(h.h - 1, cy + ry); y++)
+    for (let x = Math.max(0, cx - rx); x <= Math.min(h.w - 1, cx + rx); x++) if (h.a[y * h.w + x] > 8) return true;
+  return false;
+}
+// The paint layer to take for a click at p, given the object (if any) the browser found there: the topmost
+// layer with paint at p that is above that object
+function paintLayerAt(p, under) {
+  const floor = under ? doc.objects.indexOf(under) : -1;
+  for (let i = doc.objects.length - 1; i > floor; i--) {
+    const o = doc.objects[i];
+    if (o.paint && !isLocked(o) && !isHidden(o) && onPaint(o, p)) return o;
+  }
+  return null;
+}
+
 /* ---------- controls (the bar itself is shared with the Eraser, see openStrokeBar) ---------- */
 $('#br-color').value = PB.color; $('#br-alpha').value = Math.round(PB.alpha * 100);
 $('#br-color').addEventListener('input', e => { PB.color = e.target.value; });

@@ -87,6 +87,7 @@ async function bakeStroke(id, s) {
     images.set(rec.id, rec);
     if (onLayer) o2.img = rec.id; else o2.erase = rec.id;
     dropStroke(id, s);
+    warmPaintHits();
     commit({ bytes: rec.bytes * 3 });   // the file and its data URL are both held in memory until the step is dropped
   } catch (err) {
     dropStroke(id, s);

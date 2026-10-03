@@ -2,6 +2,7 @@
    Global UI wiring
    ===================================================================== */
 function refreshAll() {
+  warmPaintHits();
   drawArtboard(); syncObjects(); drawOverlay(); renderLayers(); updateInspector(); updatePageTab(); updateEmpty();
   $('#btn-undo').disabled = !canUndo(); $('#btn-redo').disabled = !canRedo();
 }
