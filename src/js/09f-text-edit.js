@@ -11,16 +11,8 @@
 const TE_PAD = 16;                 // room around the box (screen pixels), so the caret at either end is never cut off
 let te = null;                     // the edit in progress: { id, isNew, before }
 const teEl = $('#text-edit');
-const teFonts = new Map();
-// The browser needs the font itself to lay text out the way the outlines were; load the embedded copy once
-function teFontReady(key) {
-  if (!teFonts.has(key)) {
-    let p;
-    try { const f = new FontFace('cutout-' + key, b64ToBuf(FONT_DATA[key])); document.fonts.add(f); p = f.load(); } catch (_) { p = Promise.resolve(); }
-    teFonts.set(key, p.catch(() => { /* the fallback font is used */ }));
-  }
-  return teFonts.get(key);
-}
+// The browser needs the font itself to lay text out the way the outlines were (see fontFaceReady in 03-fonts-runtime.js)
+const teFontReady = fontFaceReady;
 const teFontKey = o => fonts[o.font] ? o.font : DEFAULT_FONT;
 
 // Put the box over the object, at the canvas's current zoom and position
@@ -34,7 +26,7 @@ function tePlace() {
   st.width = rnd(o.w * z + TE_PAD * 2, 2) + 'px';
   st.height = rnd(o.h * z + TE_PAD * 2, 2) + 'px';
   st.padding = TE_PAD + 'px';
-  st.fontFamily = "'cutout-" + teFontKey(o) + "', sans-serif";
+  st.fontFamily = "'" + cssFamily(teFontKey(o)) + "', sans-serif";
   st.fontSize = rnd(o.size * z, 3) + 'px';
   st.lineHeight = rnd(o.size * o.lh * z, 3) + 'px';
   st.letterSpacing = rnd((o.ls || 0) * o.size * z, 3) + 'px';

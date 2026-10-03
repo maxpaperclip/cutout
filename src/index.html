@@ -153,7 +153,15 @@
         <h3>Text</h3>
         <div class="stack">
           <textarea id="tx-text" rows="2" spellcheck="false" aria-label="Text content"></textarea>
-          <select id="tx-font" aria-label="Font"></select>
+          <div class="fontpick" id="fontpick">
+            <button type="button" class="fp-btn" id="tx-font" aria-haspopup="listbox" aria-expanded="false" aria-controls="fp-pop" aria-label="Font"><span class="fp-name" id="fp-name"></span><span class="ico" data-icon="chev"></span></button>
+            <div class="fp-pop" id="fp-pop" hidden>
+              <input type="search" class="fp-q" id="fp-q" placeholder="Search fonts" aria-label="Search fonts" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="fp-list" aria-autocomplete="list">
+              <div class="fp-tabs" id="fp-tabs" role="group" aria-label="Font category"></div>
+              <ul class="fp-list" id="fp-list" role="listbox" aria-label="Fonts"></ul>
+            </div>
+          </div>
+          <p class="help" id="tx-missing" hidden></p>
           <div class="grid2">
             <label class="f"><span>Size</span><input type="number" id="tx-size" min="4" max="1200" step="1"></label>
             <label class="f"><span>Lines</span><input type="number" id="tx-lh" min="0.6" max="3" step="0.05"></label>
@@ -378,6 +386,10 @@
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
         <p class="help" style="margin-top:0"><strong id="about-ver"></strong><br>Drawings and photos are saved only in this browser, on this device.</p>
+        <details class="help" id="font-credits"><summary>Fonts</summary>
+          <p id="font-credits-list"></p>
+          <p>Every font is open source: the SIL Open Font License 1.1, or the Apache License 2.0 for Permanent Marker, Roboto Slab, Satisfy, Luckiest Guy, Special Elite and Chewy. Their license texts are in <code>src/fonts/licenses</code> in the project.</p>
+        </details>
       </section>
     </div>
   </aside>

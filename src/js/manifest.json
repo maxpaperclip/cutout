@@ -22,6 +22,7 @@
   "js/11-editing-commands.js",
   "js/12-ui-chrome.js",
   "js/13-inspector.js",
+  "js/13b-font-picker.js",
   "js/14-layers-tab.js",
   "js/15-page-tab.js",
   "js/16-export.js",
