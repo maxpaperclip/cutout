@@ -151,9 +151,9 @@ input:disabled,select:disabled{opacity:.45}
 #empty .btns{display:flex;gap:8px;flex-wrap:wrap}
 
 #busy{position:fixed;inset:0;z-index:90;cursor:progress}
-#persp-bar,#path-bar,#erase-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
-#persp-bar span,#path-bar span,#erase-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
-#persp-bar .btn,#path-bar .btn,#erase-bar .btn{flex:none}
+#persp-bar,#path-bar,#erase-bar,#drop-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
+#persp-bar span,#path-bar span,#erase-bar span,#drop-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
+#persp-bar .btn,#path-bar .btn,#erase-bar .btn,#drop-bar .btn{flex:none}
 /* Eraser: the hint takes the first line, the controls sit under it */
 #erase-bar{flex-wrap:wrap;max-width:min(94%,600px);padding-bottom:8px}
 #erase-bar #erase-hint{flex:1 1 100%}
@@ -161,6 +161,13 @@ input:disabled,select:disabled{opacity:.45}
 .er-f input[type=range]{min-width:60px}
 .er-f output{width:28px;text-align:right;font-variant-numeric:tabular-nums}
 .er-ring-a{fill:none;stroke:#000;stroke-opacity:.55;stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
+.btn.eyedrop{width:30px;height:30px;flex:none}
+.btn.eyedrop .ico{width:17px;height:17px}
+#drop-bar .seg{flex:none}
+#drop-bar .seg button{flex:none;padding:0 12px}
+#drop-tip{position:fixed;z-index:6;display:flex;align-items:center;gap:7px;padding:4px 9px 4px 5px;border-radius:999px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 4px 14px var(--shadow);pointer-events:none;font-size:12px}
+#drop-tip i{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);flex:none;background-image:linear-gradient(45deg,#0001 25%,transparent 25% 75%,#0001 75%)}
+#drop-tip b{font:600 12px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
 .er-ring-b{fill:none;stroke:#fff;stroke-width:1.25;vector-effect:non-scaling-stroke;pointer-events:none}
 /* Pen and point editing */
 .pe-hit{fill:none;stroke:transparent;pointer-events:stroke;cursor:copy}
@@ -183,7 +190,7 @@ input:disabled,select:disabled{opacity:.45}
 .row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .row:last-child{margin-bottom:0}
 .row>.lbl{flex:none;width:58px;color:var(--ink-3);font-size:12px}
-.row .hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.row .hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;padding:0 5px;min-width:64px}
 .chip{flex:none;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .seg.grow{flex:1}

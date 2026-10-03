@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.16.0</title>
+<title>Cutout v1.17.0</title>
 <style>
 
 :root{
@@ -159,9 +159,9 @@ input:disabled,select:disabled{opacity:.45}
 #empty .btns{display:flex;gap:8px;flex-wrap:wrap}
 
 #busy{position:fixed;inset:0;z-index:90;cursor:progress}
-#persp-bar,#path-bar,#erase-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
-#persp-bar span,#path-bar span,#erase-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
-#persp-bar .btn,#path-bar .btn,#erase-bar .btn{flex:none}
+#persp-bar,#path-bar,#erase-bar,#drop-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
+#persp-bar span,#path-bar span,#erase-bar span,#drop-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
+#persp-bar .btn,#path-bar .btn,#erase-bar .btn,#drop-bar .btn{flex:none}
 /* Eraser: the hint takes the first line, the controls sit under it */
 #erase-bar{flex-wrap:wrap;max-width:min(94%,600px);padding-bottom:8px}
 #erase-bar #erase-hint{flex:1 1 100%}
@@ -169,6 +169,13 @@ input:disabled,select:disabled{opacity:.45}
 .er-f input[type=range]{min-width:60px}
 .er-f output{width:28px;text-align:right;font-variant-numeric:tabular-nums}
 .er-ring-a{fill:none;stroke:#000;stroke-opacity:.55;stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
+.btn.eyedrop{width:30px;height:30px;flex:none}
+.btn.eyedrop .ico{width:17px;height:17px}
+#drop-bar .seg{flex:none}
+#drop-bar .seg button{flex:none;padding:0 12px}
+#drop-tip{position:fixed;z-index:6;display:flex;align-items:center;gap:7px;padding:4px 9px 4px 5px;border-radius:999px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 4px 14px var(--shadow);pointer-events:none;font-size:12px}
+#drop-tip i{width:20px;height:20px;border-radius:50%;border:1px solid var(--line);flex:none;background-image:linear-gradient(45deg,#0001 25%,transparent 25% 75%,#0001 75%)}
+#drop-tip b{font:600 12px ui-monospace,Menlo,Consolas,monospace;color:var(--ink)}
 .er-ring-b{fill:none;stroke:#fff;stroke-width:1.25;vector-effect:non-scaling-stroke;pointer-events:none}
 /* Pen and point editing */
 .pe-hit{fill:none;stroke:transparent;pointer-events:stroke;cursor:copy}
@@ -191,7 +198,7 @@ input:disabled,select:disabled{opacity:.45}
 .row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
 .row:last-child{margin-bottom:0}
 .row>.lbl{flex:none;width:58px;color:var(--ink-3);font-size:12px}
-.row .hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px}
+.row .hex{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;padding:0 5px;min-width:64px}
 .chip{flex:none;height:30px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);cursor:pointer}
 .chip[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
 .seg.grow{flex:1}
@@ -407,9 +414,19 @@ input:disabled,select:disabled{opacity:.45}
       <label class="er-f">Soft <input type="range" id="er-soft" min="0" max="100" aria-label="Softness"></label>
       <label class="er-f br-only" hidden>Opacity <input type="range" id="br-alpha" min="5" max="100" aria-label="Brush opacity"></label>
       <input type="color" class="br-only" id="br-color" aria-label="Brush color" hidden>
+      <button class="btn icon line eyedrop br-only" data-eyedrop="#br-color" title="Pick a color from the drawing" aria-label="Pick the brush color from the drawing" hidden><span class="ico" data-icon="eyedropper"></span></button>
       <button class="chip er-only" id="er-restore" aria-pressed="false" title="Paint the photo back in instead of erasing it (or hold Alt)">Restore</button>
       <button class="btn primary" id="erase-done">Done</button>
     </div>
+    <div id="drop-bar" role="group" aria-label="Eyedropper" hidden>
+      <span id="drop-hint"></span>
+      <div class="seg txt" role="group" aria-label="Sample size">
+        <button id="drop-1" aria-pressed="true" title="The one pixel under the pointer (1)">Pixel</button>
+        <button id="drop-3" aria-pressed="false" title="The average of the 3 × 3 pixels around the pointer (3)">3 × 3</button>
+      </div>
+      <button class="btn" id="drop-cancel">Cancel</button>
+    </div>
+    <div id="drop-tip" hidden><i></i><b></b></div>
     <div id="persp-bar" role="group" aria-label="Perspective" hidden>
       <span id="persp-hint"></span>
       <button class="btn line" id="persp-reset" title="Put the selection back the way it was">Reset</button>
@@ -528,6 +545,7 @@ input:disabled,select:disabled{opacity:.45}
           <span class="lbl">Color</span>
           <input type="color" id="fill-color" aria-label="Fill color">
           <input type="text" class="hex" id="fill-hex" maxlength="7" spellcheck="false" aria-label="Fill hex code">
+          <button class="btn icon line eyedrop" data-eyedrop="#fill-color" title="Pick a color from the drawing" aria-label="Pick the fill color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
           <button class="chip" id="fill-none" aria-pressed="false">None</button>
         </div>
         <div id="grad-controls" hidden>
@@ -541,7 +559,8 @@ input:disabled,select:disabled{opacity:.45}
             <span class="lbl">Color</span>
             <input type="color" id="gs-color" aria-label="Selected gradient color">
             <input type="text" class="hex" id="gs-hex" maxlength="7" spellcheck="false" aria-label="Selected gradient color hex code">
-            <button class="chip" id="gs-remove" title="Remove the selected color (Delete)">Remove</button>
+            <button class="btn icon line eyedrop" data-eyedrop="#gs-color" title="Pick a color from the drawing" aria-label="Pick the gradient color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
+          <button class="chip" id="gs-remove" title="Remove the selected color (Delete)">Remove</button>
           </div>
           <div class="row">
             <span class="lbl">Opacity</span>
@@ -560,6 +579,7 @@ input:disabled,select:disabled{opacity:.45}
           <span class="lbl">Outline</span>
           <input type="color" id="stroke-color" aria-label="Outline color">
           <input type="text" class="hex" id="stroke-hex" maxlength="7" spellcheck="false" aria-label="Outline hex code">
+          <button class="btn icon line eyedrop" data-eyedrop="#stroke-color" title="Pick a color from the drawing" aria-label="Pick the outline color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
           <button class="chip" id="stroke-none" aria-pressed="false">None</button>
         </div>
         <div class="row" id="row-weight">
@@ -643,6 +663,7 @@ input:disabled,select:disabled{opacity:.45}
         <div class="row">
           <input type="color" id="bg-color" aria-label="Page background color">
           <input type="text" class="hex" id="bg-hex" maxlength="7" spellcheck="false" aria-label="Page background hex code">
+          <button class="btn icon line eyedrop" data-eyedrop="#bg-color" title="Pick a color from the drawing" aria-label="Pick the page background color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
           <button class="chip" id="bg-none" aria-pressed="false">Clear</button>
         </div>
       </section>
@@ -732,7 +753,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.16.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.17.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -778,6 +799,7 @@ const ICONS = {
   pen: '<path d="M12 3l6 7-6 11-6-11z"/><circle cx="12" cy="12" r="1.6"/>',
   pencil: '<path d="M15.5 4.5l4 4L9 19l-5 1 1-5z"/><path d="M13.5 6.5l4 4"/>',
   brush: '<path d="M19 4.5a1.6 1.6 0 0 1 0 2.3l-7 7-2.5-2.5 7-7a1.6 1.6 0 0 1 2.5.2z"/><path d="M9.4 12.4c-2.3-.3-4 1.3-4 3.2 0 1.3-.7 2.2-1.9 2.7 3.4 1.5 8 .8 8.2-3.1"/>',
+  eyedropper: '<path d="M15.8 4.7a2.1 2.1 0 0 1 3 0 2.1 2.1 0 0 1 0 3l-1.4 1.4-3-3z"/><path d="M14.4 8.1l1.5 1.5-8.6 8.6-3.1.6.6-3.1z"/>',
   eraser: '<path d="M4.5 14.5l9-9a2 2 0 0 1 2.8 0l3.2 3.2a2 2 0 0 1 0 2.8L12 20H8z"/><path d="M9.5 10l6.2 6.2"/><path d="M12 20h8"/>',
   text: '<path d="M5 6V4h14v2M12 4v16M9 20h6"/>',
   perspective: '<path d="M8.5 5h7l4.5 14H4z"/><path d="M12 5v14" stroke-dasharray="2 2.4" opacity=".55"/>',
@@ -1727,6 +1749,47 @@ function eraseStrokeSVG(o, strokes, w, h) {
   return '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '" viewBox="0 0 ' + rnd(o.w, 3) + ' ' + rnd(o.h, 3) + '" preserveAspectRatio="none">' +
     (defs.length ? '<defs>' + defs.map(nodeToSVG).join('') + '</defs>' : '') + body.join('') + '</svg>';
 }
+/* =====================================================================
+   Eyedropper (the sums behind the color picker's eyedropper)
+   The eyedropper reads colors from a picture of what is on screen: the whole drawing, all layers,
+   blend modes and opacity included, drawn once at the size of the canvas so that one pixel of the
+   picture is one pixel on screen. These are the pure parts: which part of the page to draw, and how
+   to turn the pixels under the pointer into one color. The tool itself is in 09e-eyedropper.js.
+   ===================================================================== */
+const DROP = { maxPixels: 8e6 };   // never draw a bigger picture than this (a huge, high-resolution screen draws it smaller)
+
+// The part of the page the canvas shows, and the size of the picture to draw it at.
+// s: the canvas size on screen { w, h }; v: the view { x, y, z } (page to screen: screen = page * z + x, y).
+// k is how many picture pixels there are per screen pixel (1 unless the picture had to be made smaller).
+function dropRegion(s, v, maxPixels) {
+  const w = Math.max(1, Math.round(s.w)), h = Math.max(1, Math.round(s.h));
+  const k = Math.min(1, Math.sqrt((maxPixels || DROP.maxPixels) / (w * h)));
+  return {
+    box: { x: -v.x / v.z, y: -v.y / v.z, w: s.w / v.z, h: s.h / v.z },
+    W: Math.max(1, Math.round(w * k)), H: Math.max(1, Math.round(h * k)), k
+  };
+}
+// The picture pixel under a point on the canvas (screen pixels from the canvas's top left)
+const dropPixel = (region, sx, sy) => ({
+  x: clamp(Math.floor(sx * region.k), 0, region.W - 1), y: clamp(Math.floor(sy * region.k), 0, region.H - 1)
+});
+// The color at pixel (px, py) of RGBA data, w x h pixels: that pixel (n = 1), or the average of it and
+// its eight neighbours (n = 3; at an edge, the ones that exist). Pixels count in proportion to how
+// opaque they are, so a clear neighbour does not wash the color out. Returns { r, g, b, a }, a from 0 to 1;
+// a is 0 when there is nothing there.
+function dropAverage(data, w, h, px, py, n) {
+  const r = n >= 3 ? 1 : 0;
+  let sr = 0, sg = 0, sb = 0, sa = 0, count = 0;
+  for (let y = Math.max(0, py - r); y <= Math.min(h - 1, py + r); y++) {
+    for (let x = Math.max(0, px - r); x <= Math.min(w - 1, px + r); x++) {
+      const i = (y * w + x) * 4, a = data[i + 3];
+      sr += data[i] * a; sg += data[i + 1] * a; sb += data[i + 2] * a; sa += a; count++;
+    }
+  }
+  if (!count || !sa) return { r: 0, g: 0, b: 0, a: 0 };
+  return { r: Math.round(sr / sa), g: Math.round(sg / sa), b: Math.round(sb / sa), a: sa / (count * 255) };
+}
+const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16).padStart(2, '0')).join('');
 /* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
    ===================================================================== */
@@ -3291,6 +3354,148 @@ DRAGS.brush = { move: p => eraserMove(p), end: d => eraserEnd(d), cancel: d => e
 $('#br-color').value = PB.color; $('#br-alpha').value = Math.round(PB.alpha * 100);
 $('#br-color').addEventListener('input', e => { PB.color = e.target.value; });
 $('#br-alpha').addEventListener('input', e => { PB.alpha = clamp((+e.target.value || 100) / 100, 0.05, 1); });
+/* =====================================================================
+   Eyedropper tool
+   The little dropper next to a color (fill, outline, gradient color, page background, brush) picks a
+   color from the drawing. It is a temporary tool: choose the dropper, click on the canvas, and the
+   color goes into the field it was chosen from and the tool you had comes back. Esc or Cancel
+   backs out. The color is read from a picture of the canvas as it looks on screen (all layers,
+   opacity and blend modes), either from one pixel or as the average of the 3 x 3 pixels around it.
+   The sums are in 04e-eyedrop.js. On a touch screen, drag to refine and lift to pick.
+   ===================================================================== */
+const ED = { n: 1 };                  // 1: the pixel under the pointer; 3: the average of the 3 x 3 around it
+let edTarget = null, edBack = 'select', edReopen = false;   // the field to fill, the tool to return to, whether to bring the panel back
+let edShot = null, edRun = 0, edTimer = null, edJob = null;   // the picture of the canvas, and the one being drawn
+let edAt = null;                      // the pointer: { sx, sy (on the canvas), cx, cy (on the screen) }
+
+const edKey = () => { const s = stageSize(); return [view.x, view.y, view.z, s.w, s.h].map(v => rnd(v, 3)).join(','); };
+const edFresh = () => !!edShot && edShot.key === edKey();
+
+// Draw the canvas's current view as a picture and keep its pixels. The page color goes under everything
+// (inside the SVG, so blend modes mix with it as they do on screen), but only on the page itself.
+function edRender() {
+  clearTimeout(edTimer); edTimer = null;
+  const run = ++edRun, key = edKey(), s = stageSize(), region = dropRegion(s, view);
+  edShot = null;
+  let svg = buildSVG(doc.objects, region.box, region.W, region.H, null);
+  if (doc.bg !== 'transparent') svg = svg.replace(/^<svg[^>]*>/, m => m + '<rect x="0" y="0" width="' + doc.w + '" height="' + doc.h + '" fill="' + esc(doc.bg) + '"/>');
+  edJob = loadImage(svgDataUrl(svg)).then(img => {
+    if (run !== edRun) return;
+    const cv = document.createElement('canvas'); cv.width = region.W; cv.height = region.H;
+    try {
+      const ctx = cv.getContext('2d', { willReadFrequently: true });
+      ctx.drawImage(img, 0, 0, region.W, region.H);
+      edShot = { key, region, W: region.W, H: region.H, data: ctx.getImageData(0, 0, region.W, region.H).data };
+    } finally { cv.width = cv.height = 0; }
+  }).catch(() => {
+    if (run !== edRun) return;
+    toast('The colors could not be read from the drawing. Try zooming out or using a smaller photo.');
+    edFinish(null);
+  }).then(() => { if (run === edRun) { edTip(); drawOverlay(); } });
+  return edJob;
+}
+// The picture is out of date when the view has changed: draw it again once the view settles
+function edWatch() { if (!edFresh() && !edTimer) { edShot = null; edTimer = setTimeout(edRender, 150); } }
+async function edReady() { if (!edFresh()) await edRender(); else if (edJob) await edJob; return edFresh(); }
+
+// The color under a point of the canvas, or null (no picture yet, or nothing there)
+function edSample(a) {
+  if (!a || !edFresh()) return null;
+  const p = dropPixel(edShot.region, a.sx, a.sy);
+  const c = dropAverage(edShot.data, edShot.W, edShot.H, p.x, p.y, ED.n);
+  return c.a > 0 ? c : null;
+}
+function edPoint(e) { const r = stage.getBoundingClientRect(); return { sx: e.clientX - r.left, sy: e.clientY - r.top, cx: e.clientX, cy: e.clientY }; }
+
+/* ---------- what is shown ---------- */
+// The swatch that follows the pointer
+function edTip() {
+  const tip = $('#drop-tip');
+  if (S.tool !== 'eyedropper' || !edAt) { tip.hidden = true; return; }
+  const c = edSample(edAt);
+  tip.hidden = false;
+  tip.querySelector('i').style.background = c ? dropHex(c) : 'transparent';
+  tip.querySelector('b').textContent = c ? dropHex(c) : edFresh() ? 'Nothing here' : '…';
+  const w = tip.offsetWidth, r = stage.getBoundingClientRect();
+  tip.style.left = Math.round(Math.min(edAt.cx + 18, r.right - w - 6)) + 'px';
+  tip.style.top = Math.round(edAt.cy + 18 > r.bottom - 40 ? edAt.cy - 44 : edAt.cy + 18) + 'px';
+}
+// The pixels being read, outlined on the canvas
+function edOverlay() {
+  $('#drop-hint').textContent = ED.n === 3 ? 'Click to pick the average color of the 3 × 3 pixels there.' : 'Click to pick the color of the pixel there.';
+  edWatch();
+  if (edAt) {
+    const k = edShot ? edShot.region.k : 1, p = edShot ? dropPixel(edShot.region, edAt.sx, edAt.sy) : { x: Math.floor(edAt.sx), y: Math.floor(edAt.sy) };
+    const x0 = (p.x / k - (ED.n === 3 ? 1 : 0) - view.x) / view.z, y0 = (p.y / k - (ED.n === 3 ? 1 : 0) - view.y) / view.z, s = ED.n / view.z;
+    const at = { x: x0, y: y0, width: s, height: s };
+    ov.appendChild(svgEl('rect', Object.assign({ class: 'er-ring-a' }, at)));
+    ov.appendChild(svgEl('rect', Object.assign({ class: 'er-ring-b' }, at)));
+  }
+  return true;   // no selection handles while picking
+}
+function edMode(n) {
+  ED.n = n;
+  $('#drop-1').setAttribute('aria-pressed', String(n === 1)); $('#drop-3').setAttribute('aria-pressed', String(n === 3));
+  edTip(); drawOverlay();
+}
+
+/* ---------- picking ---------- */
+// Leave the tool; if there is a color, put it in the field the dropper was chosen from
+function edFinish(hex) {
+  const field = edTarget, back = edBack, reopen = edReopen;
+  setTool(TOOLS[back] && back !== 'eyedropper' ? back : 'select');
+  if (reopen) openPanel();
+  if (!hex || !field) return;
+  const el = $(field);
+  if (!el) return;
+  el.value = hex;   // the same events a person's own choice sends, so the field behaves just as it does then
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  toast('Picked ' + hex + '.');
+}
+async function edPick(e) {
+  const a = edPoint(e);
+  if (!(await edReady()) || S.tool !== 'eyedropper') return;
+  const c = edSample(a);
+  if (!c) { toast('There is no color there. Click on something in the drawing.'); return; }
+  edFinish(dropHex(c));
+}
+function startEyedropper(field) {
+  if (S.tool === 'eyedropper') { if (edTarget === field) edFinish(null); else edTarget = field; return; }
+  edBack = S.tool; edTarget = field;
+  edReopen = matchMedia('(max-width: 820px)').matches && $('#panel').classList.contains('open');   // on a small screen the panel covers the canvas
+  if (edReopen) { $('#panel').classList.remove('open'); $('#btn-panel').setAttribute('aria-pressed', 'false'); }
+  setTool('eyedropper');
+}
+
+TOOLS.eyedropper = {
+  cursor: 'draw',   // no shortcut key: it is started from a color, and returns to the tool you were using
+  down(e) { drag = { type: 'eyedrop' }; edAt = edPoint(e); edTip(); drawOverlay(); },
+  hover(e) { edAt = edPoint(e); edTip(); drawOverlay(); },
+  overlay: edOverlay,
+  keys(e) {
+    if (e.key === 'Escape') { e.preventDefault(); edFinish(null); return true; }
+    if (e.key === '1' || e.key === '3') { edMode(+e.key); return true; }
+    return e.ctrlKey || e.metaKey;   // undo and the like would change what is being read
+  },
+  enter() { $('#drop-bar').hidden = false; edMode(ED.n); edAt = null; edRender(); },
+  leave() {
+    $('#drop-bar').hidden = true; $('#drop-tip').hidden = true;
+    edRun++; clearTimeout(edTimer); edTimer = null; edShot = null; edAt = null; edTarget = null;   // a picture still being drawn is dropped
+  }
+};
+DRAGS.eyedrop = {
+  move(p, e) { edAt = edPoint(e); edTip(); drawOverlay(); },
+  end(d, e) { if (e && e.type === 'pointercancel') { drawOverlay(); return; } edPick(e); },
+  cancel() { /* a second finger: the pick is abandoned and the pinch goes on */ }
+};
+stage.addEventListener('pointerleave', () => { if (S.tool === 'eyedropper' && !drag) { edAt = null; edTip(); drawOverlay(); } });
+
+/* ---------- controls ---------- */
+$$('[data-eyedrop]').forEach(b => b.addEventListener('click', () => startEyedropper(b.dataset.eyedrop)));
+$('#drop-1').addEventListener('click', () => edMode(1));
+$('#drop-3').addEventListener('click', () => edMode(3));
+$('#drop-cancel').addEventListener('click', () => edFinish(null));
 /* =====================================================================
    Perspective
    Tilts the selection as if it were seen from an angle. The selection's bounding box is

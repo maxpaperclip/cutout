@@ -105,9 +105,19 @@
       <label class="er-f">Soft <input type="range" id="er-soft" min="0" max="100" aria-label="Softness"></label>
       <label class="er-f br-only" hidden>Opacity <input type="range" id="br-alpha" min="5" max="100" aria-label="Brush opacity"></label>
       <input type="color" class="br-only" id="br-color" aria-label="Brush color" hidden>
+      <button class="btn icon line eyedrop br-only" data-eyedrop="#br-color" title="Pick a color from the drawing" aria-label="Pick the brush color from the drawing" hidden><span class="ico" data-icon="eyedropper"></span></button>
       <button class="chip er-only" id="er-restore" aria-pressed="false" title="Paint the photo back in instead of erasing it (or hold Alt)">Restore</button>
       <button class="btn primary" id="erase-done">Done</button>
     </div>
+    <div id="drop-bar" role="group" aria-label="Eyedropper" hidden>
+      <span id="drop-hint"></span>
+      <div class="seg txt" role="group" aria-label="Sample size">
+        <button id="drop-1" aria-pressed="true" title="The one pixel under the pointer (1)">Pixel</button>
+        <button id="drop-3" aria-pressed="false" title="The average of the 3 × 3 pixels around the pointer (3)">3 × 3</button>
+      </div>
+      <button class="btn" id="drop-cancel">Cancel</button>
+    </div>
+    <div id="drop-tip" hidden><i></i><b></b></div>
     <div id="persp-bar" role="group" aria-label="Perspective" hidden>
       <span id="persp-hint"></span>
       <button class="btn line" id="persp-reset" title="Put the selection back the way it was">Reset</button>
@@ -226,6 +236,7 @@
           <span class="lbl">Color</span>
           <input type="color" id="fill-color" aria-label="Fill color">
           <input type="text" class="hex" id="fill-hex" maxlength="7" spellcheck="false" aria-label="Fill hex code">
+          <button class="btn icon line eyedrop" data-eyedrop="#fill-color" title="Pick a color from the drawing" aria-label="Pick the fill color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
           <button class="chip" id="fill-none" aria-pressed="false">None</button>
         </div>
         <div id="grad-controls" hidden>
@@ -239,7 +250,8 @@
             <span class="lbl">Color</span>
             <input type="color" id="gs-color" aria-label="Selected gradient color">
             <input type="text" class="hex" id="gs-hex" maxlength="7" spellcheck="false" aria-label="Selected gradient color hex code">
-            <button class="chip" id="gs-remove" title="Remove the selected color (Delete)">Remove</button>
+            <button class="btn icon line eyedrop" data-eyedrop="#gs-color" title="Pick a color from the drawing" aria-label="Pick the gradient color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
+          <button class="chip" id="gs-remove" title="Remove the selected color (Delete)">Remove</button>
           </div>
           <div class="row">
             <span class="lbl">Opacity</span>
@@ -258,6 +270,7 @@
           <span class="lbl">Outline</span>
           <input type="color" id="stroke-color" aria-label="Outline color">
           <input type="text" class="hex" id="stroke-hex" maxlength="7" spellcheck="false" aria-label="Outline hex code">
+          <button class="btn icon line eyedrop" data-eyedrop="#stroke-color" title="Pick a color from the drawing" aria-label="Pick the outline color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
           <button class="chip" id="stroke-none" aria-pressed="false">None</button>
         </div>
         <div class="row" id="row-weight">
@@ -341,6 +354,7 @@
         <div class="row">
           <input type="color" id="bg-color" aria-label="Page background color">
           <input type="text" class="hex" id="bg-hex" maxlength="7" spellcheck="false" aria-label="Page background hex code">
+          <button class="btn icon line eyedrop" data-eyedrop="#bg-color" title="Pick a color from the drawing" aria-label="Pick the page background color from the drawing"><span class="ico" data-icon="eyedropper"></span></button>
           <button class="chip" id="bg-none" aria-pressed="false">Clear</button>
         </div>
       </section>

@@ -24,6 +24,7 @@ src/
     04b-groups.js       Groups (folders in Layers): kept beside the flat object list
     04c-path-edit.js    Path geometry shared by the Pen tool and point editing
     04d-erase.js        Erase masks: how an erased object is described and drawn (no DOM, unit tested)
+    04e-eyedrop.js      Eyedropper sums: which part of the page to draw, and the average color of 1 or 3 x 3 pixels (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     07-history-autosave.js  Undo/redo + IndexedDB persistence
@@ -32,6 +33,7 @@ src/
     09b-pen.js          Pen tool and point editing (pointer and keyboard handling)
     09c-eraser.js       Eraser tool: pointer handling, the brush bar, and baking strokes into a mask or layer picture
     09d-brush.js        Brush tool and paint layers (shares its strokes, bar and baking with the Eraser)
+    09e-eyedropper.js   Eyedropper: a temporary tool started from a color field, reads the whole drawing as it looks on screen
     10-perspective.js
     11-editing-commands.js
     12-ui-chrome.js
@@ -200,3 +202,21 @@ page, whose picture each stroke repaints. It reuses everything the Eraser does:
   one in the Layers tab, or just keep painting (the brush reuses the selected paint layer, or the one on top when
   nothing is selected).
 - Their pictures are stored and saved like photos but don't count toward `LIMITS.photos` (`docPhotoIds`).
+
+## How the eyedropper works
+
+The small dropper beside each color (Fill, Outline, gradient color, page Background, and the Brush bar) starts
+`TOOLS.eyedropper` (`09e-eyedropper.js`). It has no shortcut key and no toolbar button; it remembers the tool
+you were using, and goes back to it after a pick, Esc or Cancel.
+
+- The color is read from a picture of what is on screen, so it includes every layer, opacity, blend modes, photos
+  and paint layers, and ignores hidden objects. `edRender` draws `buildSVG(doc.objects, ...)` (plus the page color,
+  under everything and only on the page) at the size of the canvas, so one picture pixel is one screen pixel at the
+  current zoom, and keeps the pixels with `getImageData`. `04e-eyedrop.js` has the pure parts: `dropRegion`
+  (which part of the page, and the picture size, capped at `DROP.maxPixels`), `dropPixel`, and `dropAverage`
+  (one pixel, or the 3 x 3 around it; pixels are weighted by opacity, so clear ones don't wash the color out).
+- The picture is drawn again (after a short wait) when the view changes, and a pick waits for a fresh one, so
+  zooming or panning while the tool is active is fine. Undo and redo are blocked while it is active.
+- A pick fills the field the dropper was started from by setting its value and sending the same `input` and
+  `change` events a person's own choice sends, so each field's existing code applies it and records one undo step.
+- A spot with nothing there (outside the page, or an empty page with no color) picks nothing and keeps the tool.

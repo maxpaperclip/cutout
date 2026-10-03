@@ -36,6 +36,7 @@ const MODULE_FILES = [
   '04b-groups.js',
   '04c-path-edit.js',
   '04d-erase.js',
+  '04e-eyedrop.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '17-projects.js',
@@ -67,6 +68,8 @@ const EXPORT_NAMES = [
   'STYLE_KEYS', 'KIND_PARAMS', 'copyKeys', 'toPlainPath', 'makeImage',
   'lineEnds', 'isStraightLine', 'lineGeometry', 'makeLine', 'setLineEnds',
   'KIND_INFO', 'kindInfo', 'hasPixels', 'hasPaint', 'keepsRatio',
+  // 04e-eyedrop.js
+  'DROP', 'dropRegion', 'dropPixel', 'dropAverage', 'dropHex',
   // 04d-erase.js
   'ERASE', 'eraseLive', 'eraseBusy', 'canErase', 'eraseView', 'eraseStrokeParts', 'eraseStrokeSVG',
   'erasePathStart', 'erasePathMore', 'eraseSigma', 'strokeBegin', 'strokeAdd', 'strokeEnd',
