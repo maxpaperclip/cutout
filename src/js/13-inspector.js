@@ -16,6 +16,8 @@ function updateInspector() {
   show('#sec-text', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
   show('#sec-app', n > 0);
+  show('#sec-erase', !!o && canErase(o));
+  $('#btn-erase-reset').disabled = !(o && o.erase);
   const nPhotoSel = sel.filter(hasPixels).length;
   show('#sec-mask', nPhotoSel > 0 || (!!o && hasPic(o)) || (n > 0 && doc.objects.some(hasPixels)));
   show('#sec-combine', !(n === 1 && nPhotoSel === 1));

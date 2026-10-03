@@ -23,12 +23,14 @@ src/
     04-document-model.js
     04b-groups.js       Groups (folders in Layers): kept beside the flat object list
     04c-path-edit.js    Path geometry shared by the Pen tool and point editing
+    04d-erase.js        Erase masks: how an erased object is described and drawn (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     07-history-autosave.js  Undo/redo + IndexedDB persistence
     08-rendering.js
     09-pointer-interaction.js
     09b-pen.js          Pen tool and point editing (pointer and keyboard handling)
+    09c-eraser.js       Eraser tool: pointer handling, the brush bar, and baking strokes into a mask picture
     10-perspective.js
     11-editing-commands.js
     12-ui-chrome.js
@@ -117,7 +119,8 @@ TOOLS.brush = {
   overlay() { return false; },            // draw over the canvas; true hides the selection handles
   enter() {}, leave() {}                  // when chosen, and when another tool is
 };
-DRAGS.brush = { move(p, e) {}, end(d, e) { commit(); }, overlay() { return true; } };
+DRAGS.brush = { move(p, e) {}, end(d, e) { commit(); }, overlay() { return true; },
+                cancel(d) {} };           // optional: a second finger arrived, so the drag is abandoned
 ```
 
 Add the file to `src/js/manifest.json` after `09-pointer-interaction.js`, and a
@@ -160,3 +163,19 @@ it can't click buttons or draw shapes — it only proves the build still
 produces valid, reproducible output and that nobody forgot to re-run the
 release step. The manual browser pass in step 2 above is still what catches
 actual behavior bugs.
+
+## How erasing works
+
+The Eraser never changes a photo. An erased object carries `o.erase`, the id of a small picture in the
+`images` map (flagged `mask: true`) that sits over the object's box: white shows the object, black hides it,
+grays fade it. `objView` draws the object through that picture as an SVG `<mask>`, so the canvas, SVG export
+and PNG/JPG/WebP export all share one description (`04d-erase.js`).
+
+- While a stroke is drawn it is a vector path inside the mask (`eraseLive`), so the preview is exactly what
+  gets saved. On release, `09c-eraser.js` renders the same SVG over the old mask into a canvas, encodes a new
+  PNG, points `o.erase` at it and records one undo step. Old mask pictures stay until the history drops them,
+  so Undo is just the drawing's JSON stepping back.
+- Mask pictures are stored, saved in project files and cleaned up like photos, but they don't count toward
+  `LIMITS.photos` (`docPhotoIds`).
+- Not supported yet, with a message instead: tilting an erased photo (Perspective) and using one as a photo
+  mask. Both would need to bake the erasing into the photo's pixels first.

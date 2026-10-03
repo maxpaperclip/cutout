@@ -352,7 +352,7 @@ async function importSVGFile(file) {
   for (let i = 0; i < res.pictures.length; i++) {
     const p = res.pictures[i], info = pictures[p.n], b = boxes[i];
     if (!info) continue;
-    if (docImageIds(doc).size >= LIMITS.photos) { photoProblem = 'Some pictures in the file were left out because this drawing has the most photos it can hold.'; break; }
+    if (docPhotoIds(doc).size >= LIMITS.photos) { photoProblem = 'Some pictures in the file were left out because this drawing has the most photos it can hold.'; break; }
     let rec;
     try {
       const raw = svgPictureBlob(info.href);   // decoded here; nothing is fetched

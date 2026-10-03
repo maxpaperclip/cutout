@@ -151,9 +151,17 @@ input:disabled,select:disabled{opacity:.45}
 #empty .btns{display:flex;gap:8px;flex-wrap:wrap}
 
 #busy{position:fixed;inset:0;z-index:90;cursor:progress}
-#persp-bar,#path-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
-#persp-bar span,#path-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
-#persp-bar .btn,#path-bar .btn{flex:none}
+#persp-bar,#path-bar,#erase-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
+#persp-bar span,#path-bar span,#erase-bar span{flex:1;min-width:0;color:var(--ink-2);line-height:1.3}
+#persp-bar .btn,#path-bar .btn,#erase-bar .btn{flex:none}
+/* Eraser: the hint takes the first line, the controls sit under it */
+#erase-bar{flex-wrap:wrap;max-width:min(94%,600px);padding-bottom:8px}
+#erase-bar #erase-hint{flex:1 1 100%}
+.er-f{display:flex;align-items:center;gap:6px;color:var(--ink-2);flex:1 1 130px}
+.er-f input[type=range]{min-width:60px}
+.er-f output{width:28px;text-align:right;font-variant-numeric:tabular-nums}
+.er-ring-a{fill:none;stroke:#000;stroke-opacity:.55;stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
+.er-ring-b{fill:none;stroke:#fff;stroke-width:1.25;vector-effect:non-scaling-stroke;pointer-events:none}
 /* Pen and point editing */
 .pe-hit{fill:none;stroke:transparent;pointer-events:stroke;cursor:copy}
 .handle.pe-pt{cursor:move}

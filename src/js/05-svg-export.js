@@ -103,7 +103,7 @@ function ser(tag, attrs) { return serOpen(tag, attrs).slice(0, -1) + '/>'; }
    { tag, a: attributes, kids: [nodes] }, plus the definitions it needs (gradient, photo clip).
    The canvas turns that into live elements (patchKids, in 08-rendering.js); export turns it into
    SVG text (nodeToSVG). So there is one place that decides how an object looks.
-   ids: the ids to give its definitions, { grad, clip } (the canvas and export number them differently).
+   ids: the ids to give its definitions, { grad, clip, mask } (the canvas and export number them differently).
    ===================================================================== */
 function gradView(o, id) {
   const g = gradSpec(o);
@@ -114,6 +114,8 @@ function objView(o, ids) {
   if (gid) defs.push(gradView(o, gid));
   const blend = blendOf(o);   // the whole object (fill, photo and outline) blends as one
   const node = { tag: 'g', a: { style: blend ? 'mix-blend-mode:' + blend : null }, kids: [] };
+  const er = eraseView(o, ids.mask || 'em' + o.id);   // erased parts hide the whole object, outline included (see 04d-erase.js)
+  if (er) { defs.push(...er.defs); node.a.mask = 'url(#' + er.id + ')'; }
   if (hasPic(o)) {
     // photo fill: the fill underneath (unless the photo covers it), the photo clipped to the shape, the outline on top
     const pg = picGeom(o), sa = strokeAttrs(o);
@@ -138,15 +140,15 @@ function nodeToSVG(n) {
 }
 // The gradient as SVG markup, wrapped in <defs>
 const gradToSVG = (o, id) => '<defs>' + nodeToSVG(gradView(o, id)) + '</defs>';
-function objToSVG(o, clipId, gradId) {
-  const v = objView(o, { clip: clipId || ('pc' + o.id), grad: gradId || ('gr' + o.id) });
+function objToSVG(o, clipId, gradId, maskId) {
+  const v = objView(o, { clip: clipId || ('pc' + o.id), grad: gradId || ('gr' + o.id), mask: maskId || ('em' + o.id) });
   return (v.defs.length ? '<defs>' + v.defs.map(nodeToSVG).join('') + '</defs>' : '') + nodeToSVG(v.node);
 }
 function buildSVG(objs, box, outW, outH, bg) {
   const parts = ['<svg xmlns="http://www.w3.org/2000/svg" width="' + rnd(outW, 2) + '" height="' + rnd(outH, 2) + '" viewBox="' + rnd(box.x, 3) + ' ' + rnd(box.y, 3) + ' ' + rnd(box.w, 3) + ' ' + rnd(box.h, 3) + '">'];
   if (bg) parts.push('<rect x="' + rnd(box.x, 3) + '" y="' + rnd(box.y, 3) + '" width="' + rnd(box.w, 3) + '" height="' + rnd(box.h, 3) + '" fill="' + esc(bg) + '"/>');
   let n = 0;
-  objs.forEach(o => { if (!isHidden(o)) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n)); } });   // hidden, or inside a hidden group
+  objs.forEach(o => { if (!isHidden(o)) { ++n; parts.push(objToSVG(o, 'pc' + n, 'gr' + n, 'em' + n)); } });   // hidden, or inside a hidden group
   parts.push('</svg>');
   return parts.join('');
 }

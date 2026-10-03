@@ -31,6 +31,7 @@ function sanitizeDoc(d) {
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
     if (hasPaint(o) && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
+    if (typeof r.erase === 'string' && r.erase) { if (images.has(r.erase)) o.erase = r.erase; else missingPhoto = true; }   // see 04d-erase.js
     if (hasPixels(o)) {
       o.img = typeof r.img === 'string' ? r.img : '';
       if (!images.has(o.img)) { missingPhoto = true; return; }
@@ -66,7 +67,7 @@ function sanitizeDoc(d) {
 async function saveProject() {
   closeMenus();
   const pics = {};
-  docImageIds(doc).forEach(id => { const r = images.get(id); if (r) pics[id] = { name: r.name, w: r.w, h: r.h, mime: r.mime, data: r.dataUrl }; });
+  docImageIds(doc).forEach(id => { const r = images.get(id); if (r) pics[id] = { name: r.name, w: r.w, h: r.h, mime: r.mime, data: r.dataUrl, mask: r.mask ? true : undefined }; });
   const blob = new Blob(['{"app":"cutout","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
   try { const r = await saveFile(safeName(X.name) + '.cutout.json', blob); if (r === 'saved') toast('Project saved.'); }
   catch (err) { toast(err.message || 'The project could not be saved.'); }
@@ -81,7 +82,7 @@ function dataUrlToBlob(url) {
   } catch (e) { return null; }
 }
 // Accept a photo from a project file only if it is a genuine, reasonably sized picture
-async function adoptProjectPhoto(r) {
+async function adoptProjectPhoto(r, mask) {
   if (!r || typeof r.data !== 'string' || r.data.length > LIMITS.fileBytes * 1.4) return null;
   const blob = dataUrlToBlob(r.data);
   if (!blob || blob.size > LIMITS.fileBytes) return null;
@@ -89,7 +90,7 @@ async function adoptProjectPhoto(r) {
   try { img = await loadPicture(r.data); } catch (e) { return null; }
   const w = img.naturalWidth, h = img.naturalHeight;
   if (!w || !h || w * h > LIMITS.srcPixels) return null;
-  return { id: uid(), blob, dataUrl: r.data, w, h, mime: blob.type, bytes: blob.size, name: baseName(r.name), stored: false };
+  return { id: uid(), blob, dataUrl: r.data, w, h, mime: blob.type, bytes: blob.size, name: mask ? 'Erased areas' : baseName(r.name), stored: false, mask: !!mask };
 }
 async function openProject(file) {
   try {
@@ -97,15 +98,19 @@ async function openProject(file) {
     const raw = data && data.doc ? data.doc : data, pics = data && data.images && typeof data.images === 'object' ? data.images : {};
     const map = new Map();
     let dropped = 0;
+    const maskIds = rawEraseIds(raw);   // erase masks come along with their photos and don't count against the photo limit
+    let nPhotos = 0;
     for (const id of rawImageIds(raw)) {
-      const rec = map.size < LIMITS.photos ? await adoptProjectPhoto(pics[id]) : null;
-      if (rec) map.set(id, rec); else dropped++;
+      const isMask = maskIds.has(id);
+      const rec = isMask || nPhotos < LIMITS.photos ? await adoptProjectPhoto(pics[id], isMask) : null;
+      if (rec) { map.set(id, rec); if (!isMask) nPhotos++; } else dropped++;
     }
     // point the drawing at the freshly registered photo ids
     (Array.isArray(raw.objects) ? raw.objects : []).forEach(o => {
       if (!o) return;
       if (typeof o.img === 'string') o.img = map.has(o.img) ? map.get(o.img).id : '';
       if (o.pic && typeof o.pic.id === 'string') o.pic.id = map.has(o.pic.id) ? map.get(o.pic.id).id : '';
+      if (typeof o.erase === 'string') o.erase = map.has(o.erase) ? map.get(o.erase).id : '';
     });
     map.forEach(rec => images.set(rec.id, rec));
     const d = sanitizeDoc(raw);

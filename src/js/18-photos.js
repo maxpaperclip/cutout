@@ -65,7 +65,7 @@ async function importFiles(list) {
         catch (err) { problems.push(err.message); }
         continue;
       }
-      if (docImageIds(doc).size >= LIMITS.photos) { problems.push('This drawing already has the most photos it can hold (' + LIMITS.photos + '). Delete one to add another.'); break; }
+      if (docPhotoIds(doc).size >= LIMITS.photos) { problems.push('This drawing already has the most photos it can hold (' + LIMITS.photos + '). Delete one to add another.'); break; }
       let rec;
       try { rec = await processPhoto(f); } catch (err) { problems.push(err.message); continue; }
       images.set(rec.id, rec);
@@ -86,7 +86,7 @@ async function importFiles(list) {
 }
 async function updatePhotoInfo() {
   const el = $('#photo-info'); if (!el) return;
-  const ids = docImageIds(doc); let bytes = 0;
+  const ids = docPhotoIds(doc); let bytes = 0;
   ids.forEach(id => { const r = images.get(id); if (r) bytes += r.bytes; });
   let t = 'Photos in this drawing: ' + ids.size + ' of ' + LIMITS.photos + (ids.size ? ' (' + fmtMB(bytes) + ' MB)' : '') + '. Files up to ' + fmtMB(LIMITS.fileBytes) + ' MB are accepted, shrunk to fit ' + LIMITS.edge + ' pixels, and stripped of location data. ';
   t += DB.ok ? 'Autosave keeps your work on this device.' : 'Autosave cannot store photos in this browser, so use File > Save project to keep them.';

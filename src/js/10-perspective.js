@@ -192,6 +192,7 @@ function perspEligible() {
   if (sel.some(isLocked)) return { why: 'Unlock the selected objects first.' };
   if (sel.some(o => hasPixels(o) && !images.has(o.img))) return { why: 'That photo is not available any more.' };
   if (sel.some(o => hasPic(o) && !picCovers(o) && o.fill && o.fill !== 'none')) return { why: 'The photo has to fill the shape before it can be tilted. Choose Fit photo first.' };
+  if (sel.some(o => o.erase)) return { why: 'Photos with erased parts can\u2019t be tilted yet. Choose Restore all in the Eraser section first.' };
   if (sel.some(hasGrad)) return { why: 'Shapes with a gradient fill can\u2019t be tilted yet. Change the fill to Solid first.' };
   return { objs: sel };
 }
