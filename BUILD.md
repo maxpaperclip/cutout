@@ -13,13 +13,14 @@ src/
   styles.css          All CSS, extracted as-is from the old <style> block
   fonts/
     manifest.json     Maps font keys (e.g. "inter-xb") to their .woff file
-    *.woff            The actual embedded fonts, as real binary files
+    *.woff            The actual embedded fonts, as real binary files (Latin subsets, except noto-sans-sc)
+    licenses/         Each font's license text; CREDITS.md is the table of fonts and licenses
   js/
     manifest.json     Load order for the files below (order matters — see note)
     00-preamble.js     Library check + paper.js setup
     01-helpers.js       $ / $$ / small DOM helpers
     02-icons.js
-    03-fonts-runtime.js Parses FONT_DATA into usable fonts (opentype.js)
+    03-fonts-runtime.js The font list (key, label, category), fonts parsed on first use (opentype.js), browser font loading
     04-document-model.js
     04b-groups.js       Groups (folders in Layers): kept beside the flat object list
     04c-path-edit.js    Path geometry shared by the Pen tool and point editing
@@ -39,6 +40,7 @@ src/
     11-editing-commands.js
     12-ui-chrome.js
     13-inspector.js
+    13b-font-picker.js  The categorized font picker, and fonts added from the computer ("Yours")
     14-layers-tab.js
     15-page-tab.js
     16-export.js
@@ -49,6 +51,8 @@ src/
     20-boot.js
 build.js              The build script (plain Node, no required dependencies)
 scripts/copy-to-root.js   Copies a finished build to the repo root for release
+scripts/fetch-fonts.js    Downloads the library's Latin fonts and licenses from Fontsource (npm)
+scripts/subset-cjk.py     Cuts Noto Sans SC down to the common Chinese characters (needs fonttools)
 dist/                  Build output (gitignored by default — see below)
 ```
 
@@ -91,15 +95,27 @@ warning (not an error) and falls back to unminified output if it isn't.
 
 ## Adding or changing a font
 
-1. Drop the `.woff` file in `src/fonts/`.
-2. Add a line to `src/fonts/manifest.json` mapping a short key to it, e.g.
-   `"comic-neue": "fonts/comic-neue.woff"`.
-3. Add the key to `FONT_DEFS` near the top of `src/js/03-fonts-runtime.js`
-   so it shows up in the font picker: `['comic-neue', 'Comic Neue'],`.
-4. `npm run build` and check it in the exported preview.
+A font's **key** is saved inside every drawing that uses it, so never rename or remove one.
 
-You do not need to touch `build.js` — it reads the manifest and embeds
-whatever's listed.
+1. Latin fonts from Google Fonts: add a line `['key', 'fontsource-package', 400]` to `NEW_FONTS` in
+   `scripts/fetch-fonts.js` and run `node scripts/fetch-fonts.js` (needs internet). It downloads the Latin subset
+   (`src/fonts/<key>.woff`), the license text (`src/fonts/licenses/<key>.txt`), and rewrites `manifest.json` and
+   `CREDITS.md`. A font from elsewhere: drop the `.woff` in `src/fonts/` yourself (not `.woff2`, which opentype.js
+   can't read), add its license to `licenses/`, and add `"key": "fonts/key.woff"` to `src/fonts/manifest.json`
+   and a row to `CREDITS.md`.
+2. Add `['key', 'Label', 'category']` to `FONT_DEFS` in `src/js/03-fonts-runtime.js`. Categories are `sans`,
+   `serif`, `script`, `display`, `decorative` and `international`; the picker lists fonts in this order within
+   each category. If the font's name is a poor sample of it (a Chinese font), add a line to `FONT_SAMPLES`.
+3. `npm test` (it checks that the list, the manifest, the files and the licenses all agree), then `npm run build`
+   and try the font in the picker.
+
+Each weight is its own font (there is no faux bold), so add a second entry only for a weight that is really needed.
+Size matters because every font is embedded in the one HTML file: Latin fonts are about 15 to 65 KB; the Chinese
+font is 0.8 MB, which is why only one is included (`python3 scripts/subset-cjk.py` makes it).
+
+Fonts are parsed the first time they are used, not at start-up. Fonts a person adds from their computer ("Yours")
+are kept in this browser's IndexedDB (`meta` store, key `font:...`) and loaded before the drawing is restored
+(`loadUserFonts`, called from `restoreSession`).
 
 ## Editing a section of the app
 

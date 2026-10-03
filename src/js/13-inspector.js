@@ -58,7 +58,10 @@ function updateInspector() {
     if (o.kind === 'rect') setNum(F.r, o.r || 0);
     if (o.kind === 'text') {
       const ta = $('#tx-text'); if (document.activeElement !== ta && ta.value !== o.text) ta.value = o.text;
-      $('#tx-font').value = fonts[o.font] ? o.font : DEFAULT_FONT;
+      fpSetValue(fonts[o.font] ? o.font : DEFAULT_FONT);
+      const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
+      mh.hidden = !miss.length;
+      if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
       setNum($('#tx-size'), o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
     }
@@ -157,27 +160,19 @@ const txArea = $('#tx-text');
 txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; o.text = txArea.value; refresh(o); render(); renderLayers(); });
 txArea.addEventListener('change', () => commit());
 txArea.addEventListener('keydown', e => { if (e.key === 'Escape') txArea.blur(); });
-$('#tx-font').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; o.font = e.target.value; refresh(o); commit(); });
 onNum($('#tx-size'), (o, v) => { if (o.kind === 'text') o.size = clamp(v, 4, 1200); }, true);
 onNum($('#tx-lh'), (o, v) => { if (o.kind === 'text') o.lh = clamp(v, 0.6, 3); });
 onNum($('#tx-ls'), (o, v) => { if (o.kind === 'text') o.ls = clamp(v, -20, 200) / 100; });
 $$('[data-align]').forEach(b => b.addEventListener('click', () => { const o = one(); if (!o || o.kind !== 'text') return; o.align = b.dataset.align; refresh(o); commit(); }));
-function fillFontSelect() {
-  const sel = $('#tx-font'); sel.textContent = '';
-  Object.keys(fonts).forEach(k => { const op = elt('option', '', fonts[k].label); op.value = k; sel.appendChild(op); });
-}
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
   try {
-    const font = opentype.parse(await f.arrayBuffer());
-    const fam = (font.names && font.names.fontFamily && (font.names.fontFamily.en || Object.values(font.names.fontFamily)[0])) || f.name.replace(/\.[^.]+$/, '');
-    const key = 'user:' + fam + ':' + Date.now();
-    fonts[key] = { label: fam + ' (yours)', font };
-    fillFontSelect();
+    const r = await addUserFont(f);
     const o = one();
-    if (o && o.kind === 'text') { o.font = key; refresh(o); commit(); }
-    toast('Added \u201c' + fam + '\u201d.');
+    if (o && o.kind === 'text') { o.font = r.key; refresh(o); commit(); }
+    FP.cat = 'user'; if (fpIsOpen()) { fpTabsRender(); fpRender(); }
+    toast('Added \u201c' + r.fam + '\u201d.' + (r.kept ? '' : ' It could not be kept for next time.'));
   } catch (err) {
     toast('That font file could not be read. Use a .ttf, .otf or .woff file (not .woff2).');
   }

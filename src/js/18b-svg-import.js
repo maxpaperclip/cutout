@@ -160,9 +160,13 @@ function svgScaleOutlines(svg) {
   })(svg, rootScale, 1, false);
 }
 
-// The Cutout font closest to an SVG font: serif, monospace or sans serif, regular or bold
+// The Cutout font closest to an SVG font: the same name if we have it, else serif, monospace or sans serif, regular or bold
 function svgFontFor(family, weight) {
   const f = String(family || '').toLowerCase(), bold = /bold|[6-9]00/.test(String(weight || ''));
+  if (typeof fonts !== 'undefined') {   // a font we have under that very name (the first one listed), in its bold form where there is one
+    const first = f.split(',')[0].replace(/["']/g, '').trim(), hit = Object.keys(fonts).find(k => fonts[k].category !== 'user' && fonts[k].label.toLowerCase() === first);
+    if (hit) return bold && hit === 'inter' ? 'inter-xb' : bold && hit === 'lora' ? 'lora-b' : hit;
+  }
   const key = /mono|courier|consol/.test(f) ? 'mono' : /serif/.test(f) && !/sans/.test(f) || /times|georgia|garamond/.test(f) ? (bold ? 'lora-b' : 'lora') : (bold ? 'inter-xb' : 'inter');
   return typeof fonts !== 'undefined' && fonts[key] ? key : DEFAULT_FONT;
 }

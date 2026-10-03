@@ -141,6 +141,7 @@ async function registerStored(r) {
 // Open the database and bring back the last drawing with its photos
 async function restoreSession() {
   DB.db = await idbOpen(); DB.ok = !!DB.db;
+  await loadUserFonts();   // before the drawing is read, so text in a font added earlier keeps it (see 13b-font-picker.js)
   let raw = null;
   if (DB.ok) { try { const m = await idbGet('meta', 'doc'); raw = m && m.json; } catch (e) { /* fall through */ } }
   if (!raw) { try { raw = localStorage.getItem(AUTOSAVE_KEY); } catch (e) { /* ignore */ } }
