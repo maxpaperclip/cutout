@@ -87,6 +87,11 @@
     </svg>
 
     <div id="empty" hidden>
+      <div id="empty-resume" hidden>
+        <p id="empty-resume-info"></p>
+        <div class="btns"><button class="btn primary" data-act="resume">Reopen last drawing</button></div>
+        <hr>
+      </div>
       <h2>A blank page</h2>
       <p>Choose a shape or the text tool on the left, then click or drag on the page. Select two shapes to combine them, or import a photo and use a shape as its mask.</p>
       <div class="btns">
@@ -385,6 +390,8 @@
       <section class="sec">
         <h3>Photos and saving</h3>
         <p class="help" id="photo-info" style="margin-top:0"></p>
+        <label class="f"><span style="width:96px">When it opens</span><select id="resume-pref" aria-label="When FriendShaped opens">
+          <option value="ask">Ask me</option><option value="open">Reopen my last drawing</option><option value="new">Start blank</option></select></label>
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
@@ -392,7 +399,7 @@
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
-        <p class="help" style="margin-top:0"><strong id="about-ver"></strong><br>Drawings and photos are saved only in this browser, on this device.</p>
+        <p class="help" style="margin-top:0"><strong id="about-ver"></strong><br><span id="about-new"></span><br>Drawings and photos are saved only in this browser, on this device.</p>
         <details class="help" id="font-credits"><summary>Fonts</summary>
           <p id="font-credits-list"></p>
           <p>Every font is open source: the SIL Open Font License 1.1, or the Apache License 2.0 for Permanent Marker, Roboto Slab, Satisfy, Luckiest Guy, Special Elite and Chewy. Their license texts are in <code>src/fonts/licenses</code> in the project.</p>

@@ -198,7 +198,9 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
    import a photo and mask it, export a PNG. The unit tests cover
    geometry, SVG export and boolean ops, but not the canvas/editor UI, so this manual pass is the real
    safety net right now.
-3. If this is a new version, run `npm version 1.7.0 --no-git-tag-version`
+3. If this is a new version, rewrite `WHATS_NEW` in `src/js/20-boot.js` (one or two sentences on what changed). FriendShaped shows
+   it once, with "Updated to v…", the first time a different version opens in a browser, and keeps it in About, so it is easy
+   to tell that the new file is the one running. Then run `npm version 1.7.0 --no-git-tag-version`
    (with the real number). That updates `package.json` and
    `package-lock.json` together. `package.json` is the only place the version
    is written: the build stamps it into the page title and the About box,

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.20.0</title>
+<title>FriendShaped v1.21.0</title>
 <style>
 
 :root{
@@ -158,6 +158,7 @@ input:disabled,select:disabled{opacity:.45}
 #empty h2{margin:0 0 6px;font-size:15px}
 #empty p{margin:0 0 12px;color:var(--ink-2)}
 #empty .btns{display:flex;gap:8px;flex-wrap:wrap}
+#empty hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 #busy{position:fixed;inset:0;z-index:90;cursor:progress}
 #persp-bar,#path-bar,#erase-bar,#drop-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
@@ -428,6 +429,11 @@ input:disabled,select:disabled{opacity:.45}
     </svg>
 
     <div id="empty" hidden>
+      <div id="empty-resume" hidden>
+        <p id="empty-resume-info"></p>
+        <div class="btns"><button class="btn primary" data-act="resume">Reopen last drawing</button></div>
+        <hr>
+      </div>
       <h2>A blank page</h2>
       <p>Choose a shape or the text tool on the left, then click or drag on the page. Select two shapes to combine them, or import a photo and use a shape as its mask.</p>
       <div class="btns">
@@ -726,6 +732,8 @@ input:disabled,select:disabled{opacity:.45}
       <section class="sec">
         <h3>Photos and saving</h3>
         <p class="help" id="photo-info" style="margin-top:0"></p>
+        <label class="f"><span style="width:96px">When it opens</span><select id="resume-pref" aria-label="When FriendShaped opens">
+          <option value="ask">Ask me</option><option value="open">Reopen my last drawing</option><option value="new">Start blank</option></select></label>
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
@@ -733,7 +741,7 @@ input:disabled,select:disabled{opacity:.45}
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
-        <p class="help" style="margin-top:0"><strong id="about-ver"></strong><br>Drawings and photos are saved only in this browser, on this device.</p>
+        <p class="help" style="margin-top:0"><strong id="about-ver"></strong><br><span id="about-new"></span><br>Drawings and photos are saved only in this browser, on this device.</p>
         <details class="help" id="font-credits"><summary>Fonts</summary>
           <p id="font-credits-list"></p>
           <p>Every font is open source: the SIL Open Font License 1.1, or the Apache License 2.0 for Permanent Marker, Roboto Slab, Satisfy, Luckiest Guy, Special Elite and Chewy. Their license texts are in <code>src/fonts/licenses</code> in the project.</p>
@@ -805,7 +813,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.20.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.21.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -2648,6 +2656,11 @@ const HISTORY = { steps: 100, bytes: 48 * 1048576 };
 const hist = { steps: [], idx: -1, bytes: 0 };
 const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
 function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
+// What to do with the last drawing when FriendShaped opens: 'ask' (a blank page with a button to reopen it; the default),
+// 'open' (reopen it straight away) or 'new' (a blank page). Kept in this browser; see boot in 20-boot.js.
+const RESUME_KEY = 'friendshaped.resume';
+const resumePref = () => { try { const v = localStorage.getItem(RESUME_KEY); return v === 'open' || v === 'new' ? v : 'ask'; } catch (e) { return 'ask'; } };
+let held = null;   // the last drawing, brought back from this browser but not opened yet ('ask'): { doc, lost }
 const AUTOSAVE_KEY = 'friendshaped.autosave.v1';   // fallback when the browser has no IndexedDB
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
@@ -2694,6 +2707,7 @@ function setStatus(state, detail) {
 }
 function scheduleSave(str) {
   if (suppressSave) return;
+  if (held) { held = null; updateEmpty(); }   // saving replaces the last drawing, so it can no longer be offered
   clearTimeout(saveTimer);
   setStatus('saving', 'Saving your drawing on this device.');
   saveTimer = setTimeout(() => persistNow(str), 600);
@@ -2775,9 +2789,10 @@ async function registerStored(r) {
   images.set(r.id, { id: r.id, blob: r.blob, dataUrl, w: r.w, h: r.h, mime: r.mime, bytes: r.blob.size, name: r.name || 'Photo', stored: true, mask: !!r.mask });
 }
 // Open the database and bring back the last drawing with its photos
-async function restoreSession() {
+async function restoreSession(wantDoc) {
   DB.db = await idbOpen(); DB.ok = !!DB.db;
   await loadUserFonts();   // before the drawing is read, so text in a font added earlier keeps it (see 13b-font-picker.js)
+  if (!wantDoc) return null;   // (starting blank: the drawing is not needed)
   let raw = null;
   if (DB.ok) { try { const m = await idbGet('meta', 'doc'); raw = m && m.json; } catch (e) { /* fall through */ } }
   if (!raw) { try { raw = localStorage.getItem(AUTOSAVE_KEY); } catch (e) { /* ignore */ } }
@@ -4998,9 +5013,9 @@ function selectAll() { S.sel = new Set(doc.objects.filter(o => !isHidden(o) && !
    Toast, menus, panel
    ===================================================================== */
 let toastTimer = null;
-function toast(msg) {
+function toast(msg, ms) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
-  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 3200);
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 3200);
 }
 function closeMenus() { $('#menu-file').hidden = true; $('#btn-file').setAttribute('aria-expanded', 'false'); }
 function openPanel() { $('#panel').classList.add('open'); $('#btn-panel').setAttribute('aria-pressed', 'true'); }
@@ -5009,7 +5024,20 @@ function switchTab(name) {
   $$('.pane').forEach(p => { p.hidden = p.dataset.pane !== name; });
   if (name === 'page') updatePhotoInfo();
 }
-function updateEmpty() { $('#empty').hidden = !(doc.objects.length === 0 && S.tool === 'select'); }
+function updateEmpty() {
+  $('#empty').hidden = !(doc.objects.length === 0 && S.tool === 'select');
+  $('#empty-resume').hidden = !held;
+  if (held) { const n = held.doc.objects.length; $('#empty-resume-info').textContent = 'Your last drawing is still saved here (' + n + (n === 1 ? ' object' : ' objects') + ').'; }
+}
+// Open the drawing that was kept from last time
+function reopenLast() {
+  if (!held || doc.objects.length) return;
+  const h = held; held = null;
+  doc = h.doc;
+  suppressSave = true; resetHistory(); suppressSave = false;
+  requestAnimationFrame(() => fit());
+  toast(h.lost ? 'Reopened your last drawing. Some photos could not be restored.' : 'Reopened your last drawing.');
+}
 
 /* =====================================================================
    Inspector (Design tab)
@@ -6639,7 +6667,7 @@ document.addEventListener('click', e => {
   const a = e.target.closest('[data-act]'); if (!a || a.closest('#layers')) return;
   const act = a.dataset.act;
   if (act === 'new') newDrawing(); else if (act === 'open') { closeMenus(); $('#file-project').click(); }
-  else if (act === 'save') saveProject(); else if (act === 'example') loadExample();
+  else if (act === 'save') saveProject(); else if (act === 'example') loadExample(); else if (act === 'resume') reopenLast();
   else if (act === 'import') { closeMenus(); $('#file-photo').click(); }
 });
 $('#file-photo').addEventListener('change', e => { const f = e.target.files; const list = Array.from(f); e.target.value = ''; importFiles(list); });
@@ -6693,26 +6721,38 @@ document.addEventListener('gesturestart', e => e.preventDefault());
 /* =====================================================================
    Boot
    ===================================================================== */
+// What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
+const WHATS_NEW = 'New: FriendShaped opens on a blank page now, with a button to reopen your last drawing (change this under the Page tab, "When it opens"). Also new: select letters while typing in place to change their color, size or font.';
+const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
 $('#about-ver').textContent = 'FriendShaped v' + APP_VERSION;
+$('#about-new').textContent = WHATS_NEW;
+$('#resume-pref').value = resumePref();
+$('#resume-pref').addEventListener('change', e => { try { localStorage.setItem(RESUME_KEY, e.target.value); } catch (err) { toast('This browser would not keep that setting.'); } });
 if (window.ResizeObserver) new ResizeObserver(() => { if (!userView) fit(); else drawOverlay(); }).observe($('#stagewrap'));
 (async function boot() {
+  const pref = resumePref();
   let restored = null;
-  try { restored = await Promise.race([restoreSession(), new Promise(r => setTimeout(() => r(null), 6000))]); } catch (e) { restored = null; }
+  try { restored = await Promise.race([restoreSession(pref !== 'new'), new Promise(r => setTimeout(() => r(null), 6000))]); } catch (e) { restored = null; }
   let note = '';
   if (restored && restored.doc.objects.length && !doc.objects.length) {
-    doc = restored.doc;
-    note = restored.lost ? 'Restored your last drawing. Some photos could not be restored.' : 'Restored your last drawing.';
+    if (pref === 'open') {
+      doc = restored.doc;
+      note = restored.lost ? 'Restored your last drawing. Some photos could not be restored.' : 'Restored your last drawing.';
+    } else held = restored;   // 'ask': a blank page, with a button to bring it back (updateEmpty)
   }
   suppressSave = true; resetHistory(); suppressSave = false;
-  requestAnimationFrame(() => { fit(); if (note) toast(note); });
-  cleanOrphans();
+  // A different version than last time: say so, and what changed, so an updated file is easy to recognize
+  let updated = false;
+  try { const seen = localStorage.getItem(SEEN_KEY); updated = !!seen && seen !== APP_VERSION; localStorage.setItem(SEEN_KEY, APP_VERSION); } catch (e) { /* no memory of versions in this browser */ }
+  if (updated) note = ('Updated to v' + APP_VERSION + '. ' + WHATS_NEW + ' ' + note).trim();
+  requestAnimationFrame(() => { fit(); if (note) toast(note, updated ? 9000 : 3200); });
+  if (!held) cleanOrphans();   // (the photos of a drawing still waiting to be reopened are kept)
 })();
 
 
 })();
-
 </script>
 </body>
 </html>

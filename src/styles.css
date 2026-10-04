@@ -150,6 +150,7 @@ input:disabled,select:disabled{opacity:.45}
 #empty h2{margin:0 0 6px;font-size:15px}
 #empty p{margin:0 0 12px;color:var(--ink-2)}
 #empty .btns{display:flex;gap:8px;flex-wrap:wrap}
+#empty hr{border:0;border-top:1px solid var(--line);margin:14px 0}
 
 #busy{position:fixed;inset:0;z-index:90;cursor:progress}
 #persp-bar,#path-bar,#erase-bar,#drop-bar{position:absolute;left:50%;top:12px;transform:translateX(-50%);z-index:5;display:flex;align-items:center;gap:8px;width:max-content;max-width:min(94%,560px);padding:6px 6px 6px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 28px var(--shadow)}
