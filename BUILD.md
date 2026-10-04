@@ -209,14 +209,6 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
    and a fresh build of `src/` ever drift apart, which mostly protects
    against forgetting step 4.
 
-## Names kept from before the rename
-
-The app was called Cutout until v1.19. Two names inside the browser were kept on purpose, because renaming them would hide
-drawings people already saved: the IndexedDB database (`indexedDB.open('cutout', 1)`) and the old autosave key
-(`cutout.autosave.v1`), both in `src/js/07-history-autosave.js`. Project files made by the old name (`*.cutout.json`) still
-open; new ones are saved as `*.friendshaped.json`. (Browsers keep saved drawings per web address, so a drawing saved at one
-address isn't found at another, whatever the app is called.)
-
 ## What CI actually checks
 
 `.github/workflows/build.yml` runs `npm run build` on every push and pull

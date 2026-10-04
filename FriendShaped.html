@@ -2280,7 +2280,7 @@ const HISTORY = { steps: 100, bytes: 48 * 1048576 };
 const hist = { steps: [], idx: -1, bytes: 0 };
 const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
 function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
-const AUTOSAVE_KEY = 'cutout.autosave.v1';       // older versions saved here; read once for migration. (Storage names keep the app's old name, Cutout, so drawings saved before the rename are still found.)
+const AUTOSAVE_KEY = 'friendshaped.autosave.v1';   // fallback when the browser has no IndexedDB
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
 const fmtMB = n => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0);
@@ -2291,7 +2291,7 @@ function idbOpen() {
     const finish = v => { if (!done) { done = true; resolve(v); } };
     try {
       if (!window.indexedDB) return finish(null);
-      const req = indexedDB.open('cutout', 1);   // the app's old name, kept on purpose: renaming the database would hide drawings already saved in it
+      const req = indexedDB.open('friendshaped', 1);
       req.onupgradeneeded = () => { const db = req.result; db.createObjectStore('images', { keyPath: 'id' }); db.createObjectStore('meta', { keyPath: 'key' }); };
       req.onsuccess = () => finish(req.result);
       req.onerror = () => finish(null);
