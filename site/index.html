@@ -170,8 +170,13 @@ input:disabled,select:disabled{opacity:.45}
 .er-f input[type=range]{min-width:60px}
 .er-f output{width:28px;text-align:right;font-variant-numeric:tabular-nums}
 .er-ring-a{fill:none;stroke:#000;stroke-opacity:.55;stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
-#text-edit{position:absolute;min-height:0;z-index:4;box-sizing:border-box;margin:0;border:0;outline:0;background:transparent;resize:none;overflow:hidden;white-space:pre;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--accent);transform-origin:50% 50%;font-weight:400;font-kerning:normal}
-#text-edit::selection{background:rgba(59,59,245,.3);color:transparent;-webkit-text-fill-color:transparent}
+/* The textarea behind text typed in place only takes the keyboard; the caret and selection are drawn on the canvas (09f-text-edit.js) */
+#text-edit{position:absolute;z-index:4;width:2px;height:20px;min-height:0;box-sizing:border-box;margin:0;padding:0;border:0;outline:0;background:transparent;resize:none;overflow:hidden;white-space:pre;opacity:0;pointer-events:none;color:transparent;caret-color:transparent;font-size:16px;line-height:1}
+.te-sel{fill:rgba(59,59,245,.3);stroke:none;pointer-events:none}
+.te-caret{stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;animation:te-blink 1.06s steps(1) infinite}
+.te-caret.off{opacity:0;animation:none}
+@keyframes te-blink{0%{opacity:1}50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.te-caret{animation:none}}
 .fontpick{position:relative}
 .fp-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);cursor:pointer;font-size:15px;text-align:left}
 .fp-btn .fp-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -995,6 +1000,7 @@ const rawFontKeys = raw => (raw && Array.isArray(raw.objects) ? raw.objects : []
 function fontArrived(key) {
   try {
     Array.from(textLayouts.keys()).forEach(k => { if (k.startsWith(key + '|')) textLayouts.delete(k); });
+    if (typeof purgeLineMetrics === 'function') purgeLineMetrics(key);   // the caret's measurements too (04f-text-layout.js)
     let any = false;
     doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { refresh(o); any = true; } });
     if (any) refreshAll();
@@ -1131,7 +1137,7 @@ const hasPaint = o => !!o && !hasPixels(o);       // has a fill, an outline, and
 const keepsRatio = o => !!kindInfo(o).keepsRatio;
 function labelOf(o) {
   if (o.name) return o.name;
-  if (o.kind === 'text') return (o.text || '').split('\n')[0].slice(0, 26) || 'Text';
+  if (o.kind === 'text') { const t = (o.text || '').split('\n')[0].slice(0, 26); return t.trim() ? t : 'Text'; }   // (a first line of only spaces has no name of its own)
   if (o.kind === 'polygon' && o.star) return 'Star';
   if (isStraightLine(o)) return 'Line';
   return kindInfo(o).label || 'Object';
@@ -1339,21 +1345,12 @@ function pathIsOpen(d) {
 const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 
 /* ---------- geometry builders ---------- */
+// The outline of a text. Where each line goes comes from textLayout (04f-text-layout.js), which the caret and the selection use too.
 function buildText(o) {
-  const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
-  const asc = font.ascender * scale, desc = -font.descender * scale;
-  const lineH = size * o.lh, lines = String(o.text).split('\n');
-  const opts = { kerning: true, letterSpacing: o.ls || 0 };
-  const widths = lines.map(l => l ? font.getAdvanceWidth(l, size, opts) : 0);
-  const W = Math.max(size * 0.4, ...widths);
+  const lay = textLayout(o), opts = { kerning: true, letterSpacing: lay.ls };
   let d = '';
-  lines.forEach((l, i) => {
-    if (!l) return;
-    const x = o.align === 'center' ? (W - widths[i]) / 2 : o.align === 'right' ? W - widths[i] : 0;
-    const y = i * lineH + (lineH - (asc + desc)) / 2 + asc;
-    d += font.getPath(l, x, y, size, opts).toPathData(2);
-  });
-  return { d, w: W, h: lineH * lines.length };
+  lay.lines.forEach(L => { if (L.text) d += lay.font.getPath(L.text, L.x, L.base, lay.size, opts).toPathData(2); });
+  return { d, w: lay.w, h: lay.h };
 }
 function buildPolygon(o) {
   const n = clamp(Math.round(o.sides || 5), 3, 24), star = !!o.star, inner = clamp(o.inner || 0.45, 0.1, 0.95);
@@ -1418,7 +1415,7 @@ function newShape(kind, props) {
   if (kind === 'rect' && o.r === undefined) o.r = 0;
   if (kind === 'polygon') { o.sides = o.sides || 6; o.star = !!o.star; o.inner = o.inner || 0.45; }
   if (kind === 'text') {
-    o.text = o.text !== undefined ? o.text : 'Text'; o.font = o.font || DEFAULT_FONT; o.size = o.size || 64;
+    o.text = o.text !== undefined ? o.text : ' '; o.font = o.font || DEFAULT_FONT; o.size = o.size || 64;   // a new text starts as one space: selected for typing over, and dropped if nothing is typed (see finishTextEdit)
     o.align = o.align || 'left'; o.lh = o.lh || 1.2; o.ls = o.ls || 0;
     if (!given('fill')) o.fill = '#151936';
     if (!given('stroke')) o.stroke = 'none';
@@ -1988,6 +1985,151 @@ function dropAverage(data, w, h, px, py, n) {
   return { r: Math.round(sr / sa), g: Math.round(sg / sa), b: Math.round(sb / sa), a: sa / (count * 255) };
 }
 const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16).padStart(2, '0')).join('');
+/* =====================================================================
+   Text layout with positions, and picking text by its box (no DOM; unit tested)
+   Text is drawn as outlines (buildText, in 04-document-model.js), so the outlines, the caret, the
+   selection highlight and a click on the text all have to agree about where every letter is. They
+   all come from textLayout() below: the one place that decides it. Nothing asks the browser to lay
+   text out, so what is drawn and what is edited cannot drift apart, however long the text.
+   Everything here is in the text's own box coordinates (0,0 = top-left of its box), the same ones
+   the outlines are drawn in; objXf (05-svg-export.js) and worldToBox (04c-path-edit.js) turn those
+   into the page, including for turned and mirrored text.
+   Indexes are positions in o.text (UTF-16 units, like a textarea's selectionStart).
+   ===================================================================== */
+
+/* ---------- one line: where each character starts ---------- */
+const lineMetricCache = new Map();
+const noGlyph = () => {};
+// xs[i] is where the caret sits before character i (and xs[n] after the last one); width is the line's advance.
+// forEachGlyph is the very walk getPath and getAdvanceWidth make, so these positions are the drawn ones.
+function measureLine(font, size, ls, line) {
+  const opts = { kerning: true, letterSpacing: ls }, n = line.length, xs = [], walks = typeof font.forEachGlyph === 'function';
+  let width = walks ? font.forEachGlyph(line, 0, 0, size, opts, (g, x) => { xs.push(x); }) : undefined;
+  if (typeof width !== 'number') width = font.getAdvanceWidth(line, size, opts);
+  if (xs.length !== n) {
+    // A ligature (fi, say) is one glyph for several characters. Measure each prefix instead; for a very long line, spread evenly.
+    xs.length = 0;
+    for (let i = 0; i < n; i++) xs.push(!i ? 0 : walks && n <= 1500 ? font.forEachGlyph(line.slice(0, i), 0, 0, size, opts, noGlyph) : width * i / n);
+  }
+  xs.push(width);
+  for (let i = 1; i < xs.length; i++) if (xs[i] < xs[i - 1]) xs[i] = xs[i - 1];   // never backwards
+  return { width, xs };
+}
+function lineMetrics(font, fontKey, size, ls, line) {
+  const key = fontKey + '|' + size + '|' + ls + '|' + line;
+  let m = lineMetricCache.get(key);
+  if (m) { lineMetricCache.delete(key); lineMetricCache.set(key, m); return m; }   // keep recently used ones
+  m = measureLine(font, size, ls, line);
+  lineMetricCache.set(key, m);
+  if (lineMetricCache.size > 3000) lineMetricCache.delete(lineMetricCache.keys().next().value);
+  return m;
+}
+// A face that was used before it arrived was measured in the default font (see fontArrived)
+function purgeLineMetrics(fontKey) {
+  Array.from(lineMetricCache.keys()).forEach(k => { if (k.startsWith(fontKey + '|')) lineMetricCache.delete(k); });
+}
+
+/* ---------- the whole text ---------- */
+// lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
+//             x (left edge, from the alignment), top (its slot), base (its baseline) }
+function textLayout(o) {
+  const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
+  const asc = font.ascender * scale, desc = -font.descender * scale;
+  const lineH = size * o.lh, ls = o.ls || 0;
+  let W = size * 0.4, start = 0;
+  const lines = String(o.text).split('\n').map((t, i) => {
+    const m = lineMetrics(font, o.font, size, ls, t);
+    if (m.width > W) W = m.width;
+    const L = { i, text: t, start, end: start + t.length, m, x: 0, top: i * lineH, base: i * lineH + (lineH - (asc + desc)) / 2 + asc };
+    start += t.length + 1;   // (the line break counts as a character)
+    return L;
+  });
+  lines.forEach(L => { L.x = o.align === 'center' ? (W - L.m.width) / 2 : o.align === 'right' ? W - L.m.width : 0; });
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: lineH * lines.length };
+}
+
+/* ---------- caret, selection, and clicks ---------- */
+// The line an index is on (an index at the very end of a line is on that line, not the next)
+function lineOfIndex(lay, index) {
+  const ls = lay.lines;
+  let lo = 0, hi = ls.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].start <= index) lo = mid; else hi = mid - 1; }
+  return ls[lo];
+}
+// Where the caret is drawn for an index: a vertical segment from the font's top to its bottom
+function caretAt(lay, index) {
+  const L = lineOfIndex(lay, index), col = clamp(index - L.start, 0, L.text.length);
+  return { x: L.x + L.m.xs[col], y0: L.base - lay.asc, y1: L.base + lay.desc, line: L.i };
+}
+// The highlight for a selection from a to b: a rectangle per line. A selection that runs past the end of a line also covers its break.
+function selectionRects(lay, a, b) {
+  if (a > b) { const t = a; a = b; b = t; }
+  const out = [], brk = Math.max(lay.size * 0.25, 2);
+  lay.lines.forEach(L => {
+    const s = Math.max(a, L.start), e = Math.min(b, L.end);
+    if (s > e) return;
+    const x0 = L.x + L.m.xs[s - L.start], x1 = L.x + L.m.xs[e - L.start] + (b > L.end && L.i < lay.lines.length - 1 ? brk : 0);
+    if (x1 > x0) out.push({ x: x0, y: L.base - lay.asc, w: x1 - x0, h: lay.asc + lay.desc });
+  });
+  return out;
+}
+// The index nearest a point (box coordinates): the line by height, then the closest gap between letters
+function indexAtPoint(lay, x, y) {
+  const L = lay.lines[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, lay.lines.length - 1) : 0], xs = L.m.xs, n = L.text.length, lx = x - L.x;
+  if (lx <= xs[0]) return L.start;
+  if (lx >= xs[n]) return L.end;
+  let lo = 0, hi = n;   // xs[lo] <= lx < xs[hi]
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xs[mid] <= lx) lo = mid; else hi = mid; }
+  let col = lx - xs[lo] < xs[hi] - lx ? lo : hi;
+  if (col > 0 && col < n) {   // never between the two halves of one character
+    const c1 = L.text.charCodeAt(col - 1), c2 = L.text.charCodeAt(col);
+    if (c1 >= 0xD800 && c1 <= 0xDBFF && c2 >= 0xDC00 && c2 <= 0xDFFF) col--;
+  }
+  return L.start + col;
+}
+// Up (dir -1) or Down (+1) from an index, keeping to goalX (the column the caret started from; null = where it is now).
+// Up from the first line goes to the start, Down from the last to the end.
+function verticalMove(lay, index, dir, goalX) {
+  const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX, j = L.i + dir;
+  if (j < 0) return { index: 0, goalX: gx };
+  if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
+  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lineH / 2), goalX: gx };
+}
+// The word at an index, for double-click: a run of letters and digits, of spaces, or of other marks, within one line
+function wordRange(text, index) {
+  const n = text.length;
+  index = clamp(index, 0, n);
+  const i = index < n && text[index] !== '\n' ? index : index - 1;   // at the end of a line, the one before
+  if (i < 0 || text[i] === '\n') return [index, index];
+  const kind = c => /[\p{L}\p{N}\p{M}_]/u.test(c) ? 'w' : /\s/.test(c) ? 's' : 'p', k = kind(text[i]);
+  let s = i, e = i + 1;
+  while (s > 0 && text[s - 1] !== '\n' && kind(text[s - 1]) === k) s--;
+  while (e < n && text[e] !== '\n' && kind(text[e]) === k) e++;
+  return [s, e];
+}
+// The whole line at an index, for triple-click
+function lineRange(text, index) {
+  index = clamp(index, 0, text.length);
+  const s = index > 0 ? text.lastIndexOf('\n', index - 1) + 1 : 0, e = text.indexOf('\n', index);
+  return [s, e < 0 ? text.length : e];
+}
+
+/* ---------- picking text by its box ---------- */
+// True when a page point {x, y} is inside an object's box (turned and mirrored with the object), padded by pad
+function boxContains(o, p, pad) {
+  const q = worldToBox(o, p.x, p.y), e = pad || 0;
+  return q[0] >= -e && q[0] <= o.w + e && q[1] >= -e && q[1] <= o.h + e;
+}
+// A selected text can be picked anywhere in its box, not only on its letters, so the space between and
+// around them is not a dead zone. It only wins over what is under it: `under` is what the click hit
+// (null for nothing), and anything drawn above the text still gets the click first.
+function textBoxAt(p, under) {
+  for (let i = doc.objects.length - 1; i > (under ? doc.objects.indexOf(under) : -1); i--) {
+    const o = doc.objects[i];
+    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && boxContains(o, p)) return o;
+  }
+  return null;
+}
 /* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
    ===================================================================== */
@@ -2711,21 +2853,26 @@ TOOLS.hand = { key: 'h', cursor: 'hand' };   // panning itself is handled above,
 TOOLS.select = {
   key: 'v', cursor: 'select',
   down(e, p) {
+    if (te && teDown(e, p)) return;   // a press on the text being typed: caret or selection (see 09f-text-edit.js)
     if (pe && peDown(e, p)) return;   // editing points (see 09b-pen.js)
     const h = e.target.closest && e.target.closest('[data-h]');
     if (h) { beginHandle(h.dataset.h, p, e); return; }
     const g = e.target.closest && e.target.closest('[data-id]');
-    const o = g ? byId(+g.dataset.id) : null;
-    const pl = paintLayerAt(p, o && !isLocked(o) && !isHidden(o) ? o : null);   // paint above what was hit (see 09d-brush.js)
+    let o = g ? byId(+g.dataset.id) : null;
+    if (o && (isLocked(o) || isHidden(o))) o = null;
+    o = textBoxAt(p, o) || o;   // a selected text is picked anywhere in its box, not just on its letters (see 04f-text-layout.js)
+    const pl = paintLayerAt(p, o);   // paint above what was hit (see 09d-brush.js)
     if (pl) { beginMove(pl, p, e); return; }
-    if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
+    if (o) { beginMove(o, p, e); return; }
     beginMarquee(p, e);
   },
   dblclick(e, under) {
     if (pe) return;   // double-clicking a point is handled in peDown (see there)
     const g = under.closest && under.closest('[data-id]');
-    const o = g ? byId(+g.dataset.id) : null;
-    if (!o || isLocked(o) || isHidden(o)) return;
+    let o = g ? byId(+g.dataset.id) : null;
+    if (o && (isLocked(o) || isHidden(o))) o = null;
+    o = textBoxAt(toWorld(e), o) || o;   // (the box of a selected text counts here too)
+    if (!o || (te && te.id === o.id)) return;   // (the text being typed already took this: double-click picks a word, see teDown)
     // Double-click picks just this object, even inside a group; for text it also opens the editor,
     // and for a plain shape it shows its points for editing
     if (o.kind === 'text') startTextEdit(o, false);   // typed in place (see 09f-text-edit.js)
@@ -2753,7 +2900,7 @@ function startPinch() {
   userView = true;
   const k = drag && DRAGS[drag.type];
   if (k && k.cancel) k.cancel(drag);   // a drag that keeps work outside the drawing (the eraser) drops it here
-  if (drag && drag.type !== 'pan' && drag.type !== 'marquee') revertUncommitted();
+  if (drag && drag.type !== 'pan' && drag.type !== 'marquee' && drag.type !== 'textsel') revertUncommitted();   // (selecting text changes nothing to take back, and typed text is not in the history yet)
   drag = null;
   const s = pinchState();
   pinch = { d0: s.d, mx0: s.mx, my0: s.my, v0: { x: view.x, y: view.y, z: view.z } };
@@ -3755,61 +3902,78 @@ $('#drop-cancel').addEventListener('click', () => edFinish(null));
 /* =====================================================================
    Editing text in place
    Text is drawn as outlines (see buildText in 04-document-model.js), so there is nothing on the canvas to
-   type into. While a text object is being edited, a see-through <textarea> sits exactly over it, set in
-   the same font, size, spacing and angle. The browser supplies the caret, the selection and the keyboard
-   handling; every keystroke goes into o.text and the outlines underneath are rebuilt as you type.
-   Editing ends with Esc or a click anywhere else, as one undo step. Text that ends up empty is removed.
+   type into. While a text object is being edited, an invisible <textarea> takes the keyboard: typing, the
+   arrow keys, copy and paste, input methods, phone keyboards. The caret and the highlighted selection are
+   not the browser's: they are drawn over the text here, from the same layout the outlines come from
+   (textLayout, in 04f-text-layout.js). The browser never lays the text out, so the caret cannot drift from
+   the letters, whatever the zoom, angle, font or length. (Pressing on the text places the caret or selects,
+   a double-click picks a word, a triple-click a line.)
+   Every keystroke goes into o.text and the outlines underneath are rebuilt as you type.
+   Editing ends with Esc, Ctrl+Enter or a click anywhere else, as one undo step. Text that ends up empty is removed.
    A new text object is only added to the undo history when editing ends, so Undo takes it away whole.
    The Design tab's own text box still works; the two never edit at once.
    ===================================================================== */
-const TE_PAD = 16;                 // room around the box (screen pixels), so the caret at either end is never cut off
-let te = null;                     // the edit in progress: { id, isNew, before }
+const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
+let te = null;                     // the edit in progress: { id, isNew, before, goalX, hold, clicks }
 const teEl = $('#text-edit');
-// The browser needs the font itself to lay text out the way the outlines were (see fontFaceReady in 03-fonts-runtime.js)
-const teFontReady = fontFaceReady;
-const teFontKey = o => fonts[o.font] ? o.font : DEFAULT_FONT;
+const teObj = () => te && byId(te.id);
 
-// Put the box over the object, at the canvas's current zoom and position
-function tePlace() {
-  const o = te && byId(te.id);
-  if (!o) return;
-  const z = view.z, sr = stage.getBoundingClientRect(), hr = teEl.offsetParent.getBoundingClientRect();
-  const st = teEl.style;
-  st.left = rnd(sr.left - hr.left + view.x + o.x * z - TE_PAD, 2) + 'px';
-  st.top = rnd(sr.top - hr.top + view.y + o.y * z - TE_PAD, 2) + 'px';
-  st.width = rnd(o.w * z + TE_PAD * 2, 2) + 'px';
-  st.height = rnd(o.h * z + TE_PAD * 2, 2) + 'px';
-  st.padding = TE_PAD + 'px';
-  st.fontFamily = "'" + cssFamily(teFontKey(o)) + "', sans-serif";
-  st.fontSize = rnd(o.size * z, 3) + 'px';
-  st.lineHeight = rnd(o.size * o.lh * z, 3) + 'px';
-  st.letterSpacing = rnd((o.ls || 0) * o.size * z, 3) + 'px';
-  st.textAlign = o.align || 'left';
-  st.transform = o.rot ? 'rotate(' + o.rot + 'deg)' : 'none';
-  teEl.scrollLeft = 0; teEl.scrollTop = 0;
+/* ---------- the selection: the textarea keeps it, we draw it ---------- */
+const teSel = () => ({ a: teEl.selectionStart, b: teEl.selectionEnd });
+// Where the selection was started (anchor) and where its moving end, the caret, is (focus)
+function teEnds() {
+  const s = teSel();
+  return teEl.selectionDirection === 'backward' ? { anchor: s.b, focus: s.a } : { anchor: s.a, focus: s.b };
 }
+function teSetSel(anchor, focus) {
+  try { teEl.setSelectionRange(Math.min(anchor, focus), Math.max(anchor, focus), anchor > focus ? 'backward' : anchor < focus ? 'forward' : 'none'); } catch (e) { /* no textarea to hold it */ }
+  drawOverlay();
+}
+// The browser moves the caret after a key is handled (and tells us in more than one way, depending on the browser): redraw once, soon
+let teFrame = 0;
+function teSoon() {
+  if (teFrame) return;
+  teFrame = requestAnimationFrame(() => { teFrame = 0; if (te) drawOverlay(); });
+}
+
+/* ---------- drawing: the box, the highlight and the caret ---------- */
+// Drawn in the text's own box coordinates, inside the transform the outlines use, so it is exact for turned and mirrored text too
 function teOverlay() {
-  const o = byId(te.id);
+  const o = teObj();
   if (!o) return false;
-  const c = centerOf(o);
-  ov.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line ov-dash', transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null }));
+  const lay = textLayout(o), s = teSel(), g = svgEl('g', { transform: objXf(o) });
+  g.appendChild(svgEl('rect', { x: 0, y: 0, width: o.w, height: o.h, class: 'ov-line ov-dash' }));
+  selectionRects(lay, s.a, s.b).forEach(r => g.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'te-sel' })));
+  const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected)
+  g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b ? 'te-caret' : 'te-caret off' }));
+  ov.appendChild(g);
+  tePlace();
   return true;   // no handles while typing
 }
+// The invisible textarea follows the caret, so a phone keyboard or an input method's window opens next to it
+function tePlace() {
+  const caret = te && ov.querySelector('.te-caret');
+  if (!caret || !teEl.offsetParent) return;
+  const r = caret.getBoundingClientRect(), hr = teEl.offsetParent.getBoundingClientRect(), st = teEl.style;
+  st.left = rnd(r.left - hr.left, 1) + 'px';
+  st.top = rnd(r.top - hr.top, 1) + 'px';
+  st.height = Math.max(rnd(r.height, 1), 8) + 'px';
+}
 
+/* ---------- starting and ending ---------- */
 function startTextEdit(o, isNew) {
   if (te) finishTextEdit();
   if (!o || o.kind !== 'text') return;
-  if (isLocked(o) || isHidden(o) || o.fx || o.fy) {   // a mirrored text can't be typed over: use the Design tab
+  if (isLocked(o) || isHidden(o)) {   // a locked text can't be typed over: use the Design tab
     if (isNew) commit();
     S.sel = new Set([o.id]); refreshAll(); openPanel(); focusText();
     return;
   }
   S.sel = new Set([o.id]);
-  te = { id: o.id, isNew: !!isNew, before: o.text };
+  te = { id: o.id, isNew: !!isNew, before: o.text, goalX: null, hold: false, clicks: { n: 0, t: 0, x: 0, y: 0 } };
   teEl.value = o.text; teEl.hidden = false;
-  refreshAll(); tePlace();
-  teFontReady(teFontKey(o)).then(() => { if (te && te.id === o.id) tePlace(); });
-  setTimeout(() => { if (te && te.id === o.id) { teEl.focus(); teEl.select(); } }, 30);   // after the click that started it is over
+  refreshAll();
+  setTimeout(() => { if (te && te.id === o.id) { teEl.focus({ preventScroll: true }); teEl.select(); drawOverlay(); } }, 30);   // after the click that started it is over
 }
 function finishTextEdit() {
   if (!te) return;
@@ -3825,11 +3989,52 @@ function finishTextEdit() {
   refreshAll();
 }
 
+/* ---------- the mouse and touch: a press on the text places the caret ---------- */
+// Called first by the Select tool while editing. Says whether the press was on the text (anywhere in its box).
+function teDown(e, p) {
+  const o = teObj();
+  if (!o) return false;
+  te.hold = false;
+  if (e.button > 0 || !boxContains(o, p, TE_PAD / view.z)) return false;   // elsewhere it works as usual, and the edit ends when the textarea loses focus
+  const q = worldToBox(o, p.x, p.y), at = indexAtPoint(textLayout(o), q[0], q[1]);
+  const c = te.clicks, again = e.timeStamp - c.t < 450 && Math.hypot(e.clientX - c.x, e.clientY - c.y) < 6;
+  c.n = again ? Math.min(c.n + 1, 3) : 1; c.t = e.timeStamp; c.x = e.clientX; c.y = e.clientY;   // (a fourth quick press stays on the line)
+  let anchor = at, focus = at;
+  if (c.n === 2) [anchor, focus] = wordRange(o.text, at);
+  else if (c.n === 3) [anchor, focus] = lineRange(o.text, at);
+  else if (e.shiftKey) anchor = teEnds().anchor;
+  te.hold = true; te.goalX = null;
+  drag = { type: 'textsel', anchor };
+  teSetSel(anchor, focus);
+  teEl.focus({ preventScroll: true });
+  e.preventDefault();
+  return true;
+}
+DRAGS.textsel = {
+  move(p) {
+    const o = teObj();
+    if (!o) return;
+    const q = worldToBox(o, p.x, p.y);
+    te.goalX = null;
+    teSetSel(drag.anchor, indexAtPoint(textLayout(o), q[0], q[1]));
+  },
+  end() {
+    if (te) { teEl.focus({ preventScroll: true }); setTimeout(() => { if (te) te.hold = false; }, 350); }   // (a phone sends its own mouse events a moment after the touch)
+    drawOverlay();
+  },
+  cancel() { if (te) te.hold = false; },
+  overlay: () => !!(te && teOverlay())
+};
+// While a press on the text is going on the textarea must keep the keyboard, or the edit would end
+stage.addEventListener('mousedown', e => { if (te && te.hold) e.preventDefault(); });
+
+/* ---------- the keyboard ---------- */
 teEl.addEventListener('input', () => {
-  const o = te && byId(te.id);
+  const o = teObj();
   if (!o) return;
+  te.goalX = null;
   o.text = teEl.value; refresh(o);
-  render(); renderLayers(); tePlace();
+  render(); renderLayers();
   $('#tx-text').value = o.text;
 });
 teEl.addEventListener('keydown', e => {
@@ -3837,11 +4042,27 @@ teEl.addEventListener('keydown', e => {
   const sk = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && !e.altKey && (sk === 'b' || sk === 'i')) { e.preventDefault(); e.stopPropagation(); toggleStyle(sk === 'b' ? 'bold' : 'italic', true); return; }   // the one shortcut that works while typing
   e.stopPropagation();   // typing is never a shortcut
+  const o = teObj();
+  if (!o || !te) return;
+  // Up and Down are ours, so they follow the lines as drawn and keep their column across short lines
+  if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing) {
+    e.preventDefault();
+    const ends = teEnds(), m = verticalMove(textLayout(o), ends.focus, e.key === 'ArrowUp' ? -1 : 1, te.goalX);
+    te.goalX = m.goalX;
+    teSetSel(e.shiftKey ? ends.anchor : m.index, m.index);
+    return;
+  }
+  if (e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt' && e.key !== 'Meta') te.goalX = null;   // anything else starts a new column
+  teSoon();
 });
-teEl.addEventListener('blur', () => finishTextEdit());
-// Scrolling and pinching over the text still move the canvas
-teEl.addEventListener('wheel', e => { e.preventDefault(); stage.dispatchEvent(new WheelEvent('wheel', e)); }, { passive: false });
-window.addEventListener('resize', () => { if (te) tePlace(); });
+['keyup', 'select', 'focus'].forEach(n => teEl.addEventListener(n, () => { if (te) teSoon(); }));
+document.addEventListener('selectionchange', () => { if (te && document.activeElement === teEl) teSoon(); });
+teEl.addEventListener('blur', () => {
+  // A press on the text itself takes the keyboard back at once; anything else ends the edit
+  if (te && te.hold) { setTimeout(() => { if (te && te.hold) teEl.focus({ preventScroll: true }); }, 0); return; }
+  finishTextEdit();
+});
+window.addEventListener('resize', () => { if (te) drawOverlay(); });
 /* =====================================================================
    Perspective
    Tilts the selection as if it were seen from an angle. The selection's bounding box is
@@ -4975,8 +5196,7 @@ async function setTextFace(key) {
     if (fonts[FP.shown]) fpStyle.value = FP.shown;   // the menu goes back to the face the text really has
     return;
   }
-  t.font = key; refresh(t); commit();
-  if (te && te.id === id) fontFaceReady(key).then(() => { if (te && te.id === id) tePlace(); });   // typing in place: the box takes the new face
+  t.font = key; refresh(t); commit();   // (typing in place follows by itself: the caret is drawn from the same layout)
 }
 // Bold or italic on or off for the selected text, by moving to the matching face. say: tell the person when there isn't one (a shortcut gives no other sign).
 function toggleStyle(which, say) {

@@ -35,6 +35,7 @@ src/
     04c-path-edit.js    Path geometry shared by the Pen tool and point editing
     04d-erase.js        Erase masks: how an erased object is described and drawn (no DOM, unit tested)
     04e-eyedrop.js      Eyedropper sums: which part of the page to draw, and the average color of 1 or 3 x 3 pixels (no DOM, unit tested)
+    04f-text-layout.js  Text layout with a position for every character (the caret, the selection and clicks all come from it, and the outlines are drawn from it), and picking a selected text by its box (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     07-history-autosave.js  Undo/redo + IndexedDB persistence
@@ -44,7 +45,7 @@ src/
     09c-eraser.js       Eraser tool: pointer handling, the brush bar, and baking strokes into a mask or layer picture
     09d-brush.js        Brush tool and paint layers (shares its strokes, bar and baking with the Eraser)
     09e-eyedropper.js   Eyedropper: a temporary tool started from a color field, reads the whole drawing as it looks on screen
-    09f-text-edit.js    Typing text in place: a see-through text box laid over the text object being edited
+    09f-text-edit.js    Typing text in place: an invisible text box takes the keyboard, and the caret and selection are drawn from the text's own layout
     10-perspective.js
     11-editing-commands.js
     12-ui-chrome.js

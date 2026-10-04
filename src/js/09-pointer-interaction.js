@@ -90,21 +90,26 @@ TOOLS.hand = { key: 'h', cursor: 'hand' };   // panning itself is handled above,
 TOOLS.select = {
   key: 'v', cursor: 'select',
   down(e, p) {
+    if (te && teDown(e, p)) return;   // a press on the text being typed: caret or selection (see 09f-text-edit.js)
     if (pe && peDown(e, p)) return;   // editing points (see 09b-pen.js)
     const h = e.target.closest && e.target.closest('[data-h]');
     if (h) { beginHandle(h.dataset.h, p, e); return; }
     const g = e.target.closest && e.target.closest('[data-id]');
-    const o = g ? byId(+g.dataset.id) : null;
-    const pl = paintLayerAt(p, o && !isLocked(o) && !isHidden(o) ? o : null);   // paint above what was hit (see 09d-brush.js)
+    let o = g ? byId(+g.dataset.id) : null;
+    if (o && (isLocked(o) || isHidden(o))) o = null;
+    o = textBoxAt(p, o) || o;   // a selected text is picked anywhere in its box, not just on its letters (see 04f-text-layout.js)
+    const pl = paintLayerAt(p, o);   // paint above what was hit (see 09d-brush.js)
     if (pl) { beginMove(pl, p, e); return; }
-    if (o && !isLocked(o) && !isHidden(o)) { beginMove(o, p, e); return; }
+    if (o) { beginMove(o, p, e); return; }
     beginMarquee(p, e);
   },
   dblclick(e, under) {
     if (pe) return;   // double-clicking a point is handled in peDown (see there)
     const g = under.closest && under.closest('[data-id]');
-    const o = g ? byId(+g.dataset.id) : null;
-    if (!o || isLocked(o) || isHidden(o)) return;
+    let o = g ? byId(+g.dataset.id) : null;
+    if (o && (isLocked(o) || isHidden(o))) o = null;
+    o = textBoxAt(toWorld(e), o) || o;   // (the box of a selected text counts here too)
+    if (!o || (te && te.id === o.id)) return;   // (the text being typed already took this: double-click picks a word, see teDown)
     // Double-click picks just this object, even inside a group; for text it also opens the editor,
     // and for a plain shape it shows its points for editing
     if (o.kind === 'text') startTextEdit(o, false);   // typed in place (see 09f-text-edit.js)
@@ -132,7 +137,7 @@ function startPinch() {
   userView = true;
   const k = drag && DRAGS[drag.type];
   if (k && k.cancel) k.cancel(drag);   // a drag that keeps work outside the drawing (the eraser) drops it here
-  if (drag && drag.type !== 'pan' && drag.type !== 'marquee') revertUncommitted();
+  if (drag && drag.type !== 'pan' && drag.type !== 'marquee' && drag.type !== 'textsel') revertUncommitted();   // (selecting text changes nothing to take back, and typed text is not in the history yet)
   drag = null;
   const s = pinchState();
   pinch = { d0: s.d, mx0: s.mx, my0: s.my, v0: { x: view.x, y: view.y, z: view.z } };

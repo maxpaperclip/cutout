@@ -111,6 +111,7 @@ const rawFontKeys = raw => (raw && Array.isArray(raw.objects) ? raw.objects : []
 function fontArrived(key) {
   try {
     Array.from(textLayouts.keys()).forEach(k => { if (k.startsWith(key + '|')) textLayouts.delete(k); });
+    if (typeof purgeLineMetrics === 'function') purgeLineMetrics(key);   // the caret's measurements too (04f-text-layout.js)
     let any = false;
     doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { refresh(o); any = true; } });
     if (any) refreshAll();
