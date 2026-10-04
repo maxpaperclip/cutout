@@ -4,9 +4,9 @@ Cutout ships two ways, both made by the same build:
 
 - **`Cutout.html`**, the *lite single file*: one self-contained HTML file with a small set of fonts built in. No server,
   no install, works from a USB stick or an email attachment.
-- **`dist/site/`**, the *hosted site*: `index.html` plus a `fonts/` folder with every font. The page only carries the
+- **`site/`**, the *hosted site* (built in `dist/site/`, and committed to the repo like `Cutout.html`): `index.html` plus a `fonts/` folder with every font. The page only carries the
   fonts it needs to start; any other font is fetched from `fonts/` the first time it is used, and the browser keeps it.
-  To publish it, upload the contents of `dist/site/` to any static web host (GitHub Pages, Netlify, Cloudflare Pages, a
+  To publish it, upload the contents of `site/` to any static web host (GitHub Pages, Netlify, Cloudflare Pages, a
   school server). Nothing else from the repo is needed. It has to be opened from a web address: a page opened straight
   from disk can't fetch the fonts folder, and says so.
 
@@ -62,7 +62,8 @@ build.js              The build script (plain Node, no required dependencies)
 scripts/copy-to-root.js   Copies a finished build to the repo root for release
 scripts/fetch-fonts.js    Downloads the library's Latin fonts and licenses from Fontsource (npm)
 scripts/subset-cjk.py     Cuts Noto Sans SC down to the common Chinese characters (needs fonttools)
-dist/                  Build output: Cutout.html and site/ (gitignored by default — see below)
+dist/                  Build output: Cutout.html and site/ (gitignored; `npm run release` copies them to the repo root)
+Cutout.html, site/     The committed release: the lite single file, and the hosted page with its fonts/ folder
 ```
 
 The split follows the section comments that were already in the old file
@@ -93,7 +94,7 @@ npm run build     # builds dist/Cutout.html (the lite single file) and dist/site
 npm run dev       # builds once, then rebuilds on any change under src/
 npm run build:min # same, but minifies JS and CSS with esbuild (~10% smaller)
 npm run serve     # build once, then serve dist/site/ on localhost so you can test the hosted version in a browser
-npm run release   # build, then copy the result to the repo root (see below)
+npm run release   # build, then copy Cutout.html and site/ to the repo root (see below)
 npm test          # run the unit tests in tests-unit/ (see tests-unit/README.md)
 ```
 
@@ -201,10 +202,10 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
    is written: the build stamps it into the page title and the About box,
    and the output file is always named `Cutout.html`, so download links never
    change. A unit test fails if a version number is hard-coded anywhere else.
-4. `npm run release` — this rebuilds and copies `Cutout.html` (the lite single file) to the repo
-   root. The hosted site isn't committed: upload the contents of `dist/site/` to your web host.
-5. Commit both your `src/` changes and the updated root HTML file together.
-   CI (`.github/workflows/build.yml`) will fail the build if the root file
+4. `npm run release` — this rebuilds and copies `Cutout.html` (the lite single file) and `site/` (the hosted
+   page and its `fonts/` folder) to the repo root. To publish the hosted version, upload the contents of `site/`.
+5. Commit your `src/` changes together with the updated `Cutout.html` and `site/`.
+   CI (`.github/workflows/build.yml`) will fail the build if the root file or `site/`
    and a fresh build of `src/` ever drift apart, which mostly protects
    against forgetting step 4.
 
@@ -212,7 +213,7 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
 
 `.github/workflows/build.yml` runs `npm run build` on every push and pull
 request, runs `npm test`, then diffs the build result against the `Cutout.html`
-committed at the repo root. It is **not** a functional test —
+committed at the repo root and `dist/site/` against the committed `site/` folder. It is **not** a functional test —
 it can't click buttons or draw shapes — it only proves the build still
 produces valid, reproducible output and that nobody forgot to re-run the
 release step. The manual browser pass in step 2 above is still what catches
