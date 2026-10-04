@@ -11,23 +11,23 @@ const FONT_CATEGORIES = [
   ['sans', 'Sans'], ['serif', 'Serif'], ['script', 'Script'], ['display', 'Display'],
   ['decorative', 'Decorative'], ['international', 'International'], ['user', 'Yours']
 ];
-// One entry per family: key of its regular face, label, category, then optional { w: weight of that first face if it
-// isn't 400, faces: [[key, weight, italic?], ...] the other weights and italics }. The picker lists them in this order.
+// One entry per family: key of its first face, label, category, then optional { w: weight of that first face if it
+// isn't 400, faces: [[key, weight, italic?], ...] more weights and italics }. The picker lists them in this order.
+// The other weights and italics of most families come from src/fonts/faces.json (window.FONT_FACES), made by scripts/fetch-fonts.js.
 const FONT_DEFS = [
-  ['inter', 'Inter', 'sans', { faces: [['inter-xb', 800]] }], ['roboto', 'Roboto', 'sans'], ['open-sans', 'Open Sans', 'sans'],
+  ['inter', 'Inter', 'sans'], ['roboto', 'Roboto', 'sans'], ['open-sans', 'Open Sans', 'sans'],
   ['montserrat', 'Montserrat', 'sans'], ['poppins', 'Poppins', 'sans'],
-  ['lato', 'Lato', 'sans', { faces: [['lato-100', 100], ['lato-100i', 100, 1], ['lato-300', 300], ['lato-300i', 300, 1], ['lato-400i', 400, 1],
-    ['lato-700', 700], ['lato-700i', 700, 1], ['lato-900', 900], ['lato-900i', 900, 1]] }],
+  ['lato', 'Lato', 'sans'],
   ['work-sans', 'Work Sans', 'sans'],
-  ['nunito-xb', 'Nunito Extra Bold', 'sans', { w: 800 }], ['lexend', 'Lexend', 'sans'], ['atkinson', 'Atkinson Hyperlegible', 'sans'],
+  ['nunito-xb', 'Nunito', 'sans', { w: 800 }], ['lexend', 'Lexend', 'sans'], ['atkinson', 'Atkinson Hyperlegible', 'sans'],
   ['comic-neue', 'Comic Neue', 'sans'], ['mono', 'Roboto Mono', 'sans'],
-  ['lora', 'Lora', 'serif', { faces: [['lora-b', 700]] }], ['merriweather', 'Merriweather', 'serif'], ['playfair', 'Playfair Display', 'serif'],
+  ['lora', 'Lora', 'serif'], ['merriweather', 'Merriweather', 'serif'], ['playfair', 'Playfair Display', 'serif'],
   ['eb-garamond', 'EB Garamond', 'serif'], ['baskerville', 'Libre Baskerville', 'serif'], ['source-serif', 'Source Serif 4', 'serif'],
   ['roboto-slab', 'Roboto Slab', 'serif'], ['cormorant', 'Cormorant Garamond', 'serif'],
   ['pacifico', 'Pacifico', 'script'], ['dancing', 'Dancing Script', 'script'], ['lobster', 'Lobster', 'script'], ['great-vibes', 'Great Vibes', 'script'],
   ['satisfy', 'Satisfy', 'script'], ['sacramento', 'Sacramento', 'script'], ['caveat', 'Caveat', 'script'], ['patrick-hand', 'Patrick Hand', 'script'],
   ['kalam', 'Kalam', 'script'], ['marker', 'Permanent Marker', 'script'],
-  ['bungee', 'Bungee', 'display'], ['fredoka', 'Fredoka SemiBold', 'display', { w: 600 }], ['bebas', 'Bebas Neue', 'display'], ['anton', 'Anton', 'display'],
+  ['bungee', 'Bungee', 'display'], ['fredoka', 'Fredoka', 'display', { w: 600 }], ['bebas', 'Bebas Neue', 'display'], ['anton', 'Anton', 'display'],
   ['oswald', 'Oswald', 'display'], ['archivo-black', 'Archivo Black', 'display'], ['abril', 'Abril Fatface', 'display'],
   ['alfa-slab', 'Alfa Slab One', 'display'], ['righteous', 'Righteous', 'display'], ['lilita', 'Lilita One', 'display'], ['cinzel', 'Cinzel', 'display'],
   ['bangers', 'Bangers', 'decorative'], ['luckiest', 'Luckiest Guy', 'decorative'], ['creepster', 'Creepster', 'decorative'],
@@ -39,6 +39,7 @@ const FONT_SAMPLES = { 'noto-sans-sc': '中文' };   // what the picker shows fo
 const FONT_WEIGHTS = { 100: 'Thin', 200: 'Extra Light', 300: 'Light', 400: 'Regular', 500: 'Medium', 600: 'Semi Bold', 700: 'Bold', 800: 'Extra Bold', 900: 'Black' };
 const fontStyleName = (w, italic) => w === 400 ? (italic ? 'Italic' : 'Regular') : (FONT_WEIGHTS[w] || String(w)) + (italic ? ' Italic' : '');
 const DEFAULT_FONT = 'inter-xb';
+const FONT_FACES = window.FONT_FACES || {};   // family key -> [[face key, weight, italic?], ...]
 const FONT_BASE = window.FONT_BASE || '';   // the fonts folder of the hosted build; '' in the single file, which has only its built-in fonts
 const fonts = {};     // face key -> { label, category, family, weight, italic, styleLabel, font (parsed the first time it is read), data (base64, built in) or buf (fetched or added by the person) }
 const FAMILIES = {};  // family key (its regular face) -> { id, label, category, faces: [face keys, lightest first, italics after upright] }
@@ -66,7 +67,7 @@ FONT_DEFS.forEach(([key, label, category, opts]) => {
   if (!fontAvailable(key)) return;   // not in this build (the single file only has some fonts)
   addFace(key, label, category, key, opts.w || 400, false);
   const faces = [key];
-  (opts.faces || []).forEach(([fk, w, i]) => {
+  (opts.faces || FONT_FACES[key] || []).forEach(([fk, w, i]) => {
     if (!fontAvailable(fk)) return;
     addFace(fk, label + ' ' + fontStyleName(w, !!i), category, key, w, !!i);
     faces.push(fk);

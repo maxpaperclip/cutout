@@ -20,6 +20,7 @@ src/
   styles.css          All CSS, extracted as-is from the old <style> block
   fonts/
     manifest.json     Maps font keys (e.g. "inter-xb") to their .woff file: every weight and italic is its own entry
+    faces.json        Each family's other weights and italics (made by scripts/fetch-fonts.js)
     builds.json       Which fonts each build has built into its HTML: "core" (the hosted page) and "lite" (the single file)
     *.woff            The actual fonts, as real binary files (Latin subsets, except noto-sans-sc)
     licenses/         Each font's license text; CREDITS.md is the table of fonts and licenses
@@ -122,17 +123,14 @@ nothing is ever faked. There are no variable fonts either, because opentype.js c
 3. `npm test` (it checks that the list, the manifest, the files and the licenses all agree), then `npm run build`
    and try the font in the picker.
 
-**More weights and italics of a family:** add one line per face to `EXTRA_FACES` in `scripts/fetch-fonts.js`
-(`['lato-700i', 'lato', 700, 'italic']`; name them `<family>-<weight>`, with an `i` after for italic, and run the script
-again), then list them in the family's `FONT_DEFS` entry as `[key, weight, italic]`:
-
-```js
-['lato', 'Lato', 'sans', { faces: [['lato-700', 700], ['lato-700i', 700, 1], ['lato-400i', 400, 1]] }],
-```
-
-The family's first key is its regular face; if that face isn't weight 400, say so with `{ w: 800, ... }`. The other faces
-share the family's license, so they need no license file or credits row. Faces that are already in use under another
-name (`inter-xb`, `lora-b`) are listed the same way, which is how Inter and Lora got a Bold button without any key changing.
+**Weights and italics come with the family.** `scripts/fetch-fonts.js` downloads every Latin weight and italic the
+Fontsource package has, one `.woff` each, named `<family>-<weight>` with an `i` after for italic (`lato-700i`), and writes
+the list to `src/fonts/faces.json` (`{ "lato": [["lato-100", 100], ["lato-100i", 100, 1], ...] }`), which the build puts in
+both HTML files. So adding Lato to `NEW_FONTS` and `FONT_DEFS` is all it takes to get its ten faces. Faces that already
+had a key of their own keep it (`inter-xb` is Inter at weight 800, `lora-b` is Lora Bold), and a family whose first face
+isn't weight 400 says so in `FONT_DEFS` with `{ w: 800 }` (Nunito, Fredoka). The extra faces share the family's license,
+so they need no license file or credits row. A face added by hand (a font from elsewhere) can be listed right in its
+`FONT_DEFS` entry instead: `{ faces: [['key-700', 700], ['key-700i', 700, 1]] }`.
 
 **Which build carries which font.** `src/fonts/builds.json` lists the fonts built into each HTML file: `core` for the
 hosted page (just enough to start: the default font, `inter-xb`, and the one the wordmark is drawn in, `bungee`) and

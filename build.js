@@ -57,21 +57,27 @@ const MUST_EMBED = ['inter-xb', 'bungee'];
 function readFontLists() {
   const manifest = JSON.parse(fs.readFileSync(path.join(FONTS_SRC, 'manifest.json'), 'utf8'));
   const builds = JSON.parse(fs.readFileSync(path.join(FONTS_SRC, 'builds.json'), 'utf8'));
+  const faces = JSON.parse(fs.readFileSync(path.join(FONTS_SRC, 'faces.json'), 'utf8'));   // each family's other weights and italics
+  Object.keys(faces).forEach((fam) => {
+    if (!manifest[fam]) throw new Error(`[build] "${fam}" in src/fonts/faces.json is not in src/fonts/manifest.json.`);
+    faces[fam].forEach(([k]) => { if (!manifest[k]) throw new Error(`[build] "${k}" in src/fonts/faces.json is not in src/fonts/manifest.json.`); });
+  });
   ['core', 'lite'].forEach((name) => {
     const keys = builds[name];
     if (!Array.isArray(keys)) throw new Error(`[build] src/fonts/builds.json has no "${name}" list.`);
     keys.forEach((k) => { if (!manifest[k]) throw new Error(`[build] "${k}" in builds.json "${name}" is not in src/fonts/manifest.json.`); });
     MUST_EMBED.forEach((k) => { if (!keys.includes(k)) throw new Error(`[build] builds.json "${name}" must include "${k}".`); });
   });
-  return { manifest, builds };
+  return { manifest, builds, faces };
 }
 
 // The fonts built into the page: window.FONT_DATA, keyed by font name, base64 — what src/js/03-fonts-runtime.js
-// finds at start-up. window.FONT_BASE says where the other fonts are fetched from ('' means nowhere: the
-// single file only has the fonts that are built in).
-function buildFontData(manifest, keys, fontBase) {
+// finds at start-up. window.FONT_FACES lists every family's weights and italics (in both builds, since the single
+// file has some faces of a family and the hosted page knows all of them). window.FONT_BASE says where the other
+// fonts are fetched from ('' means nowhere: the single file only has the fonts that are built in).
+function buildFontData(manifest, keys, fontBase, faces) {
   const entries = keys.map((key) => [key, fs.readFileSync(path.join(FONTS_SRC, path.basename(manifest[key]))).toString('base64')]);
-  return `window.FONT_DATA=${JSON.stringify(Object.fromEntries(entries))};window.FONT_BASE=${JSON.stringify(fontBase)};`;
+  return `window.FONT_DATA=${JSON.stringify(Object.fromEntries(entries))};window.FONT_FACES=${JSON.stringify(faces)};window.FONT_BASE=${JSON.stringify(fontBase)};`;
 }
 
 function buildAppScript(minify) {
@@ -141,21 +147,21 @@ function build({ minify = false, outDir = OUT_DIR } = {}) {
   const html = stampVersion(fs.readFileSync(path.join(SRC, 'index.html'), 'utf8'), 'src/index.html');
   const css = buildStyles(minify);
   const appScript = buildAppScript(minify);
-  const { manifest, builds } = readFontLists();
+  const { manifest, builds, faces } = readFontLists();
   const kb = (file) => (fs.statSync(file).size / 1024).toFixed(0);
 
   fs.mkdirSync(outDir, { recursive: true });
 
   // 1. The lite single file: only the lite fonts, nothing to fetch
   const liteFile = path.join(outDir, LITE_FILE);
-  fs.writeFileSync(liteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.lite, '') }), 'utf8');
+  fs.writeFileSync(liteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.lite, '', faces) }), 'utf8');
 
   // 2. The hosted site: a small page, and every font as its own file for the page to fetch when it is needed
   const siteDir = path.join(outDir, SITE_DIR), siteFonts = path.join(siteDir, 'fonts');
   fs.rmSync(siteDir, { recursive: true, force: true });   // so a font taken out of the library doesn't linger
   fs.mkdirSync(siteFonts, { recursive: true });
   const siteFile = path.join(siteDir, 'index.html');
-  fs.writeFileSync(siteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.core, 'fonts/') }), 'utf8');
+  fs.writeFileSync(siteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.core, 'fonts/', faces) }), 'utf8');
   const keys = Object.keys(manifest);
   keys.forEach((k) => fs.copyFileSync(path.join(FONTS_SRC, path.basename(manifest[k])), path.join(siteFonts, path.basename(manifest[k]))));
   // The licenses travel with the fonts they cover

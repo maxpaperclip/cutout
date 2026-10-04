@@ -7,11 +7,9 @@ The other weights and italics of a family (such as `lato-700i`) come from the sa
 | Key | Source | License | License text |
 |---|---|---|---|
 | inter | @fontsource/inter 5.3.0 | OFL-1.1 | licenses/inter.txt |
-| inter-xb | @fontsource/inter 5.3.0 | OFL-1.1 | licenses/inter-xb.txt |
 | nunito-xb | @fontsource/nunito 5.3.0 | OFL-1.1 | licenses/nunito-xb.txt |
 | fredoka | @fontsource/fredoka 5.3.0 | OFL-1.1 | licenses/fredoka.txt |
 | lora | @fontsource/lora 5.3.0 | OFL-1.1 | licenses/lora.txt |
-| lora-b | @fontsource/lora 5.3.0 | OFL-1.1 | licenses/lora-b.txt |
 | bungee | @fontsource/bungee 5.3.0 | OFL-1.1 | licenses/bungee.txt |
 | pacifico | @fontsource/pacifico 5.3.0 | OFL-1.1 | licenses/pacifico.txt |
 | marker | @fontsource/permanent-marker 5.3.0 | Apache-2.0 | licenses/marker.txt |

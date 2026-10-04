@@ -9,6 +9,7 @@ const SRC = path.join(__dirname, '..', 'src');
 const runtimeSource = fs.readFileSync(path.join(SRC, 'js', '03-fonts-runtime.js'), 'utf8');
 const manifest = JSON.parse(fs.readFileSync(path.join(SRC, 'fonts', 'manifest.json'), 'utf8'));
 const builds = JSON.parse(fs.readFileSync(path.join(SRC, 'fonts', 'builds.json'), 'utf8'));
+const faces = JSON.parse(fs.readFileSync(path.join(SRC, 'fonts', 'faces.json'), 'utf8'));
 const credits = fs.readFileSync(path.join(SRC, 'fonts', 'CREDITS.md'), 'utf8');
 
 // Arrays made inside the vm have its own Array, which deepEqual treats as a different kind of thing
@@ -18,7 +19,7 @@ function loadRuntime({ base, builtIn, fetchImpl }) {
   const toasts = [], fetched = [];
   const sandbox = {
     console, Date, Promise, Math, Uint8Array, String, Array, Set, Map, setTimeout, clearTimeout, atob: globalThis.atob,
-    window: { FONT_BASE: base },
+    window: { FONT_BASE: base, FONT_FACES: faces },
     FONT_DATA: Object.fromEntries(builtIn.map(k => [k, 'AAAA'])),
     opentype: { parse: () => ({ getAdvanceWidth: () => 1, getPath: () => ({ toPathData: () => '' }) }) },
     $: () => ({ setAttribute() {}, appendChild() {}, outerHTML: '' }), svgEl: () => ({}),
@@ -84,6 +85,34 @@ test('fonts: the list and the files agree', async (t) => {
   });
 });
 
+test('fonts: faces.json agrees with the files', async (t) => {
+  await t.test('every face is a real file in the manifest, in a family of the list, with a real weight', () => {
+    Object.entries(faces).forEach(([fam, list]) => {
+      assert.ok(familyKeys.includes(fam), fam + ' is in FONT_DEFS');
+      const seen = new Set([hosted.fonts[fam].weight + 'n']);
+      list.forEach(([k, w, i]) => {
+        assert.ok(manifest[k], k + ' in the manifest');
+        assert.ok(w >= 100 && w <= 900 && w % 100 === 0, k + ' weight');
+        const id = w + (i ? 'i' : 'n');
+        assert.ok(!seen.has(id), fam + ' has two ' + id);
+        seen.add(id);
+      });
+    });
+  });
+  await t.test('every file in the manifest is the first face of a family or one of its faces', () => {
+    const used = new Set(familyKeys);
+    Object.values(faces).forEach(list => list.forEach(([k]) => used.add(k)));
+    assert.deepEqual(plain(Object.keys(manifest).filter(k => !used.has(k))), []);
+  });
+  await t.test('names follow <family>-<weight>[i], except the ones saved drawings already used', () => {
+    const old = new Set(['inter-xb', 'lora-b']);
+    Object.entries(faces).forEach(([fam, list]) => list.forEach(([k, w, i]) => {
+      if (old.has(k)) return;
+      assert.match(k, new RegExp('^' + (fam === 'nunito-xb' ? 'nunito' : fam) + '-' + w + (i ? 'i' : '') + '$'));
+    }));
+  });
+});
+
 test('fonts: which fonts each build carries', async (t) => {
   await t.test('builds.json lists real fonts, and the lite build includes the core', () => {
     ['core', 'lite'].forEach(n => builds[n].forEach(k => assert.ok(manifest[k], n + ': ' + k)));
@@ -118,7 +147,7 @@ test('fonts: families, weights and italics', async (t) => {
     assert.equal(hosted.boldToggled('lato-700i'), 'lato-400i');
     assert.equal(hosted.boldToggled('lato-100'), 'lato-700');   // light counts as not bold
     assert.equal(hosted.boldToggled('lato-900'), 'lato');       // black counts as bold
-    assert.equal(hosted.boldToggled('inter'), 'inter-xb');
+    assert.equal(hosted.boldToggled('inter'), 'inter-700');
     assert.equal(hosted.boldToggled('inter-xb'), 'inter');
     assert.equal(hosted.boldToggled('lora'), 'lora-b');
   });
@@ -129,11 +158,27 @@ test('fonts: families, weights and italics', async (t) => {
     assert.equal(hosted.italicToggled('lato-300'), 'lato-300i');
   });
   await t.test('a family without a style gets the same face back, so the button can switch itself off', () => {
-    assert.equal(hosted.italicToggled('inter'), 'inter');          // no italic
-    assert.equal(hosted.italicToggled('roboto'), 'roboto');
-    assert.equal(hosted.boldToggled('roboto'), 'roboto');          // no bold face
-    assert.equal(hosted.boldToggled('bungee'), 'bungee');
-    assert.equal(hosted.boldToggled('nunito-xb'), 'nunito-xb');    // the only face is already bold: nothing lighter to go to
+    ['bungee', 'pacifico', 'bebas', 'lobster'].forEach(k => {
+      assert.equal(hosted.italicToggled(k), k, k + ' italic');
+      assert.equal(hosted.boldToggled(k), k, k + ' bold');
+    });
+    assert.equal(hosted.italicToggled('roboto-slab'), 'roboto-slab');   // bold, but no italic
+    assert.equal(hosted.boldToggled('roboto-slab'), 'roboto-slab-700');
+  });
+  await t.test('families whose first face is not the regular one (Nunito, Fredoka) still have a regular and a bold', () => {
+    assert.equal(hosted.boldToggled('nunito-xb'), 'nunito-400');
+    assert.equal(hosted.boldToggled('nunito-400'), 'nunito-700');
+    assert.equal(hosted.faceForFamily('nunito-xb', 'lato'), 'nunito-400');
+    assert.equal(hosted.fonts['nunito-xb'].label, 'Nunito');
+    assert.equal(hosted.fonts['nunito-xb'].styleLabel, 'Extra Bold');
+    assert.equal(hosted.boldToggled('fredoka'), 'fredoka-400');     // 600 counts as bold
+    assert.equal(hosted.boldToggled('fredoka-400'), 'fredoka-700');
+  });
+  await t.test('inter and lora got their bold faces under the keys they already had', () => {
+    assert.equal(hosted.fonts['inter-xb'].family, 'inter');
+    assert.equal(hosted.fonts['lora-b'].family, 'lora');
+    assert.equal(hosted.italicToggled('inter'), 'inter-400i');
+    assert.equal(hosted.italicToggled('lora-b'), 'lora-700i');
   });
   await t.test('picking another family keeps bold and italic where the family has them', () => {
     assert.equal(hosted.faceForFamily('lato', 'inter'), 'lato');
@@ -141,8 +186,9 @@ test('fonts: families, weights and italics', async (t) => {
     assert.equal(hosted.faceForFamily('lora', 'lato-700'), 'lora-b');
     assert.equal(hosted.faceForFamily('lato', 'lora-b'), 'lato-700');
     assert.equal(hosted.faceForFamily('lato', 'lato-700i'), 'lato-700i');
-    assert.equal(hosted.faceForFamily('lora', 'lato-700i'), 'lora-b');     // no italic Lora: upright
-    assert.equal(hosted.faceForFamily('roboto', 'lato-900'), 'roboto');    // no bold Roboto: its only face
+    assert.equal(hosted.faceForFamily('lora', 'lato-700i'), 'lora-700i');
+    assert.equal(hosted.faceForFamily('roboto', 'lato-900'), 'roboto-700');
+    assert.equal(hosted.faceForFamily('bungee', 'lato-700i'), 'bungee');   // one face: nothing else to give
   });
   await t.test('the weight of every face is a real weight, and a family has one face per weight and slant', () => {
     Object.values(hosted.FAMILIES).forEach(F => {
@@ -205,7 +251,7 @@ test('build: the two outputs', async (t) => {
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'cutout-build-'));
   const log = console.log; console.log = () => {};
   try { build({ outDir: out }); } finally { console.log = log; }
-  const dataOf = html => JSON.parse(/window\.FONT_DATA=(\{.*?\});window\.FONT_BASE=/s.exec(html)[1]);
+  const dataOf = html => JSON.parse(/window\.FONT_DATA=(\{.*?\});window\.FONT_FACES=/s.exec(html)[1]);
   const baseOf = html => JSON.parse(/window\.FONT_BASE=("[^"]*")/.exec(html)[1]);
   await t.test('Cutout.html is one self-contained file with the lite fonts built in', () => {
     const html = fs.readFileSync(path.join(out, 'Cutout.html'), 'utf8');
@@ -222,7 +268,7 @@ test('build: the two outputs', async (t) => {
     assert.ok(fs.existsSync(path.join(out, 'site', 'fonts', 'CREDITS.md')));
   });
   await t.test('the two pages differ only in their fonts', () => {
-    const strip = html => html.replace(/window\.FONT_DATA=\{.*?\};window\.FONT_BASE="[^"]*";/s, '');
+    const strip = html => html.replace(/window\.FONT_DATA=.*?window\.FONT_BASE="[^"]*";/s, '');
     assert.equal(strip(fs.readFileSync(path.join(out, 'Cutout.html'), 'utf8')), strip(fs.readFileSync(path.join(out, 'site', 'index.html'), 'utf8')));
   });
   fs.rmSync(out, { recursive: true, force: true });
