@@ -2,6 +2,7 @@
 
 Every font here is open source and comes with its license text in `licenses/`. The fonts added by `scripts/fetch-fonts.js`
 are the Latin subsets published by [Fontsource](https://fontsource.org); see each license for the authors.
+The other weights and italics of a family (such as `lato-700i`) come from the same package and share its license.
 
 | Key | Source | License | License text |
 |---|---|---|---|

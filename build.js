@@ -2,11 +2,15 @@
 /**
  * Build script for Cutout.
  *
- * Cutout ships as ONE self-contained HTML file so it can be dropped into any
- * classroom setup with zero server, zero install, and zero dependencies.
- * This script is what makes that possible while still letting you develop
- * against normal, separate files: it reads everything under src/ and glues
- * it back into a single dist/Cutout.html.
+ * It reads everything under src/ and glues it into two things:
+ *
+ *   dist/Cutout.html     The "lite" single file: one self-contained HTML file that works from a USB stick or an
+ *                        email attachment, with a small set of fonts built in ("lite" in src/fonts/builds.json).
+ *   dist/site/           The hosted version: index.html plus a fonts/ folder holding every font. The page only
+ *                        carries the few fonts it needs to start ("core" in src/fonts/builds.json); the rest are
+ *                        fetched from fonts/ when a font is first used, and the browser keeps them. To publish,
+ *                        upload the contents of dist/site/ to any static web host. It needs to be opened from a
+ *                        web address (a file opened straight from disk can't fetch the fonts folder).
  *
  * Nothing here is a "real" module bundler (no import/export resolution).
  * The JS files under src/js/ share one global scope on purpose, in the
@@ -17,7 +21,7 @@
  * touching anything else in this file.
  *
  * Usage:
- *   node build.js            build dist/Cutout.html
+ *   node build.js            build dist/Cutout.html and dist/site/
  *   node build.js --watch    rebuild on any change under src/
  *   node build.js --minify   also minify the JS with esbuild, if installed
  */
@@ -34,7 +38,8 @@ const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 // title, and APP_VERSION in src/js/01-helpers.js). To release a new version:
 //   npm version 1.7.0 --no-git-tag-version
 // which updates package.json and package-lock.json together.
-const OUT_FILE = path.join(OUT_DIR, 'Cutout.html');
+const LITE_FILE = 'Cutout.html';
+const SITE_DIR = 'site';
 const VERSION_TOKEN = '__APP_VERSION__';
 function stampVersion(text, where) {
   if (!text.includes(VERSION_TOKEN)) throw new Error(`[build] ${where} no longer contains ${VERSION_TOKEN}; the version would not be stamped in.`);
@@ -46,19 +51,27 @@ function readManifest() {
   return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
 }
 
-function buildFontData() {
-  // Every font listed in src/fonts/manifest.json becomes one entry in
-  // window.FONT_DATA, keyed by name — exactly what
-  // src/js/03-fonts-runtime.js expects to find at runtime. To add a new
-  // embedded font: drop the .woff file in src/fonts/ and add a line here.
-  const fontsDir = path.join(SRC, 'fonts');
-  const manifest = JSON.parse(fs.readFileSync(path.join(fontsDir, 'manifest.json'), 'utf8'));
-  const entries = Object.entries(manifest).map(([key, relPath]) => {
-    const b64 = fs.readFileSync(path.join(fontsDir, path.basename(relPath))).toString('base64');
-    return [key, b64];
+const FONTS_SRC = path.join(SRC, 'fonts');
+// Fonts every build must carry: the default font for text, and the one the wordmark is drawn in
+const MUST_EMBED = ['inter-xb', 'bungee'];
+function readFontLists() {
+  const manifest = JSON.parse(fs.readFileSync(path.join(FONTS_SRC, 'manifest.json'), 'utf8'));
+  const builds = JSON.parse(fs.readFileSync(path.join(FONTS_SRC, 'builds.json'), 'utf8'));
+  ['core', 'lite'].forEach((name) => {
+    const keys = builds[name];
+    if (!Array.isArray(keys)) throw new Error(`[build] src/fonts/builds.json has no "${name}" list.`);
+    keys.forEach((k) => { if (!manifest[k]) throw new Error(`[build] "${k}" in builds.json "${name}" is not in src/fonts/manifest.json.`); });
+    MUST_EMBED.forEach((k) => { if (!keys.includes(k)) throw new Error(`[build] builds.json "${name}" must include "${k}".`); });
   });
-  const obj = Object.fromEntries(entries);
-  return `window.FONT_DATA=${JSON.stringify(obj)};`;
+  return { manifest, builds };
+}
+
+// The fonts built into the page: window.FONT_DATA, keyed by font name, base64 — what src/js/03-fonts-runtime.js
+// finds at start-up. window.FONT_BASE says where the other fonts are fetched from ('' means nowhere: the
+// single file only has the fonts that are built in).
+function buildFontData(manifest, keys, fontBase) {
+  const entries = keys.map((key) => [key, fs.readFileSync(path.join(FONTS_SRC, path.basename(manifest[key]))).toString('base64')]);
+  return `window.FONT_DATA=${JSON.stringify(Object.fromEntries(entries))};window.FONT_BASE=${JSON.stringify(fontBase)};`;
 }
 
 function buildAppScript(minify) {
@@ -105,14 +118,7 @@ function buildStyles(minify) {
   return css;
 }
 
-function build({ minify = false } = {}) {
-  const start = Date.now();
-
-  const html = stampVersion(fs.readFileSync(path.join(SRC, 'index.html'), 'utf8'), 'src/index.html');
-  const css = buildStyles(minify);
-  const fontDataScript = buildFontData();
-  const appScript = buildAppScript(minify);
-
+function buildPage({ html, css, appScript, fontDataScript }) {
   const scripts = [
     '<script src="https://cdn.jsdelivr.net/npm/paper@0.12.18/dist/paper-core.min.js"></script>',
     '<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>',
@@ -124,15 +130,41 @@ function build({ minify = false } = {}) {
   // itself uses `$` and `$$` as function names — a literal-string
   // replacement would trigger JS's special "$$"/"$&" substitution
   // patterns and silently corrupt the output.
-  const out = html
+  return html
     .replace('<!--STYLES-->', () => css)
     .replace('<!--SCRIPTS-->', () => scripts);
+}
 
-  fs.mkdirSync(OUT_DIR, { recursive: true });
-  fs.writeFileSync(OUT_FILE, out, 'utf8');
+function build({ minify = false, outDir = OUT_DIR } = {}) {
+  const start = Date.now();
 
-  const kb = (fs.statSync(OUT_FILE).size / 1024).toFixed(0);
-  console.log(`[build] wrote ${path.relative(__dirname, OUT_FILE)} (${kb} KB) in ${Date.now() - start}ms`);
+  const html = stampVersion(fs.readFileSync(path.join(SRC, 'index.html'), 'utf8'), 'src/index.html');
+  const css = buildStyles(minify);
+  const appScript = buildAppScript(minify);
+  const { manifest, builds } = readFontLists();
+  const kb = (file) => (fs.statSync(file).size / 1024).toFixed(0);
+
+  fs.mkdirSync(outDir, { recursive: true });
+
+  // 1. The lite single file: only the lite fonts, nothing to fetch
+  const liteFile = path.join(outDir, LITE_FILE);
+  fs.writeFileSync(liteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.lite, '') }), 'utf8');
+
+  // 2. The hosted site: a small page, and every font as its own file for the page to fetch when it is needed
+  const siteDir = path.join(outDir, SITE_DIR), siteFonts = path.join(siteDir, 'fonts');
+  fs.rmSync(siteDir, { recursive: true, force: true });   // so a font taken out of the library doesn't linger
+  fs.mkdirSync(siteFonts, { recursive: true });
+  const siteFile = path.join(siteDir, 'index.html');
+  fs.writeFileSync(siteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.core, 'fonts/') }), 'utf8');
+  const keys = Object.keys(manifest);
+  keys.forEach((k) => fs.copyFileSync(path.join(FONTS_SRC, path.basename(manifest[k])), path.join(siteFonts, path.basename(manifest[k]))));
+  // The licenses travel with the fonts they cover
+  fs.cpSync(path.join(FONTS_SRC, 'licenses'), path.join(siteFonts, 'licenses'), { recursive: true });
+  fs.copyFileSync(path.join(FONTS_SRC, 'CREDITS.md'), path.join(siteFonts, 'CREDITS.md'));
+
+  const fontsKb = keys.reduce((n, k) => n + fs.statSync(path.join(siteFonts, path.basename(manifest[k]))).size, 0) / 1024;
+  console.log(`[build] wrote ${path.relative(__dirname, liteFile)} (${kb(liteFile)} KB, ${builds.lite.length} fonts built in) in ${Date.now() - start}ms`);
+  console.log(`[build] wrote ${path.relative(__dirname, siteFile)} (${kb(siteFile)} KB) and ${keys.length} fonts in ${path.relative(__dirname, siteFonts)}/ (${fontsKb.toFixed(0)} KB)`);
 }
 
 function watch() {
@@ -153,9 +185,13 @@ function watch() {
   });
 }
 
-const args = process.argv.slice(2);
-if (args.includes('--watch')) {
-  watch();
-} else {
-  build({ minify: args.includes('--minify') });
+module.exports = { build };
+
+if (require.main === module) {
+  const args = process.argv.slice(2);
+  if (args.includes('--watch')) {
+    watch();
+  } else {
+    build({ minify: args.includes('--minify') });
+  }
 }

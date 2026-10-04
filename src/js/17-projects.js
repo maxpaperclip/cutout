@@ -114,6 +114,7 @@ async function openProject(file) {
       if (typeof o.erase === 'string') o.erase = map.has(o.erase) ? map.get(o.erase).id : '';
     });
     map.forEach(rec => images.set(rec.id, rec));
+    await fontsWithin(rawFontKeys(raw), 4000);   // fonts this drawing uses that aren't here yet (hosted build); a slow one is laid out again when it arrives (fontArrived)
     const d = sanitizeDoc(raw);
     const miss = d._missingFont, lostPhoto = dropped || d._missingPhoto;
     delete d._missingFont; delete d._missingPhoto;

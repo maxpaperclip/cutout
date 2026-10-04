@@ -7,7 +7,7 @@
     "build": "node build.js",
     "build:min": "node build.js --minify",
     "dev": "node build.js --watch",
-    "serve": "node build.js && npx --yes serve dist",
+    "serve": "node build.js && npx --yes serve dist/site",
     "release": "node build.js && node scripts/copy-to-root.js",
     "test": "node --test tests-unit/*.test.js"
   },

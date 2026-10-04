@@ -1,7 +1,7 @@
 /* =====================================================================
    Boot
    ===================================================================== */
-$('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + FONT_DEFS.filter(f => f[2] === c).map(f => f[1]).join(', ')).join('. ') + '.';
+$('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
 $('#about-ver').textContent = 'Cutout v' + APP_VERSION;
 if (window.ResizeObserver) new ResizeObserver(() => { if (!userView) fit(); else drawOverlay(); }).observe($('#stagewrap'));

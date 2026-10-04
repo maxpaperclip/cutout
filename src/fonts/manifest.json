@@ -52,5 +52,14 @@
   "orbitron": "fonts/orbitron.woff",
   "monoton": "fonts/monoton.woff",
   "chewy": "fonts/chewy.woff",
+  "lato-100": "fonts/lato-100.woff",
+  "lato-100i": "fonts/lato-100i.woff",
+  "lato-300": "fonts/lato-300.woff",
+  "lato-300i": "fonts/lato-300i.woff",
+  "lato-400i": "fonts/lato-400i.woff",
+  "lato-700": "fonts/lato-700.woff",
+  "lato-700i": "fonts/lato-700i.woff",
+  "lato-900": "fonts/lato-900.woff",
+  "lato-900i": "fonts/lato-900i.woff",
   "noto-sans-sc": "fonts/noto-sans-sc.woff"
 }

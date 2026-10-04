@@ -154,6 +154,7 @@ async function restoreSession() {
       try { const r = await idbGet('images', id); if (r && r.blob) await registerStored(r); else lost++; } catch (e) { lost++; }
     }
   }
+  await fontsWithin(rawFontKeys(parsed), 2500);   // fonts the drawing uses that aren't here yet (hosted build); never hold up start-up for long (boot gives up at 6 s), a slow one is laid out again when it arrives
   const d = sanitizeDoc(parsed);
   if (d._missingPhoto) lost = Math.max(lost, 1);
   delete d._missingPhoto; delete d._missingFont;
