@@ -73,7 +73,7 @@ const iconFor = o => o.paint ? 'brush' : o.kind === 'polygon' ? (o.star ? 'star'
 /* ---------- blend modes and line ends ----------
    o.blend: how an object mixes with what's under it (absent = normal).
    o.cap:   how open outline ends and dash ends are drawn (absent = automatic: round for lines
-            and drawn lines, flat for everything else, which is how Cutout has always drawn them). */
+            and drawn lines, flat for everything else, which is how FriendShaped has always drawn them). */
 const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'],
   ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'],
   ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'],
@@ -114,7 +114,7 @@ function makeImage(rec, props) {
    Every position is a fraction of the object's box (0,0 = top-left, 1,1 = bottom-right), so
    resizing, flipping and turning the object carry the gradient along with no extra work.
    A radial radius of 0.5 reaches the box edges; on a wide box the circle stretches into an ellipse.
-   o.fill stays a plain color (the first stop) so older versions of Cutout, which drop o.grad when
+   o.fill stays a plain color (the first stop) so older versions of FriendShaped, which drop o.grad when
    they open a drawing, still show a sensible solid color. */
 const GRAD_TYPES = ['linear', 'radial'];
 const GRAD_MAX_STOPS = 8;

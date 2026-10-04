@@ -1,12 +1,12 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 const plain = (x) => JSON.parse(JSON.stringify(x));
 // A drawing with objects A..F from bottom to top (ids 1..6)
 function setup(n = 6) {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
   const names = 'ABCDEFGHIJ'.slice(0, n).split('');
   names.forEach((nm, i) => m.doc.objects.push(m.newShape('rect', { name: nm, x: i * 100, y: 0, w: 50, h: 50 })));
   const byName = (nm) => m.doc.objects.find((o) => o.name === nm);
@@ -189,7 +189,7 @@ test('groups: copying', async (t) => {
 
 test('groups: scaling and turning several objects together', async (t) => {
   await t.test('scaleAbout grows positions, sizes and outlines from the anchor', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = m.newShape('rect', { x: 100, y: 100, w: 50, h: 20, sw: 2, r: 4 });
     const o0 = plain(o);
     m.scaleAbout(o, o0, 100, 100, 2);
@@ -200,14 +200,14 @@ test('groups: scaling and turning several objects together', async (t) => {
   });
 
   await t.test('scaleAbout scales text by its size', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const t0 = m.newShape('text', { x: 0, y: 0, size: 20 });
     m.scaleAbout(t0, plain(t0), 0, 0, 1.5);
     assert.equal(t0.size, 30);
   });
 
   await t.test('rotateAbout turns objects around a shared center', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = m.newShape('rect', { x: 90, y: -10, w: 20, h: 20, rot: 10 });   // centered at (100, 0)
     m.rotateAbout(o, plain(o), 0, 0, 90);
     assert.ok(Math.abs(o.x + 10) < 1e-9 && Math.abs(o.y - 90) < 1e-9, o.x + ',' + o.y);   // now centered at (0, 100)
@@ -244,7 +244,7 @@ test('groups: other commands', async (t) => {
   });
 
   await t.test('a drawing from before groups existed opens with no groups', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const d = { objects: [m.newShape('rect', {})], nextId: 5 };
     m.normalizeGroups(d);
     assert.deepEqual(plain(d.groups), []);

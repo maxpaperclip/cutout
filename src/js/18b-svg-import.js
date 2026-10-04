@@ -1,14 +1,14 @@
 /* =====================================================================
    SVG import
-   Brings an SVG file in as ordinary, editable Cutout objects: shapes become paths, groups become
-   groups, gradients become Cutout gradients, text becomes Cutout text (in Cutout's default font)
+   Brings an SVG file in as ordinary, editable FriendShaped objects: shapes become paths, groups become
+   groups, gradients become FriendShaped gradients, text becomes FriendShaped text (in FriendShaped's default font)
    and embedded pictures become photos. Three steps:
      1. svgSafeParse(text): read the file and make it safe. Students may download SVGs from anywhere,
         so scripts, event handlers, embedded web content, animation and anything that would fetch
         from the internet are removed before anything else happens. <style> rules are copied onto
         the shapes they apply to, because paper.js only reads colors written on the shapes.
      2. paper.js reads the cleaned SVG into its own items (with shapes expanded to paths).
-     3. svgConvert(): walks those items and makes Cutout objects. This step uses only paper.js,
+     3. svgConvert(): walks those items and makes FriendShaped objects. This step uses only paper.js,
         so it can be tested without a browser.
    Embedded pictures are swapped for marker paths before paper.js reads the file (it loads
    pictures later, so their size isn't known in time). The marker's four corners say exactly
@@ -160,7 +160,7 @@ function svgScaleOutlines(svg) {
   })(svg, rootScale, 1, false);
 }
 
-// The Cutout font closest to an SVG font: the same name if we have it, else serif, monospace or sans serif, regular or bold
+// The FriendShaped font closest to an SVG font: the same name if we have it, else serif, monospace or sans serif, regular or bold
 function svgFontFor(family, weight) {
   const f = String(family || '').toLowerCase(), bold = /bold|[6-9]00/.test(String(weight || ''));
   if (typeof fonts !== 'undefined') {   // a font we have under that very name (the first one listed), in its bold form where there is one
@@ -171,14 +171,14 @@ function svgFontFor(family, weight) {
   return typeof fonts !== 'undefined' && fonts[key] ? key : DEFAULT_FONT;
 }
 
-/* ---------- 3. turning paper.js items into Cutout objects ---------- */
+/* ---------- 3. turning paper.js items into FriendShaped objects ---------- */
 const svgScaleOf = m => Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
 function svgColor(c) {
   if (!c) return null;
   if (c.gradient) { const s = c.gradient.stops[0]; return s ? { hex: normHex(s.color.toCSS(true)) || '#000000', a: s.color.alpha } : null; }
   return { hex: normHex(c.toCSS(true)) || '#000000', a: c.alpha };
 }
-// A paper.js gradient color, as a Cutout gradient laid out over the shape's box (b, page coordinates)
+// A paper.js gradient color, as a FriendShaped gradient laid out over the shape's box (b, page coordinates)
 function svgGradient(c, m, b) {
   if (!c || !c.gradient || c.gradient.stops.length < 2) return null;
   const n = c.gradient.stops.length, w = Math.max(b.width, 1e-6), h = Math.max(b.height, 1e-6);
@@ -191,7 +191,7 @@ function svgGradient(c, m, b) {
   const o = P(c.origin), d = P(c.destination);
   let g;
   if (c.gradient.radial) {
-    // Cutout's radial gradients stretch with the box, so a circle on a non-square box is approximate
+    // FriendShaped's radial gradients stretch with the box, so a circle on a non-square box is approximate
     const R = Math.hypot(d.px - o.px, d.py - o.py);
     g = { type: 'radial', stops, cx: o.x, cy: o.y, r: R / Math.sqrt(w * h) };
     if (c.highlight) { const f = P(c.highlight); g.fx = f.x; g.fy = f.y; }
@@ -199,7 +199,7 @@ function svgGradient(c, m, b) {
   return sanitizeGrad(g);
 }
 const svgNameOf = item => (item.name && item.name.indexOf(SVG_IMG_MARK) !== 0 ? String(item.name).slice(0, 60) : '');
-// Walk the paper.js items and make Cutout objects in the current drawing's id space.
+// Walk the paper.js items and make FriendShaped objects in the current drawing's id space.
 // Returns { objects, groups, pictures: [{ n, corners }], counts }.
 function svgConvert(root) {
   const out = { objects: [], groups: [], pictures: [], counts: { shapes: 0, text: 0, skipped: 0, clipped: 0, tooMany: false } };
@@ -208,7 +208,7 @@ function svgConvert(root) {
   const visibleKids = it => (it.children || []).filter(c => c.visible && !c.clipMask);
   // A plain shape (circle, rect...) as a path, placed the same way
   const asPath = it => { const p = it.toPath(false); return { src: p, mx: p.matrix }; };
-  // blend: the blend mode passed down from a group; Cutout groups have no blend of their own
+  // blend: the blend mode passed down from a group; FriendShaped groups have no blend of their own
   function walk(item, acc, parent, op, clip, depth, blend) {
     if (!item.visible || !room()) return;
     const m = acc.appended(item.matrix), opacity = op * (item.opacity === undefined ? 1 : item.opacity), cls = item.className;
@@ -292,7 +292,7 @@ function svgConvert(root) {
     const align = item.justification === 'center' ? 'center' : item.justification === 'right' ? 'right' : 'left';
     const o = newShape('text', { text: content.slice(0, 5000), size: rnd(size, 2), align, font: svgFontFor(item.fontFamily, item.fontWeight),
       fill: fill ? fill.hex : '#000000', stroke: 'none', opacity: rnd(clamp(opacity * (fill ? fill.a : 1), 0, 1), 3) });
-    // Put Cutout's text box where the SVG's first baseline was, then turn it the same way
+    // Put FriendShaped's text box where the SVG's first baseline was, then turn it the same way
     const font = fontOf(o.font), k = o.size / font.unitsPerEm, asc = font.ascender * k, desc = -font.descender * k;
     const baseline = (o.lh * o.size - (asc + desc)) / 2 + asc;
     // the text's own origin is its first baseline; its matrix already holds the position
@@ -327,16 +327,16 @@ async function importSVGFile(file) {
   if (file.size > SVG_LIMITS.fileBytes) throw new Error(label + ' is ' + fmtMB(file.size) + ' MB. SVG files can be up to ' + fmtMB(SVG_LIMITS.fileBytes) + ' MB.');
   const { svg, pictures } = svgSafeParse(await file.text());
   let root;
-  try { root = paper.project.importSVG(svg, { insert: false, expandShapes: true }); } catch (e) { console.error(e); throw new Error(label + ' could not be read. It may use SVG features Cutout doesn’t know.'); }
+  try { root = paper.project.importSVG(svg, { insert: false, expandShapes: true }); } catch (e) { console.error(e); throw new Error(label + ' could not be read. It may use SVG features FriendShaped doesn’t know.'); }
   if (!root) throw new Error(label + ' could not be read.');
   if (typeof fontsWithin === 'function') {   // hosted build: text is measured in its own font, so bring in any font it needs first
     try { await fontsWithin(root.getItems({ class: paper.PointText }).map(t => svgFontFor(t.fontFamily, t.fontWeight)), 4000); } catch (e) { /* the default font stands in */ }
   }
   const before = { next: doc.nextId };
   let res;
-  try { res = svgConvert(root); } catch (e) { console.error(e); doc.nextId = before.next; throw new Error(label + ' could not be converted. It may use SVG features Cutout doesn’t know.'); }
+  try { res = svgConvert(root); } catch (e) { console.error(e); doc.nextId = before.next; throw new Error(label + ' could not be converted. It may use SVG features FriendShaped doesn’t know.'); }
   const boxes = res.pictures.map(p => svgPictureBox(p.corners));
-  if (!res.objects.length && !boxes.length) { doc.nextId = before.next; throw new Error(label + ' has nothing in it that Cutout can show.'); }
+  if (!res.objects.length && !boxes.length) { doc.nextId = before.next; throw new Error(label + ' has nothing in it that FriendShaped can show.'); }
   // Fit it on the page if it is too big, and center it
   const all = res.objects.map(aabb).concat(boxes.map(b => ({ x: b.cx - b.w / 2, y: b.cy - b.h / 2, w: b.w, h: b.h })));
   const u = unionBox(all.map(b => ({ x: b.x, y: b.y, w: b.w, h: b.h, rot: 0 })));

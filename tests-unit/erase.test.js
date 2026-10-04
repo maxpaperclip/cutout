@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 const PIC = 'data:image/png;base64,AA==';
 const MASK = 'data:image/png;base64,BB==';
@@ -18,7 +18,7 @@ const stroke = (extra) => Object.assign({ d: 'M10 10L10 10L30 20', size: 20, sof
 
 test('erase: what counts as a photo', async (t) => {
   await t.test('docImageIds includes the erase mask, docPhotoIds does not', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'm1' });
     assert.deepEqual([...m.docImageIds(m.doc)].sort(), ['m1', 'p1']);
     assert.deepEqual([...m.docPhotoIds(m.doc)], ['p1']);
@@ -26,7 +26,7 @@ test('erase: what counts as a photo', async (t) => {
   });
 
   await t.test('only photos can be erased for now', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     assert.equal(m.canErase(o), true);
     assert.equal(m.canErase(m.newShape('rect', {})), false);
@@ -36,7 +36,7 @@ test('erase: what counts as a photo', async (t) => {
 
 test('erase: describing the mask', async (t) => {
   await t.test('nothing erased means no mask at all', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     assert.equal(m.eraseView(o, 'em1'), null);
     const v = m.objView(o, { grad: 'g', clip: 'c', mask: 'em1' });
@@ -45,7 +45,7 @@ test('erase: describing the mask', async (t) => {
   });
 
   await t.test('an erased photo is drawn through a mask: white backdrop, then the mask picture in the photo box', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'm1' });
     const v = m.objView(o, { grad: 'g', clip: 'c', mask: 'em1' });
     assert.equal(v.node.a.mask, 'url(#em1)');
@@ -63,7 +63,7 @@ test('erase: describing the mask', async (t) => {
   });
 
   await t.test('the backdrop covers the turned photo and leaves room for an outline', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'm1', rot: 30 });
     const box = m.aabb(o), rect = m.objView(o, { mask: 'em1' }).defs.find(d => d.tag === 'mask').kids[0].a;
     assert.ok(rect.x < box.x && rect.y < box.y);
@@ -71,13 +71,13 @@ test('erase: describing the mask', async (t) => {
   });
 
   await t.test('a mask picture that has gone missing is ignored, so the photo still shows', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'gone' });
     assert.equal(m.eraseView(o, 'em1'), null);
   });
 
   await t.test('a stroke being drawn is inside the mask: black erases, white restores', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'm1' });
     m.eraseLive.set(o.id, [stroke(), stroke({ restore: true })]);
     const mask = m.objView(o, { mask: 'em1' }).defs.find(d => d.tag === 'mask');
@@ -92,7 +92,7 @@ test('erase: describing the mask', async (t) => {
   });
 
   await t.test('a stroke alone is enough to make a mask (the first stroke on a fresh photo)', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     m.eraseLive.set(o.id, [stroke()]);
     const v = m.objView(o, { mask: 'em1' });
@@ -101,7 +101,7 @@ test('erase: describing the mask', async (t) => {
   });
 
   await t.test('soft strokes get a blur, hard ones do not', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     const hard = m.eraseStrokeParts(stroke({ soft: 0 }), 'f', o), soft = m.eraseStrokeParts(stroke({ soft: 1 }), 'f', o);
     assert.equal(hard.defs.length, 0); assert.equal(hard.a.filter, null);
@@ -113,7 +113,7 @@ test('erase: describing the mask', async (t) => {
   });
 
   await t.test('strokes are written as a dot first, then line segments', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     assert.equal(m.erasePathStart(1.234, 5), 'M1.23 5L1.23 5');
     assert.equal(m.erasePathMore(7, 8.456), 'L7 8.46');
   });
@@ -121,7 +121,7 @@ test('erase: describing the mask', async (t) => {
 
 test('erase: export', async (t) => {
   await t.test('the SVG has a mask definition and the photo group points at it', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'm1' });
     const svg = m.buildSVG([o], { x: 0, y: 0, w: 800, h: 600 }, 800, 600, null);
     assert.match(svg, /<defs><mask id="em1" maskUnits="userSpaceOnUse"/);
@@ -131,7 +131,7 @@ test('erase: export', async (t) => {
   });
 
   await t.test('two erased photos get their own masks', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = withPhoto(m, { erase: 'm1' });
     m.images.set('m2', { id: 'm2', w: 400, h: 200, dataUrl: 'data:image/png;base64,CC==', mask: true });
     const b = m.makeImage(m.images.get('p1'), { x: 300, y: 40, w: 200, h: 100, erase: 'm2' });
@@ -141,14 +141,14 @@ test('erase: export', async (t) => {
   });
 
   await t.test('a photo that was never erased exports exactly as before', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     const svg = m.buildSVG([o], { x: 0, y: 0, w: 800, h: 600 }, 800, 600, null);
     assert.doesNotMatch(svg, /mask/);
   });
 
   await t.test('the stand-alone stroke SVG used for baking covers the photo box', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     const svg = m.eraseStrokeSVG(o, [stroke({ soft: 1 }), stroke({ restore: true })], 400, 200);
     assert.match(svg, /^<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="400" height="200" viewBox="0 0 200 100" preserveAspectRatio="none">/);
@@ -159,7 +159,7 @@ test('erase: export', async (t) => {
   });
 
   await t.test('pointer positions map into the photo box through a turn and a flip', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { rot: 90, fx: true });
     const [wx, wy] = m.boxToWorld(o, 30, 70);
     const [bx, by] = m.worldToBox(o, wx, wy);
@@ -169,7 +169,7 @@ test('erase: export', async (t) => {
 
 test('erase: saving and opening', async (t) => {
   await t.test('an erased photo keeps its mask when a drawing is opened', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     withPhoto(m);
     const d = m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'image', img: 'p1', erase: 'm1', x: 1, y: 2, w: 30, h: 20 }] });
     assert.equal(d.objects.length, 1);
@@ -178,7 +178,7 @@ test('erase: saving and opening', async (t) => {
   });
 
   await t.test('a missing mask picture is dropped and reported, and the photo itself survives', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     m.images.set('p1', { id: 'p1', w: 400, h: 200, dataUrl: PIC });
     const d = m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'image', img: 'p1', erase: 'nope', x: 1, y: 2, w: 30, h: 20 }] });
     assert.equal(d.objects.length, 1);
@@ -187,14 +187,14 @@ test('erase: saving and opening', async (t) => {
   });
 
   await t.test('the mask is part of the saved drawing text', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m, { erase: 'm1' });
     assert.equal(JSON.parse(m.docJSON(m.doc)).objects[0].erase, 'm1');
     assert.equal(o.erase, 'm1');
   });
 
   await t.test('erasing is blocked while strokes are waiting to be saved', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withPhoto(m);
     assert.equal(m.eraseBusy(), false);
     m.eraseLive.set(o.id, [stroke()]);
@@ -204,7 +204,7 @@ test('erase: saving and opening', async (t) => {
 
 test('erase: things that cannot carry an erased photo yet say so', async (t) => {
   await t.test('using an erased photo as a mask explains why not', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const o = withPhoto(m, { erase: 'm1' });
     const r = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     m.doc.objects.push(r);
@@ -230,7 +230,7 @@ const paint = (extra) => Object.assign({ d: 'M10 10L10 10Q10 10 15 12', size: 30
 
 test('paint: smooth strokes', async (t) => {
   await t.test('a new stroke starts as a dot', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const s = { smooth: true };
     m.strokeBegin(s, 10, 20);
     assert.equal(s.d, 'M10 20L10 20');
@@ -238,7 +238,7 @@ test('paint: smooth strokes', async (t) => {
   });
 
   await t.test('a smooth stroke curves through the midpoints between positions', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const s = { smooth: true };
     m.strokeBegin(s, 0, 0);
     m.strokeAdd(s, 10, 0);
@@ -249,14 +249,14 @@ test('paint: smooth strokes', async (t) => {
   });
 
   await t.test('a plain stroke (the eraser) just joins the positions, and ends where it is', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const s = {};
     m.strokeBegin(s, 0, 0); m.strokeAdd(s, 10, 0); m.strokeEnd(s);
     assert.equal(s.d, 'M0 0L0 0L10 0');
   });
 
   await t.test('a click without a drag is still a dot', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const s = { smooth: true }; m.strokeBegin(s, 4, 4); m.strokeEnd(s);
     assert.equal(s.d, 'M4 4L4 4L4 4');
   });
@@ -264,7 +264,7 @@ test('paint: smooth strokes', async (t) => {
 
 test('paint: how strokes are described', async (t) => {
   await t.test('a paint stroke is drawn in its own color, with opacity only when it is below 100%', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     assert.equal(m.eraseStrokeParts(paint(), 'f', o).a.stroke, '#3b3bf5');
     assert.equal(m.eraseStrokeParts(paint(), 'f', o).a.opacity, null);
@@ -273,7 +273,7 @@ test('paint: how strokes are described', async (t) => {
   });
 
   await t.test('pending paint strokes are drawn over the layer, after its picture', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     m.eraseLive.set(o.id, [paint(), paint({ color: '#ff0000' })]);
     const v = m.objView(o, { mask: 'em1' });
@@ -284,14 +284,14 @@ test('paint: how strokes are described', async (t) => {
   });
 
   await t.test('the layer\'s own opacity shows in the preview, as it will once the stroke is saved', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m, { opacity: 0.5 });
     m.eraseLive.set(o.id, [paint({ alpha: 0.5 })]);
     assert.equal(m.paintView(o, 'x').kids[0].a.opacity, 0.25);
   });
 
   await t.test('soft paint strokes get a blur with an id of their own', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     m.eraseLive.set(o.id, [paint({ soft: 1 })]);
     const pv = m.paintView(o, 'em1');
@@ -300,7 +300,7 @@ test('paint: how strokes are described', async (t) => {
   });
 
   await t.test('paint and erase strokes pending on one layer stay apart: erasing goes in the mask, paint over the picture', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     m.eraseLive.set(o.id, [paint(), { d: 'M1 1L1 1', size: 10, soft: 0, restore: false, open: false }]);
     const v = m.objView(o, { mask: 'em1' });
@@ -311,14 +311,14 @@ test('paint: how strokes are described', async (t) => {
   });
 
   await t.test('a photo with no pending strokes is described exactly as before', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     const v = m.objView(o, { mask: 'em1' });
     assert.equal(v.node.kids.length, 1); assert.equal(v.defs.length, 0);
   });
 
   await t.test('pending paint strokes count as busy, so undo waits for them', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     assert.equal(m.eraseBusy(), false);
     m.eraseLive.set(o.id, [paint()]);
@@ -326,7 +326,7 @@ test('paint: how strokes are described', async (t) => {
   });
 
   await t.test('paint strokes are exported into the stand-alone stroke SVG in color', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     const svg = m.eraseStrokeSVG(o, [paint({ alpha: 0.5 })], 1600, 1200);
     assert.match(svg, /viewBox="0 0 800 600"/);
@@ -336,7 +336,7 @@ test('paint: how strokes are described', async (t) => {
 
 test('paint: the layer itself', async (t) => {
   await t.test('its picture has two pixels per page unit, up to 1600 on the long side', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     assert.deepEqual(Array.from(m.paintSize({ w: 800, h: 600 })), [1600, 1200]);
     assert.deepEqual(Array.from(m.paintSize({ w: 100, h: 100 })), [200, 200]);
     assert.deepEqual(Array.from(m.paintSize({ w: 4000, h: 3000 })), [1600, 1200]);
@@ -344,7 +344,7 @@ test('paint: the layer itself', async (t) => {
   });
 
   await t.test('a layer that was never painted on is recognised by its 1 x 1 stand-in picture', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     assert.equal(m.isBlankPaint({ w: 1, h: 1 }), true);
     assert.equal(m.isBlankPaint({ w: 5, h: 1, blank: true }), true);
     assert.equal(m.isBlankPaint(undefined), true);
@@ -352,7 +352,7 @@ test('paint: the layer itself', async (t) => {
   });
 
   await t.test('its picture is not a photo, so it does not use up the photo limit', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     withLayer(m);
     m.images.set('p1', { id: 'p1', w: 10, h: 10, dataUrl: 'data:,' });
     m.doc.objects.push(m.makeImage(m.images.get('p1'), {}));
@@ -361,7 +361,7 @@ test('paint: the layer itself', async (t) => {
   });
 
   await t.test('it shows a brush icon and a name in the Layers list', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = withLayer(m);
     assert.equal(m.iconFor(o), 'brush');
     assert.equal(m.labelOf(o), 'Paint layer');
@@ -369,7 +369,7 @@ test('paint: the layer itself', async (t) => {
   });
 
   await t.test('opening a drawing keeps the layer a paint layer', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     m.images.set('L1', { id: 'L1', w: 1600, h: 1200, dataUrl: 'data:,' });
     const d = m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'image', img: 'L1', paint: true, x: 0, y: 0, w: 800, h: 600 }, { kind: 'image', img: 'L1', x: 0, y: 0, w: 5, h: 5 }] });
     assert.equal(d.objects[0].paint, true);
@@ -377,13 +377,13 @@ test('paint: the layer itself', async (t) => {
   });
 
   await t.test('a paint layer is saved with the drawing', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     withLayer(m);
     assert.equal(JSON.parse(m.docJSON(m.doc)).objects[0].paint, true);
   });
 
   await t.test('it can be used as a photo mask like any picture', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const o = withLayer(m);
     const r = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     m.doc.objects.push(r); m.S.sel = new Set([o.id, r.id]);

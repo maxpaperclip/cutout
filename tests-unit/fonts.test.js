@@ -248,13 +248,13 @@ test('fonts: fetching a font that is not built in', async (t) => {
 
 test('build: the two outputs', async (t) => {
   const { build } = require('../build.js');
-  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'cutout-build-'));
+  const out = fs.mkdtempSync(path.join(os.tmpdir(), 'friendshaped-build-'));
   const log = console.log; console.log = () => {};
   try { build({ outDir: out }); } finally { console.log = log; }
   const dataOf = html => JSON.parse(/window\.FONT_DATA=(\{.*?\});window\.FONT_FACES=/s.exec(html)[1]);
   const baseOf = html => JSON.parse(/window\.FONT_BASE=("[^"]*")/.exec(html)[1]);
-  await t.test('Cutout.html is one self-contained file with the lite fonts built in', () => {
-    const html = fs.readFileSync(path.join(out, 'Cutout.html'), 'utf8');
+  await t.test('FriendShaped.html is one self-contained file with the lite fonts built in', () => {
+    const html = fs.readFileSync(path.join(out, 'FriendShaped.html'), 'utf8');
     assert.deepEqual(Object.keys(dataOf(html)).sort(), builds.lite.slice().sort());
     assert.equal(baseOf(html), '');
   });
@@ -262,14 +262,14 @@ test('build: the two outputs', async (t) => {
     const html = fs.readFileSync(path.join(out, 'site', 'index.html'), 'utf8');
     assert.deepEqual(Object.keys(dataOf(html)).sort(), builds.core.slice().sort());
     assert.equal(baseOf(html), 'fonts/');
-    assert.ok(html.length < fs.statSync(path.join(out, 'Cutout.html')).size, 'the hosted page is lighter than the single file');
+    assert.ok(html.length < fs.statSync(path.join(out, 'FriendShaped.html')).size, 'the hosted page is lighter than the single file');
     Object.keys(manifest).forEach(k => assert.ok(fs.existsSync(path.join(out, 'site', 'fonts', k + '.woff')), k));
     familyKeys.forEach(k => assert.ok(fs.existsSync(path.join(out, 'site', 'fonts', 'licenses', k + '.txt')), k + ' license'));
     assert.ok(fs.existsSync(path.join(out, 'site', 'fonts', 'CREDITS.md')));
   });
   await t.test('the two pages differ only in their fonts', () => {
     const strip = html => html.replace(/window\.FONT_DATA=.*?window\.FONT_BASE="[^"]*";/s, '');
-    assert.equal(strip(fs.readFileSync(path.join(out, 'Cutout.html'), 'utf8')), strip(fs.readFileSync(path.join(out, 'site', 'index.html'), 'utf8')));
+    assert.equal(strip(fs.readFileSync(path.join(out, 'FriendShaped.html'), 'utf8')), strip(fs.readFileSync(path.join(out, 'site', 'index.html'), 'utf8')));
   });
   fs.rmSync(out, { recursive: true, force: true });
 });

@@ -121,7 +121,7 @@ function fontFailed() {
   if (Date.now() - fontFailToast < 10000) return;
   fontFailToast = Date.now();
   toast(location.protocol === 'file:'
-    ? 'A font could not be loaded. Cutout fetches fonts from its fonts folder, so open it from a web address, or use the single-file version.'
+    ? 'A font could not be loaded. FriendShaped fetches fonts from its fonts folder, so open it from a web address, or use the single-file version.'
     : 'A font could not be loaded. Are you offline? Inter is shown instead.');
 }
 
@@ -144,7 +144,7 @@ const italicToggled = key => nearestFace(fonts[key].family, fonts[key].weight, !
 const faceForFamily = (family, fromKey) => nearestFace(family, fonts[fromKey] && faceIsBold(fromKey) ? 700 : 400, !!(fonts[fromKey] && fonts[fromKey].italic));
 
 // The same fonts for the browser's own text drawing (the picker's previews, typing in place). Loaded once, when first asked for.
-const cssFamily = key => 'cutout-' + String(key).replace(/[^\w-]/g, '_');
+const cssFamily = key => 'friendshaped-' + String(key).replace(/[^\w-]/g, '_');
 const faceLoads = new Map();
 function fontFaceReady(key) {
   if (!faceLoads.has(key)) {
@@ -173,12 +173,12 @@ function missingGlyphs(o) {
 (function wordmark() {
   try {
     const f = fontOf('bungee'), size = 20, opts = { kerning: true, letterSpacing: 0.02 };
-    const w = f.getAdvanceWidth('CUTOUT', size, opts);
+    const w = f.getAdvanceWidth('FRIENDSHAPED', size, opts);
     const svg = $('#wordmark');
     svg.setAttribute('viewBox', '0 0 ' + Math.ceil(w) + ' 22');
     svg.setAttribute('width', Math.ceil(w));
-    const p = svgEl('path', { d: f.getPath('CUTOUT', 0, 18.5, size, opts).toPathData(2) });
+    const p = svgEl('path', { d: f.getPath('FRIENDSHAPED', 0, 18.5, size, opts).toPathData(2) });
     svg.appendChild(p);
-  } catch (e) { $('#wordmark').outerHTML = '<b>Cutout</b>'; }
+  } catch (e) { $('#wordmark').outerHTML = '<b>FriendShaped</b>'; }
 })();
 

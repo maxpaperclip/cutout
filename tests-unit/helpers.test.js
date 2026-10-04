@@ -1,10 +1,10 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 test('helpers: clamp', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
 
   await t.test('keeps values already in range', () => {
     assert.equal(m.clamp(5, 0, 10), 5);
@@ -22,7 +22,7 @@ test('helpers: clamp', async (t) => {
 });
 
 test('helpers: rnd (rounding to a given precision)', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
 
   await t.test('rounds to 2 decimal places by default', () => {
     assert.equal(m.rnd(1.23456), 1.23);
@@ -44,7 +44,7 @@ test('helpers: rnd (rounding to a given precision)', async (t) => {
 });
 
 test('helpers: esc (XML/HTML attribute escaping)', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
 
   await t.test('escapes the five special characters used in attributes', () => {
     assert.equal(m.esc('<a & "b">'), '&lt;a &amp; &quot;b&quot;&gt;');
@@ -58,7 +58,7 @@ test('helpers: esc (XML/HTML attribute escaping)', async (t) => {
 });
 
 test('helpers: rotPt (rotate a point about a center)', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
 
   await t.test('a 0-degree rotation is a no-op', () => {
     const p = m.rotPt(10, 5, 0, 0, 0);
@@ -83,7 +83,7 @@ test('helpers: rotPt (rotate a point about a center)', async (t) => {
 });
 
 test('helpers: normDeg (normalize an angle to (-180, 180])', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
 
   await t.test('leaves an already-normalized angle alone', () => {
     assert.equal(m.normDeg(45), 45);

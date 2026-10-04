@@ -6,7 +6,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('fs');
 const path = require('path');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 const ROOT = path.join(__dirname, '..');
 const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
@@ -20,7 +20,7 @@ function srcFiles() {
 test('version: one source of truth', async (t) => {
   await t.test('package.json has a plain x.y.z version and no second version field', () => {
     assert.match(pkg.version, /^\d+\.\d+\.\d+$/);
-    assert.equal(pkg.cutoutVersion, undefined);
+    assert.equal(pkg.friendshapedVersion, undefined);
   });
 
   await t.test('package-lock.json agrees with package.json (use `npm version` to bump both)', () => {
@@ -39,14 +39,14 @@ test('version: one source of truth', async (t) => {
   });
 
   await t.test('APP_VERSION at runtime is the package.json version', () => {
-    assert.equal(loadCutoutModules().APP_VERSION, pkg.version);
+    assert.equal(loadAppModules().APP_VERSION, pkg.version);
   });
 
   await t.test('the release file has a permanent name, with no version in it', () => {
-    const versioned = fs.readdirSync(ROOT).filter((f) => /^Cutout-v.*\.html$/i.test(f));
+    const versioned = fs.readdirSync(ROOT).filter((f) => /^FriendShaped-v.*\.html$/i.test(f));
     assert.deepEqual(versioned, []);
     for (const rel of ['build.js', 'scripts/copy-to-root.js', '.github/workflows/build.yml', 'README.md', 'BUILD.md']) {
-      assert.doesNotMatch(read(rel), /Cutout-v|cutoutVersion/, rel + ' still refers to a versioned filename');
+      assert.doesNotMatch(read(rel), /FriendShaped-v|friendshapedVersion/, rel + ' still refers to a versioned filename');
     }
   });
 });

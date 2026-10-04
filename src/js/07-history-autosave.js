@@ -12,7 +12,7 @@ const HISTORY = { steps: 100, bytes: 48 * 1048576 };
 const hist = { steps: [], idx: -1, bytes: 0 };
 const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
 function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
-const AUTOSAVE_KEY = 'cutout.autosave.v1';       // older versions saved here; read once for migration
+const AUTOSAVE_KEY = 'cutout.autosave.v1';       // older versions saved here; read once for migration. (Storage names keep the app's old name, Cutout, so drawings saved before the rename are still found.)
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
 const fmtMB = n => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0);
@@ -23,7 +23,7 @@ function idbOpen() {
     const finish = v => { if (!done) { done = true; resolve(v); } };
     try {
       if (!window.indexedDB) return finish(null);
-      const req = indexedDB.open('cutout', 1);
+      const req = indexedDB.open('cutout', 1);   // the app's old name, kept on purpose: renaming the database would hide drawings already saved in it
       req.onupgradeneeded = () => { const db = req.result; db.createObjectStore('images', { keyPath: 'id' }); db.createObjectStore('meta', { keyPath: 'key' }); };
       req.onsuccess = () => finish(req.result);
       req.onerror = () => finish(null);
@@ -83,7 +83,7 @@ async function persistNow(str) {
     warnedSave = false;
   } catch (err) {
     const quota = err && (err.name === 'QuotaExceededError' || /quota/i.test(String(err.message)));
-    const msg = err && err.message === 'nodb' ? 'This browser is not letting Cutout save photos automatically. Use File > Save project to keep your work.'
+    const msg = err && err.message === 'nodb' ? 'This browser is not letting FriendShaped save photos automatically. Use File > Save project to keep your work.'
       : quota ? 'This browser has no space left for autosave. Use File > Save project to keep your work.'
       : 'Autosave did not work. Use File > Save project to keep your work.';
     setStatus('failed', msg);

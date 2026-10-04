@@ -3,11 +3,11 @@
 // that was rebuilt comes back the same.
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 test('derived outlines are not saved', async (t) => {
   await t.test('docJSON drops each object\'s outline but keeps a plain shape\'s own path', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const d = m.blankDoc();
     d.objects.push(m.newShape('polygon', { sides: 5, star: true }));
     d.objects.push(m.newShape('path', { w: 50, h: 50, nat: { d: 'M0 0L100 0L100 100Z', w: 100, h: 100 } }));
@@ -18,7 +18,7 @@ test('derived outlines are not saved', async (t) => {
   });
 
   await t.test('rebuildOutlines brings back exactly the same outlines', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const d = m.blankDoc();
     d.objects.push(m.newShape('polygon', { sides: 7, w: 80, h: 60 }));
     d.objects.push(m.newShape('path', { w: 50, h: 25, nat: { d: 'M0 0C30 0 70 100 100 100', w: 100, h: 100 } }));
@@ -32,7 +32,7 @@ test('derived outlines are not saved', async (t) => {
 
 test('shared field lists', async (t) => {
   await t.test('copyKeys copies, removes what the source lacks, and never shares a gradient', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { fill: '#ff0000', grad: m.makeGrad('linear'), blend: 'multiply' });
     const b = m.newShape('rect', { fill: '#00ff00', cap: 'round' });
     m.copyKeys(a, b, m.STYLE_KEYS);
@@ -44,7 +44,7 @@ test('shared field lists', async (t) => {
   });
 
   await t.test('toPlainPath removes every kind\'s own settings', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const t0 = m.newShape('text', { text: 'Hi' });
     m.toPlainPath(t0, 'M0 0L1 1', 10, 10);
     assert.equal(t0.kind, 'path');
@@ -53,7 +53,7 @@ test('shared field lists', async (t) => {
   });
 
   await t.test('makeImage fills in the usual photo fields', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const im = m.makeImage({ id: 'abc', w: 40, h: 20, name: 'Cat' }, { x: 5, rot: 10 });
     assert.equal(im.kind, 'image');
     assert.equal(im.img, 'abc');
@@ -62,7 +62,7 @@ test('shared field lists', async (t) => {
   });
 
   await t.test('Combine gives the result every style setting of the bottom shape', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 50, h: 50, fill: '#123456', stroke: '#abcdef', sw: 7, opacity: 0.5, join: 'round', dash: 'dashed', cap: 'square', blend: 'screen' });
     const b = m.newShape('rect', { x: 25, y: 25, w: 50, h: 50 });
     const r = m.combineShapes('unite', [a, b]);
@@ -72,7 +72,7 @@ test('shared field lists', async (t) => {
 
 test('what each kind can do (KIND_INFO)', async (t) => {
   await t.test('photos are pixels: no fill, outline or gradient, and they keep their proportions', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const im = { kind: 'image', img: 'x' }, r = { kind: 'rect' }, tx = { kind: 'text' };
     assert.equal(m.hasPixels(im), true);
     assert.equal(m.hasPaint(im), false);
@@ -83,7 +83,7 @@ test('what each kind can do (KIND_INFO)', async (t) => {
   });
 
   await t.test('every kind has a label, and plain shapes are already plain', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     for (const k of Object.keys(m.KIND_INFO)) assert.ok(m.KIND_INFO[k].label, k);
     assert.equal(!!m.kindInfo({ kind: 'path' }).plain, false);
     assert.equal(m.kindInfo({ kind: 'nonsense' }).label, undefined);
@@ -92,7 +92,7 @@ test('what each kind can do (KIND_INFO)', async (t) => {
 
 test('one description for the canvas and export (objView)', async (t) => {
   await t.test('a plain shape is one element in a group with no settings, written as just the element', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = m.newShape('rect', { x: 10, y: 20, w: 30, h: 40, fill: '#ff0000' });
     const v = m.objView(o, { grad: 'g', clip: 'c' });
     assert.equal(v.defs.length, 0);
@@ -101,7 +101,7 @@ test('one description for the canvas and export (objView)', async (t) => {
   });
 
   await t.test('a photo fill has the fill, the clipped photo and the outline, and one clip definition', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     m.images.set('p', { id: 'p', w: 10, h: 10, dataUrl: 'data:,' });
     const o = m.newShape('ellipse', { w: 100, h: 100, fill: '#ff0000', stroke: '#000000', sw: 2 });
     o.pic = { id: 'p', dx: 0, dy: 0, s: 1 };
@@ -112,7 +112,7 @@ test('one description for the canvas and export (objView)', async (t) => {
   });
 
   await t.test('export leaves out hidden parts: a photo that covers its shape hides the fill underneath', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     m.images.set('p', { id: 'p', w: 10, h: 10, dataUrl: 'data:,' });
     const o = m.newShape('rect', { w: 100, h: 100, fill: '#ff0000', stroke: 'none' });
     o.pic = { id: 'p', dx: 0, dy: 0, s: 20 };   // 200 x 200: covers the whole box
@@ -122,7 +122,7 @@ test('one description for the canvas and export (objView)', async (t) => {
   });
 
   await t.test('a gradient becomes one definition with its stops', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const o = m.newShape('rect', { fill: '#ff0000', grad: m.makeGrad('radial') });
     const v = m.objView(o, { grad: 'gr7', clip: 'c' });
     assert.equal(v.defs[0].tag, 'radialGradient');

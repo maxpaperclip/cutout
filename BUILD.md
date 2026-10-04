@@ -1,10 +1,10 @@
-# Building Cutout
+# Building FriendShaped
 
-Cutout ships two ways, both made by the same build:
+FriendShaped ships two ways, both made by the same build:
 
-- **`Cutout.html`**, the *lite single file*: one self-contained HTML file with a small set of fonts built in. No server,
+- **`FriendShaped.html`**, the *lite single file*: one self-contained HTML file with a small set of fonts built in. No server,
   no install, works from a USB stick or an email attachment.
-- **`site/`**, the *hosted site* (built in `dist/site/`, and committed to the repo like `Cutout.html`): `index.html` plus a `fonts/` folder with every font. The page only carries the
+- **`site/`**, the *hosted site* (built in `dist/site/`, and committed to the repo like `FriendShaped.html`): `index.html` plus a `fonts/` folder with every font. The page only carries the
   fonts it needs to start; any other font is fetched from `fonts/` the first time it is used, and the browser keeps it.
   To publish it, upload the contents of `site/` to any static web host (GitHub Pages, Netlify, Cloudflare Pages, a
   school server). Nothing else from the repo is needed. It has to be opened from a web address: a page opened straight
@@ -62,8 +62,8 @@ build.js              The build script (plain Node, no required dependencies)
 scripts/copy-to-root.js   Copies a finished build to the repo root for release
 scripts/fetch-fonts.js    Downloads the library's Latin fonts and licenses from Fontsource (npm)
 scripts/subset-cjk.py     Cuts Noto Sans SC down to the common Chinese characters (needs fonttools)
-dist/                  Build output: Cutout.html and site/ (gitignored; `npm run release` copies them to the repo root)
-Cutout.html, site/     The committed release: the lite single file, and the hosted page with its fonts/ folder
+dist/                  Build output: FriendShaped.html and site/ (gitignored; `npm run release` copies them to the repo root)
+FriendShaped.html, site/     The committed release: the lite single file, and the hosted page with its fonts/ folder
 ```
 
 The split follows the section comments that were already in the old file
@@ -90,11 +90,11 @@ behavior change and a structural change never land in the same commit.
 
 ```
 npm install       # only needed once, and only for the optional --minify flag
-npm run build     # builds dist/Cutout.html (the lite single file) and dist/site/ (the hosted site)
+npm run build     # builds dist/FriendShaped.html (the lite single file) and dist/site/ (the hosted site)
 npm run dev       # builds once, then rebuilds on any change under src/
 npm run build:min # same, but minifies JS and CSS with esbuild (~10% smaller)
 npm run serve     # build once, then serve dist/site/ on localhost so you can test the hosted version in a browser
-npm run release   # build, then copy Cutout.html and site/ to the repo root (see below)
+npm run release   # build, then copy FriendShaped.html and site/ to the repo root (see below)
 npm test          # run the unit tests in tests-unit/ (see tests-unit/README.md)
 ```
 
@@ -190,7 +190,7 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
 ## Releasing an update
 
 1. Make your changes under `src/`.
-2. `npm run build` and open `dist/Cutout.html` in a browser, and `npm run serve` to try the hosted version
+2. `npm run build` and open `dist/FriendShaped.html` in a browser, and `npm run serve` to try the hosted version
    (`dist/site/`) at the address it prints, which is where the on-demand fonts get exercised.
    Run `npm test` first, then actually click through it — draw a shape, add text, combine two shapes,
    import a photo and mask it, export a PNG. The unit tests cover
@@ -200,19 +200,27 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
    (with the real number). That updates `package.json` and
    `package-lock.json` together. `package.json` is the only place the version
    is written: the build stamps it into the page title and the About box,
-   and the output file is always named `Cutout.html`, so download links never
+   and the output file is always named `FriendShaped.html`, so download links never
    change. A unit test fails if a version number is hard-coded anywhere else.
-4. `npm run release` — this rebuilds and copies `Cutout.html` (the lite single file) and `site/` (the hosted
+4. `npm run release` — this rebuilds and copies `FriendShaped.html` (the lite single file) and `site/` (the hosted
    page and its `fonts/` folder) to the repo root. To publish the hosted version, upload the contents of `site/`.
-5. Commit your `src/` changes together with the updated `Cutout.html` and `site/`.
+5. Commit your `src/` changes together with the updated `FriendShaped.html` and `site/`.
    CI (`.github/workflows/build.yml`) will fail the build if the root file or `site/`
    and a fresh build of `src/` ever drift apart, which mostly protects
    against forgetting step 4.
 
+## Names kept from before the rename
+
+The app was called Cutout until v1.19. Two names inside the browser were kept on purpose, because renaming them would hide
+drawings people already saved: the IndexedDB database (`indexedDB.open('cutout', 1)`) and the old autosave key
+(`cutout.autosave.v1`), both in `src/js/07-history-autosave.js`. Project files made by the old name (`*.cutout.json`) still
+open; new ones are saved as `*.friendshaped.json`. (Browsers keep saved drawings per web address, so a drawing saved at one
+address isn't found at another, whatever the app is called.)
+
 ## What CI actually checks
 
 `.github/workflows/build.yml` runs `npm run build` on every push and pull
-request, runs `npm test`, then diffs the build result against the `Cutout.html`
+request, runs `npm test`, then diffs the build result against the `FriendShaped.html`
 committed at the repo root and `dist/site/` against the committed `site/` folder. It is **not** a functional test —
 it can't click buttons or draw shapes — it only proves the build still
 produces valid, reproducible output and that nobody forgot to re-run the

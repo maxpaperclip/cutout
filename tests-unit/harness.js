@@ -1,6 +1,6 @@
 'use strict';
 /*
- * Loads a subset of Cutout's actual src/js/*.js files into an isolated
+ * Loads a subset of FriendShaped's actual src/js/*.js files into an isolated
  * Node `vm` context so their functions can be unit tested directly,
  * without a browser or DOM.
  *
@@ -98,7 +98,7 @@ const EXPORT_NAMES = [
  * from any other call to this function (separate vm context, separate
  * paper.js scope, separate `doc`).
  */
-function loadCutoutModules({ recordToasts = false } = {}) {
+function loadAppModules({ recordToasts = false } = {}) {
   const paper = paperFactory;
   paper.setup(new paper.Size(16, 16));
 
@@ -140,23 +140,23 @@ function loadCutoutModules({ recordToasts = false } = {}) {
   // here so APP_VERSION in tests matches the real build.
   const version = require('../package.json').version;
   const source = MODULE_FILES.map(readSrc).join('\n;\n').split('__APP_VERSION__').join(version);
-  vm.runInContext(source, sandbox, { filename: 'cutout-src-bundle.js' });
+  vm.runInContext(source, sandbox, { filename: 'app-src-bundle.js' });
 
   // A second script in the SAME context can see the first script's
   // top-level const/let/function bindings (this mirrors how multiple
   // classic <script> tags share one global lexical scope in a browser),
   // even though they never became properties of the sandbox object itself.
   // We use that to pull the names we want out into an explicit export bag.
-  const exportScript = 'globalThis.__cutout_exports__ = { ' +
+  const exportScript = 'globalThis.__app_exports__ = { ' +
     EXPORT_NAMES.map((n) => `${n}: (typeof ${n} !== 'undefined' ? ${n} : undefined)`).join(', ') +
     ' };';
-  vm.runInContext(exportScript, sandbox, { filename: 'cutout-src-exports.js' });
+  vm.runInContext(exportScript, sandbox, { filename: 'app-src-exports.js' });
 
-  const mod = sandbox.__cutout_exports__;
+  const mod = sandbox.__app_exports__;
   mod._toasts = toasts;
   mod._commits = commits;
   mod._sandbox = sandbox; // escape hatch for anything not in EXPORT_NAMES
   return mod;
 }
 
-module.exports = { loadCutoutModules, MODULE_FILES, EXPORT_NAMES };
+module.exports = { loadAppModules, MODULE_FILES, EXPORT_NAMES };

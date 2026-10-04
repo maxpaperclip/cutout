@@ -4,7 +4,7 @@
 The full font is about 10 MB. This keeps the 3,755 common Chinese characters (GB2312 level 1), the GB2312
 symbol rows (punctuation, full-width forms, Greek, Cyrillic, pinyin letters), plain ASCII, Latin-1 and the usual
 curly quotes and dashes: about 0.8 MB as a .woff. Hinting and layout features other than kerning are dropped
-(Cutout turns text into outlines, so it needs neither).
+(FriendShaped turns text into outlines, so it needs neither).
 
 Needs: python3, fonttools (pip install fonttools), npm, tar, internet. Run: python3 scripts/subset-cjk.py
 """
