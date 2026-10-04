@@ -54,6 +54,8 @@ function sanitizeDoc(d) {
       if (fonts[r.font]) o.font = r.font; else { o.font = DEFAULT_FONT; missingFont = true; }
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
+      const runs = sanitizeRuns(r.runs, o.text.length, k => !!fonts[k]);   // letters set apart from the rest
+      if (runs) o.runs = runs;
     }
     if (r.kind === 'path') {   // (a converted old line already has its outline)
       if (!r.nat || typeof r.nat.d !== 'string') return;

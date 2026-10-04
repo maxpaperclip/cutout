@@ -106,14 +106,14 @@ function ensureFonts(keys, force) {
 // ... but never wait longer than ms, so opening a drawing is not held up by a slow connection (see fontArrived)
 const fontsWithin = (keys, ms) => Promise.race([ensureFonts(keys), new Promise(r => setTimeout(() => r(false), ms))]);
 // The faces the text objects of a drawing (not yet cleaned up) ask for
-const rawFontKeys = raw => (raw && Array.isArray(raw.objects) ? raw.objects : []).filter(o => o && o.kind === 'text' && typeof o.font === 'string' && fonts[o.font]).map(o => o.font);
+const rawFontKeys = raw => (raw && Array.isArray(raw.objects) ? raw.objects : []).filter(o => o && o.kind === 'text').reduce((a, o) => a.concat([o.font], Array.isArray(o.runs) ? o.runs.map(r => r && r.f) : []), []).filter(k => typeof k === 'string' && fonts[k]);
 // A face that was used before it arrived was laid out in the default font: lay it out again in its own
 function fontArrived(key) {
   try {
-    Array.from(textLayouts.keys()).forEach(k => { if (k.startsWith(key + '|')) textLayouts.delete(k); });
+    Array.from(textLayouts.keys()).forEach(k => { if (k.startsWith(key + '|') || k.indexOf('"f":"' + key + '"') >= 0) textLayouts.delete(k); });
     if (typeof purgeLineMetrics === 'function') purgeLineMetrics(key);   // the caret's measurements too (04f-text-layout.js)
     let any = false;
-    doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { refresh(o); any = true; } });
+    doc.objects.forEach(o => { if (o.kind === 'text' && (typeof textUsesFont === 'function' ? textUsesFont(o, key) : o.font === key)) { refresh(o); any = true; } });
     if (any) refreshAll();
   } catch (e) { /* the drawing isn't ready yet; it is laid out when it is */ }
 }
@@ -162,10 +162,13 @@ function fontFaceReady(key) {
 // Characters of an object's text that its font has no letter for (they would draw as nothing)
 function missingGlyphs(o) {
   if (!fontLoaded(o.font)) return [];   // still on its way: the default font standing in would say the wrong thing
-  const font = fontOf(o.font), out = [];
-  for (const ch of String(o.text || '')) {
-    if (/\s/.test(ch) || out.indexOf(ch) >= 0) continue;
-    if (font.charToGlyphIndex(ch) === 0) out.push(ch);
+  const out = [], text = String(o.text || '');
+  let i = 0;
+  for (const ch of text) {
+    const key = typeof textStyleAt === 'function' ? textStyleAt(o, i).font : o.font;   // (each letter in the face it is set in)
+    i += ch.length;
+    if (/\s/.test(ch) || out.indexOf(ch) >= 0 || !fontLoaded(key)) continue;
+    if (fontOf(key).charToGlyphIndex(ch) === 0) out.push(ch);
   }
   return out;
 }

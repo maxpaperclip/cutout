@@ -35,10 +35,11 @@ function fpSetValue(key) {
   fpItalic.title = fpItalic.disabled ? F.label + ' has no italic style' : 'Italic (Ctrl+I)';
 }
 
-// Use this face for the selected text. A face that is not here yet is fetched first, so the text never flashes in another font.
+// Use this face for the selected text (while typing in place: for the selected letters, or the letters typed next). A face that is not here yet is fetched first, so the text never flashes in another font.
 async function setTextFace(key) {
   const o = one();
-  if (!o || o.kind !== 'text' || !fonts[key] || o.font === key) return;
+  const typing = !!(o && te && te.id === o.id);
+  if (!o || o.kind !== 'text' || !fonts[key] || (!typing && o.font === key)) return;
   const id = o.id, slow = setTimeout(() => toast('Loading ' + fonts[key].label + '…'), 400);
   const ok = await ensureFonts([key], true);
   clearTimeout(slow);
@@ -47,14 +48,21 @@ async function setTextFace(key) {
     if (fonts[FP.shown]) fpStyle.value = FP.shown;   // the menu goes back to the face the text really has
     return;
   }
-  t.font = key; refresh(t); commit();   // (typing in place follows by itself: the caret is drawn from the same layout)
+  if (typing) {   // the edit may have ended while the face was on its way
+    if (te && te.id === id) { teStyle({ font: key }); teRefocus(); }
+    else if (fonts[FP.shown]) fpStyle.value = FP.shown;
+    return;
+  }
+  applyWholeStyle(t, { font: key }); refresh(t); commit();   // (the whole text: no letter keeps a face of its own)
 }
 // Bold or italic on or off for the selected text, by moving to the matching face. say: tell the person when there isn't one (a shortcut gives no other sign).
 function toggleStyle(which, say) {
   const o = one();
   if (!o || o.kind !== 'text' || !fonts[o.font]) return;
-  const to = which === 'bold' ? boldToggled(o.font) : italicToggled(o.font), same = which === 'bold' ? faceIsBold(to) === faceIsBold(o.font) : fonts[to].italic === fonts[o.font].italic;
-  if (same) { if (say) toast(FAMILIES[fonts[o.font].family].label + ' has no ' + which + ' style.'); return; }
+  const cur = te && te.id === o.id ? teStyleShown(o).font : o.font;   // (while typing in place: the letters at the caret)
+  if (!fonts[cur]) return;
+  const to = which === 'bold' ? boldToggled(cur) : italicToggled(cur), same = which === 'bold' ? faceIsBold(to) === faceIsBold(cur) : fonts[to].italic === fonts[cur].italic;
+  if (same) { if (say) toast(FAMILIES[fonts[cur].family].label + ' has no ' + which + ' style.'); return; }
   setTextFace(to);
 }
 fpStyle.addEventListener('change', () => setTextFace(fpStyle.value));
@@ -129,7 +137,7 @@ function fpClosePop(focusBtn) {
 // A row is a family: the text keeps its bold and italic where the family has them
 function fpPick(family) {
   const o = one();
-  if (o && o.kind === 'text' && FAMILIES[family]) setTextFace(faceForFamily(family, o.font));
+  if (o && o.kind === 'text' && FAMILIES[family]) setTextFace(faceForFamily(family, te && te.id === o.id ? teStyleShown(o).font : o.font));
   fpClosePop(true);
 }
 
@@ -186,7 +194,13 @@ function removeUserFont(key) {
   delete fonts[key]; delete FAMILIES[key]; faceLoads.delete(key);
   if (DB.ok) idbDel('meta', 'font:' + key).catch(() => { /* it is gone for this session either way */ });
   let used = 0;
-  doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { o.font = DEFAULT_FONT; refresh(o); used++; } });
+  doc.objects.forEach(o => {
+    if (o.kind !== 'text' || !textUsesFont(o, key)) return;
+    if (o.font === key) o.font = DEFAULT_FONT;
+    if (o.runs) o.runs = normRuns(o.runs.map(r => r.f === key ? { n: r.n, c: r.c, s: r.s } : r), String(o.text).length);   // (letters set in it go back to the text's own face)
+    if (!o.runs) delete o.runs;
+    refresh(o); used++;
+  });
   if (used) commit();
   FP.shown = null;
   const o = one(); if (o && o.kind === 'text') fpSetValue(fonts[o.font] ? o.font : DEFAULT_FONT);

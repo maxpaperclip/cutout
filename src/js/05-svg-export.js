@@ -126,6 +126,8 @@ function objView(o, ids) {
       { tag: 'g', a: { 'clip-path': 'url(#' + ids.clip + ')' }, kids: [
         { tag: 'image', a: { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform } }] },
       { tag: spec.tag, a: Object.assign({}, spec.a, { fill: 'none' }, sa, { display: sa.stroke === 'none' ? 'none' : null }) });
+  } else if (o.kind === 'text' && o.parts) {   // letters in their own colors: the outline in one piece per color
+    o.parts.forEach(pt => node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st, pt.c ? { fill: pt.c } : null, { d: pt.d }) }));
   } else node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st) });
   const pv = hasPixels(o) ? paintView(o, ids.mask || 'em' + o.id) : null;   // brush strokes not yet saved into a paint layer
   if (pv) { defs.push(...pv.defs); node.kids.push(...pv.kids); }

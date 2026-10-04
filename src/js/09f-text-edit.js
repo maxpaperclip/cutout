@@ -8,12 +8,17 @@
    the letters, whatever the zoom, angle, font or length. (Pressing on the text places the caret or selects,
    a double-click picks a word, a triple-click a line.)
    Every keystroke goes into o.text and the outlines underneath are rebuilt as you type.
+   Color, size and font apply to the selected letters (see 04g-text-runs.js); with only a caret they are kept for the
+   letters typed next. The style controls in the Design tab do not end the edit; the rest of the page does.
    Editing ends with Esc, Ctrl+Enter or a click anywhere else, as one undo step. Text that ends up empty is removed.
    A new text object is only added to the undo history when editing ends, so Undo takes it away whole.
    The Design tab's own text box still works; the two never edit at once.
    ===================================================================== */
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
-let te = null;                     // the edit in progress: { id, isNew, before, goalX, hold, clicks }
+let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
+// The controls that style the letters; a press on them leaves the text being edited
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #fill-color, #fill-hex, #fill-none, #palette';
+const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
 
@@ -43,10 +48,13 @@ function teOverlay() {
   const lay = textLayout(o), s = teSel(), g = svgEl('g', { transform: objXf(o) });
   g.appendChild(svgEl('rect', { x: 0, y: 0, width: o.w, height: o.h, class: 'ov-line ov-dash' }));
   selectionRects(lay, s.a, s.b).forEach(r => g.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'te-sel' })));
-  const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected)
-  g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b ? 'te-caret' : 'te-caret off' }));
+  const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected and the keyboard is here)
+  g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b && document.activeElement === teEl ? 'te-caret' : 'te-caret off' }));
   ov.appendChild(g);
   tePlace();
+  if (te.pending && (s.a !== s.b || s.a !== te.pendAt)) te.pending = null;   // a style chosen at the caret is for typing right there
+  const sig = JSON.stringify(teStyleShown(o));
+  if (sig !== te.sig) { te.sig = sig; updateInspector(); }   // the controls show the letters at the caret
   return true;   // no handles while typing
 }
 // The invisible textarea follows the caret, so a phone keyboard or an input method's window opens next to it
@@ -69,7 +77,7 @@ function startTextEdit(o, isNew) {
     return;
   }
   S.sel = new Set([o.id]);
-  te = { id: o.id, isNew: !!isNew, before: o.text, goalX: null, hold: false, clicks: { n: 0, t: 0, x: 0, y: 0 } };
+  te = { id: o.id, isNew: !!isNew, before: docJSON(o), goalX: null, hold: false, keep: false, clicks: { n: 0, t: 0, x: 0, y: 0 }, pending: null, pendAt: -1, sig: '' };
   teEl.value = o.text; teEl.hidden = false;
   refreshAll();
   setTimeout(() => { if (te && te.id === o.id) { teEl.focus({ preventScroll: true }); teEl.select(); drawOverlay(); } }, 30);   // after the click that started it is over
@@ -84,7 +92,7 @@ function finishTextEdit() {
     else { S.sel = new Set([o.id]); deleteSelected(); }
     return;
   }
-  if (o && (t.isNew || o.text !== t.before)) commit();
+  if (o && (t.isNew || docJSON(o) !== t.before)) commit();   // (changes to the style while editing were not committed one by one)
   refreshAll();
 }
 
@@ -94,7 +102,7 @@ function teDown(e, p) {
   const o = teObj();
   if (!o) return false;
   te.hold = false;
-  if (e.button > 0 || !boxContains(o, p, TE_PAD / view.z)) return false;   // elsewhere it works as usual, and the edit ends when the textarea loses focus
+  if (e.button > 0 || !boxContains(o, p, TE_PAD / view.z)) { finishTextEdit(); return false; }   // elsewhere it works as usual, after the edit ends
   const q = worldToBox(o, p.x, p.y), at = indexAtPoint(textLayout(o), q[0], q[1]);
   const c = te.clicks, again = e.timeStamp - c.t < 450 && Math.hypot(e.clientX - c.x, e.clientY - c.y) < 6;
   c.n = again ? Math.min(c.n + 1, 3) : 1; c.t = e.timeStamp; c.x = e.clientX; c.y = e.clientY;   // (a fourth quick press stays on the line)
@@ -132,7 +140,8 @@ teEl.addEventListener('input', () => {
   const o = teObj();
   if (!o) return;
   te.goalX = null;
-  o.text = teEl.value; refresh(o);
+  setTextValue(o, teEl.value, te.pending); te.pending = null;   // (letters typed take the style of their neighbours, or the one chosen at the caret)
+  refresh(o);
   render(); renderLayers();
   $('#tx-text').value = o.text;
 });
@@ -155,10 +164,48 @@ teEl.addEventListener('keydown', e => {
   teSoon();
 });
 ['keyup', 'select', 'focus'].forEach(n => teEl.addEventListener(n, () => { if (te) teSoon(); }));
+teEl.addEventListener('focus', () => { if (te) te.keep = false; });
 document.addEventListener('selectionchange', () => { if (te && document.activeElement === teEl) teSoon(); });
-teEl.addEventListener('blur', () => {
-  // A press on the text itself takes the keyboard back at once; anything else ends the edit
+teEl.addEventListener('blur', e => {
+  // A press on the text itself takes the keyboard back at once; a style control keeps the edit going; anything else ends it
   if (te && te.hold) { setTimeout(() => { if (te && te.hold) teEl.focus({ preventScroll: true }); }, 0); return; }
+  if (te && (te.keep || teKeeps(e.relatedTarget))) { teSoon(); return; }
   finishTextEdit();
 });
+// A press anywhere outside the text, the stage and the style controls ends the edit (the keyboard may be in a control by then, so there may be no blur)
+document.addEventListener('pointerdown', e => {
+  if (!te) return;
+  te.keep = teKeeps(e.target);
+  if (!te.keep && !e.target.closest('#stage')) finishTextEdit();
+}, true);
+// Esc while the keyboard is in a style control
+document.addEventListener('keydown', e => {
+  if (te && e.key === 'Escape' && document.activeElement !== teEl && !e.defaultPrevented && !(typeof fpIsOpen === 'function' && fpIsOpen())) { finishTextEdit(); stage.focus({ preventScroll: true }); }
+});
+
+/* ---------- color, size and font of the selected letters ---------- */
+// What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font }
+function teStyleShown(o) {
+  const s = teSel(), n = String(o.text).length, st = textStyleAt(o, Math.min(s.a === s.b ? Math.max(s.a - 1, 0) : s.a, Math.max(n - 1, 0))), p = te && te.pending;
+  if (p) {
+    if ('c' in p) st.color = p.c == null ? o.fill : p.c;
+    if ('s' in p) st.size = o.size * (p.s == null ? 1 : p.s);
+    if ('f' in p) st.font = p.f == null ? o.font : p.f;
+  }
+  return st;
+}
+// Set { color, size, font } (any of them) on the selected letters, or at a caret for the letters typed next. False when not editing.
+function teStyle(attrs) {
+  const o = teObj();
+  if (!o) return false;
+  const s = teSel();
+  if (s.a === s.b) { te.pending = Object.assign(te.pending || {}, runAttrsFor(o, attrs)); te.pendAt = s.a; }
+  else { applyTextStyle(o, s.a, s.b, attrs); refresh(o); }
+  render(); renderLayers(); drawOverlay(); updateInspector();
+  return true;
+}
+// Back to typing after a button was pressed
+function teRefocus() { setTimeout(() => { if (te) teEl.focus({ preventScroll: true }); }, 0); }
+// The control was used: while editing the change is saved with the whole edit when it ends, so no separate step now
+function settle() { if (te) teRefocus(); else commit(); }
 window.addEventListener('resize', () => { if (te) drawOverlay(); });
