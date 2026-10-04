@@ -12,7 +12,7 @@ well under a second.
 `BUILD.md`) rather than ES modules, so there's nothing to `import` directly.
 `tests-unit/harness.js` loads the actual, unmodified source of a few of
 those files (currently `01-helpers.js`, `04-document-model.js`,
-`04b-groups.js`, `04c-path-edit.js`, `04d-erase.js`, `04e-eyedrop.js`, `04f-text-layout.js`, `05-svg-export.js`, `06-boolean-ops.js`, `17-projects.js`, `18b-svg-import.js`) into an isolated Node `vm` context,
+`04b-groups.js`, `04c-path-edit.js`, `04d-erase.js`, `04e-eyedrop.js`, `04f-text-layout.js`, `04g-text-runs.js`, `05-svg-export.js`, `06-boolean-ops.js`, `17-projects.js`, `18b-svg-import.js`) into an isolated Node `vm` context,
 along with minimal stand-ins for the few things that normally come from the
 browser or another src file:
 

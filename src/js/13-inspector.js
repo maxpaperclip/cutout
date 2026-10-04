@@ -58,11 +58,12 @@ function updateInspector() {
     if (o.kind === 'rect') setNum(F.r, o.r || 0);
     if (o.kind === 'text') {
       const ta = $('#tx-text'); if (document.activeElement !== ta && ta.value !== o.text) ta.value = o.text;
-      fpSetValue(fonts[o.font] ? o.font : DEFAULT_FONT);
+      const ts = te && te.id === o.id ? teStyleShown(o) : null;   // while typing in place: the letters at the caret
+      fpSetValue(ts ? (fonts[ts.font] ? ts.font : DEFAULT_FONT) : fonts[o.font] ? o.font : DEFAULT_FONT);
       const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
       mh.hidden = !miss.length;
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
-      setNum($('#tx-size'), o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
+      setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
     }
     if (o.kind === 'polygon') {
@@ -72,7 +73,8 @@ function updateInspector() {
   }
   if (n) {
     const a = sel.find(hasPaint) || sel[0], onlyLines = sel.every(isStraightLine), onlyPhotos = sel.every(hasPixels);
-    const noFill = onlyLines || onlyPhotos, g = hasGrad(a) ? a.grad : null;
+    const typing = o && o.kind === 'text' && te && te.id === o.id ? teStyleShown(o) : null;   // (letters can take a color of their own, over a gradient too)
+    const noFill = onlyLines || onlyPhotos, g = hasGrad(a) && !typing ? a.grad : null;
     $('#row-filltype').hidden = noFill; $('#row-fill').hidden = noFill || !!g; $('#palette').hidden = noFill || !!g;
     $('#grad-controls').hidden = noFill || !g;
     $$('#fill-type button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ft === (g ? g.type : 'solid') ? 'true' : 'false'));
@@ -83,7 +85,7 @@ function updateInspector() {
       if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
     }
     ['#row-stroke', '#row-weight', '#row-corners', '#row-ends'].forEach(s => { $(s).hidden = onlyPhotos; });
-    const fill = a.fill && a.fill !== 'none' ? a.fill : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
+    const fill = (typing ? typing.color : a.fill) && (typing ? typing.color : a.fill) !== 'none' ? (typing ? typing.color : a.fill) : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
     if (document.activeElement !== $('#fill-hex')) $('#fill-hex').value = fill ? toHex6(fill) : '';
     $('#fill-color').value = fill ? toHex6(fill) : '#cccccc';
     $('#fill-none').setAttribute('aria-pressed', fill ? 'false' : 'true');
@@ -117,7 +119,15 @@ function rememberStyle(o) {
   S.style.sw = o.sw || S.style.sw; S.style.join = o.join; S.style.dash = o.dash;
 }
 // Choosing a plain fill color (or None) turns a gradient fill back into a solid one
-function styleSet(k, v) { forSel(o => { if (hasPixels(o) && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(hasPaint)); render(); }
+function styleSet(k, v) {
+  if (k === 'fill' && te && teStyle({ color: v })) return;   // typing in place: only the selected letters (or the next ones typed)
+  forSel(o => {
+    if (hasPixels(o) && k !== 'opacity') return;
+    o[k] = v;
+    if (k === 'fill') { delete o.grad; if (o.kind === 'text' && o.runs) { applyWholeStyle(o, { color: v }); refresh(o); } }   // (the whole text, so no letter keeps a color of its own)
+  });
+  rememberStyle(selObjs().find(hasPaint)); render();
+}
 
 // Geometry fields
 function onNum(inp, fn, resizes) {
@@ -125,7 +135,8 @@ function onNum(inp, fn, resizes) {
     const v = parseFloat(inp.value), o = one();
     if (!o || !isFinite(v)) { updateInspector(); return; }
     const ow = o.w, oh = o.h, p0 = o.pic ? Object.assign({}, o.pic) : null;
-    fn(o, v); refresh(o);
+    if (fn(o, v) === 'live') { refresh(o); render(); renderLayers(); updateInspector(); return; }   // (a change while typing in place is saved when the edit ends)
+    refresh(o);
     if (resizes && p0 && ow > 0 && oh > 0 && (o.w !== ow || o.h !== oh)) rescalePic(o, p0, o.w / ow, o.h / oh);
     commit();
   });
@@ -157,10 +168,14 @@ onNum(F.r, (o, v) => { o.r = clamp(v, 0, Math.min(o.w, o.h) / 2); });
 
 // Text
 const txArea = $('#tx-text');
-txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; o.text = txArea.value; refresh(o); render(); renderLayers(); });
+txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; setTextValue(o, txArea.value); refresh(o); render(); renderLayers(); });
 txArea.addEventListener('change', () => commit());
 txArea.addEventListener('keydown', e => { if (e.key === 'Escape') txArea.blur(); });
-onNum($('#tx-size'), (o, v) => { if (o.kind === 'text') o.size = clamp(v, 4, 1200); }, true);
+onNum($('#tx-size'), (o, v) => {
+  if (o.kind !== 'text') return;
+  if (te && te.id === o.id && teStyle({ size: clamp(v, 4, 1200) })) { teRefocus(); return 'live'; }   // the selected letters
+  o.size = clamp(v, 4, 1200);   // the whole text, every letter in proportion
+}, true);
 onNum($('#tx-lh'), (o, v) => { if (o.kind === 'text') o.lh = clamp(v, 0.6, 3); });
 onNum($('#tx-ls'), (o, v) => { if (o.kind === 'text') o.ls = clamp(v, -20, 200) / 100; });
 $$('[data-align]').forEach(b => b.addEventListener('click', () => { const o = one(); if (!o || o.kind !== 'text') return; o.align = b.dataset.align; refresh(o); commit(); }));
@@ -188,12 +203,13 @@ $('#pg-inner').addEventListener('change', () => commit());
 function wireColor(colorId, hexId, noneId, key, fallback) {
   const c = $(colorId), h = $(hexId), n = $(noneId);
   c.addEventListener('input', () => { styleSet(key, c.value); });
-  c.addEventListener('change', () => commit());
-  h.addEventListener('change', () => { const v = h.value.trim(); if (HEX.test(v)) { styleSet(key, v.toLowerCase()); commit(); } else updateInspector(); });
+  c.addEventListener('change', () => { if (!te) commit(); });
+  h.addEventListener('change', () => { const v = h.value.trim(); if (HEX.test(v)) { styleSet(key, v.toLowerCase()); settle(); } else updateInspector(); });
   h.addEventListener('keydown', e => { if (e.key === 'Enter') h.blur(); });
   n.addEventListener('click', () => {
     const a = selObjs()[0]; if (!a) return;
-    styleSet(key, a[key] && a[key] !== 'none' ? 'none' : fallback); commit();
+    const cur = key === 'fill' && te && teObj() ? teStyleShown(teObj()).color : a[key];   // (while typing: the letters at the caret)
+    styleSet(key, cur && cur !== 'none' ? 'none' : fallback); settle();
   });
 }
 wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
@@ -373,7 +389,7 @@ $('#opacity').addEventListener('change', () => commit());
   const box = $('#palette');
   cols.forEach(c => {
     const b = elt('button', 'sw'); b.style.background = c; b.title = c + '. Click to fill, Shift-click to outline.'; b.setAttribute('aria-label', 'Color ' + c);
-    b.addEventListener('click', e => { if (!S.sel.size) return; styleSet(e.shiftKey ? 'stroke' : 'fill', c); commit(); });
+    b.addEventListener('click', e => { if (!S.sel.size) return; styleSet(e.shiftKey ? 'stroke' : 'fill', c); settle(); });
     box.appendChild(b);
   });
 })();

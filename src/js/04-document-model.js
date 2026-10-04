@@ -86,7 +86,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -272,11 +272,29 @@ const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 
 /* ---------- geometry builders ---------- */
 // The outline of a text. Where each line goes comes from textLayout (04f-text-layout.js), which the caret and the selection use too.
+// With letters in their own colors (o.runs) it also gives parts: the same outline in pieces, one per color ({ d, c }; no c = the text's own fill).
+// A stretch of one face and size is drawn as one piece of text; where its color changes it is drawn in pieces that start
+// where the layout says (that already includes the kerning), so coloring a letter never moves anything.
 function buildText(o) {
   const lay = textLayout(o), opts = { kerning: true, letterSpacing: lay.ls };
+  const colored = Array.isArray(o.runs) && o.runs.some(r => r.c !== undefined), by = new Map();
   let d = '';
-  lay.lines.forEach(L => { if (L.text) d += lay.font.getPath(L.text, L.x, L.base, lay.size, opts).toPathData(2); });
-  return { d, w: lay.w, h: lay.h };
+  const add = (c, pd) => { d += pd; if (colored) by.set(c, (by.get(c) || '') + pd); };
+  lay.lines.forEach(L => {
+    L.segs.forEach(g => {
+      if (g.b <= g.a) return;
+      const pieces = [];
+      if (colored) runSlices(o.runs, L.start + g.a, L.start + g.b).forEach(p => {
+        const last = pieces[pieces.length - 1];
+        if (last && last.c === p.st.c) last.b = p.b; else pieces.push({ a: p.a, b: p.b, c: p.st.c });
+      });
+      if (pieces.length < 2) { add(pieces.length ? pieces[0].c : undefined, g.font.getPath(L.text.slice(g.a, g.b), L.x + g.x, L.base, g.size, opts).toPathData(2)); return; }
+      pieces.forEach(p => add(p.c, g.font.getPath(L.text.slice(p.a - L.start, p.b - L.start), L.x + L.m.xs[p.a - L.start], L.base, g.size, opts).toPathData(2)));
+    });
+  });
+  const out = { d, w: lay.w, h: lay.h };
+  if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
+  return out;
 }
 function buildPolygon(o) {
   const n = clamp(Math.round(o.sides || 5), 3, 24), star = !!o.star, inner = clamp(o.inner || 0.45, 0.1, 0.95);
@@ -311,7 +329,7 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text;
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o);
@@ -319,12 +337,12 @@ function layoutText(o) {
   if (textLayouts.size > 400) textLayouts.delete(textLayouts.keys().next().value);
   return g;
 }
-// The drawing as JSON, without derived outlines (the key 'd' on an object; a path's own nat.d is kept)
-const docJSON = d => JSON.stringify(d, function (k, v) { return k === 'd' && this && this.kind ? undefined : v; });
+// The drawing as JSON, without derived outlines (the keys 'd' and 'parts' on an object; a path's own nat.d is kept)
+const docJSON = d => JSON.stringify(d, function (k, v) { return (k === 'd' || k === 'parts') && this && this.kind ? undefined : v; });
 function rebuildOutlines(d) { d.objects.forEach(o => { try { refresh(o); } catch (e) { /* drawn as nothing until fixed */ } }); }
 
 function refresh(o) {
-  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; }
+  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; if (g.parts) o.parts = g.parts; else delete o.parts; }
   else if (o.kind === 'polygon') o.d = buildPolygon(o);
   else if (o.kind === 'path') o.d = scaledPathD(o.nat, o.w, o.h);
 }

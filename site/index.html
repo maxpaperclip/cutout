@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.19.0</title>
+<title>FriendShaped v1.20.0</title>
 <style>
 
 :root{
@@ -805,7 +805,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.19.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.20.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -995,14 +995,14 @@ function ensureFonts(keys, force) {
 // ... but never wait longer than ms, so opening a drawing is not held up by a slow connection (see fontArrived)
 const fontsWithin = (keys, ms) => Promise.race([ensureFonts(keys), new Promise(r => setTimeout(() => r(false), ms))]);
 // The faces the text objects of a drawing (not yet cleaned up) ask for
-const rawFontKeys = raw => (raw && Array.isArray(raw.objects) ? raw.objects : []).filter(o => o && o.kind === 'text' && typeof o.font === 'string' && fonts[o.font]).map(o => o.font);
+const rawFontKeys = raw => (raw && Array.isArray(raw.objects) ? raw.objects : []).filter(o => o && o.kind === 'text').reduce((a, o) => a.concat([o.font], Array.isArray(o.runs) ? o.runs.map(r => r && r.f) : []), []).filter(k => typeof k === 'string' && fonts[k]);
 // A face that was used before it arrived was laid out in the default font: lay it out again in its own
 function fontArrived(key) {
   try {
-    Array.from(textLayouts.keys()).forEach(k => { if (k.startsWith(key + '|')) textLayouts.delete(k); });
+    Array.from(textLayouts.keys()).forEach(k => { if (k.startsWith(key + '|') || k.indexOf('"f":"' + key + '"') >= 0) textLayouts.delete(k); });
     if (typeof purgeLineMetrics === 'function') purgeLineMetrics(key);   // the caret's measurements too (04f-text-layout.js)
     let any = false;
-    doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { refresh(o); any = true; } });
+    doc.objects.forEach(o => { if (o.kind === 'text' && (typeof textUsesFont === 'function' ? textUsesFont(o, key) : o.font === key)) { refresh(o); any = true; } });
     if (any) refreshAll();
   } catch (e) { /* the drawing isn't ready yet; it is laid out when it is */ }
 }
@@ -1051,10 +1051,13 @@ function fontFaceReady(key) {
 // Characters of an object's text that its font has no letter for (they would draw as nothing)
 function missingGlyphs(o) {
   if (!fontLoaded(o.font)) return [];   // still on its way: the default font standing in would say the wrong thing
-  const font = fontOf(o.font), out = [];
-  for (const ch of String(o.text || '')) {
-    if (/\s/.test(ch) || out.indexOf(ch) >= 0) continue;
-    if (font.charToGlyphIndex(ch) === 0) out.push(ch);
+  const out = [], text = String(o.text || '');
+  let i = 0;
+  for (const ch of text) {
+    const key = typeof textStyleAt === 'function' ? textStyleAt(o, i).font : o.font;   // (each letter in the face it is set in)
+    i += ch.length;
+    if (/\s/.test(ch) || out.indexOf(ch) >= 0 || !fontLoaded(key)) continue;
+    if (fontOf(key).charToGlyphIndex(ch) === 0) out.push(ch);
   }
   return out;
 }
@@ -1160,7 +1163,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -1346,11 +1349,29 @@ const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 
 /* ---------- geometry builders ---------- */
 // The outline of a text. Where each line goes comes from textLayout (04f-text-layout.js), which the caret and the selection use too.
+// With letters in their own colors (o.runs) it also gives parts: the same outline in pieces, one per color ({ d, c }; no c = the text's own fill).
+// A stretch of one face and size is drawn as one piece of text; where its color changes it is drawn in pieces that start
+// where the layout says (that already includes the kerning), so coloring a letter never moves anything.
 function buildText(o) {
   const lay = textLayout(o), opts = { kerning: true, letterSpacing: lay.ls };
+  const colored = Array.isArray(o.runs) && o.runs.some(r => r.c !== undefined), by = new Map();
   let d = '';
-  lay.lines.forEach(L => { if (L.text) d += lay.font.getPath(L.text, L.x, L.base, lay.size, opts).toPathData(2); });
-  return { d, w: lay.w, h: lay.h };
+  const add = (c, pd) => { d += pd; if (colored) by.set(c, (by.get(c) || '') + pd); };
+  lay.lines.forEach(L => {
+    L.segs.forEach(g => {
+      if (g.b <= g.a) return;
+      const pieces = [];
+      if (colored) runSlices(o.runs, L.start + g.a, L.start + g.b).forEach(p => {
+        const last = pieces[pieces.length - 1];
+        if (last && last.c === p.st.c) last.b = p.b; else pieces.push({ a: p.a, b: p.b, c: p.st.c });
+      });
+      if (pieces.length < 2) { add(pieces.length ? pieces[0].c : undefined, g.font.getPath(L.text.slice(g.a, g.b), L.x + g.x, L.base, g.size, opts).toPathData(2)); return; }
+      pieces.forEach(p => add(p.c, g.font.getPath(L.text.slice(p.a - L.start, p.b - L.start), L.x + L.m.xs[p.a - L.start], L.base, g.size, opts).toPathData(2)));
+    });
+  });
+  const out = { d, w: lay.w, h: lay.h };
+  if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
+  return out;
 }
 function buildPolygon(o) {
   const n = clamp(Math.round(o.sides || 5), 3, 24), star = !!o.star, inner = clamp(o.inner || 0.45, 0.1, 0.95);
@@ -1385,7 +1406,7 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text;
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o);
@@ -1393,12 +1414,12 @@ function layoutText(o) {
   if (textLayouts.size > 400) textLayouts.delete(textLayouts.keys().next().value);
   return g;
 }
-// The drawing as JSON, without derived outlines (the key 'd' on an object; a path's own nat.d is kept)
-const docJSON = d => JSON.stringify(d, function (k, v) { return k === 'd' && this && this.kind ? undefined : v; });
+// The drawing as JSON, without derived outlines (the keys 'd' and 'parts' on an object; a path's own nat.d is kept)
+const docJSON = d => JSON.stringify(d, function (k, v) { return (k === 'd' || k === 'parts') && this && this.kind ? undefined : v; });
 function rebuildOutlines(d) { d.objects.forEach(o => { try { refresh(o); } catch (e) { /* drawn as nothing until fixed */ } }); }
 
 function refresh(o) {
-  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; }
+  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; if (g.parts) o.parts = g.parts; else delete o.parts; }
   else if (o.kind === 'polygon') o.d = buildPolygon(o);
   else if (o.kind === 'path') o.d = scaledPathD(o.nat, o.w, o.h);
 }
@@ -2030,25 +2051,67 @@ function purgeLineMetrics(fontKey) {
 }
 
 /* ---------- the whole text ---------- */
+// A line with runs (04g-text-runs.js) is cut into segments wherever the face or size changes (a change of color alone
+// does not move anything). Each segment is measured and drawn by itself, one after the other along the line.
+function runLine(o, runs, t, start, textLen) {
+  const ls = o.ls || 0, last = Math.max(textLen - 1, 0);
+  const sl = t ? runSlices(runs, start, start + t.length) : [{ a: start, b: start, st: runStyleAt(runs, clamp(start, 0, last)) }];   // (an empty line takes the style of its break)
+  const segs = [];
+  sl.forEach(p => {
+    const f = p.st.f !== undefined ? p.st.f : o.font, size = rnd(o.size * (p.st.s !== undefined ? p.st.s : 1), 3), prev = segs[segs.length - 1];
+    if (prev && prev.f === f && prev.size === size) prev.b = p.b - start;
+    else segs.push({ a: p.a - start, b: p.b - start, f, size });
+  });
+  const xs = [];
+  let x = 0, A = 0, D = 0, S = 0;
+  segs.forEach(g => {
+    g.font = fontOf(g.f);
+    const m = lineMetrics(g.font, g.f, g.size, ls, t.slice(g.a, g.b)), sc = g.size / g.font.unitsPerEm;
+    g.x = x;
+    for (let j = 0; j < g.b - g.a; j++) xs.push(x + m.xs[j]);
+    x += m.width;
+    A = Math.max(A, g.font.ascender * sc); D = Math.max(D, -g.font.descender * sc); S = Math.max(S, g.size);
+  });
+  xs.push(x);
+  return { m: { width: x, xs }, segs, A, D, S };
+}
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
-//             x (left edge, from the alignment), top (its slot), base (its baseline) }
+//             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
+//             segs: [{ a, b (characters of the line), f (face), font, size, x (from the line's left edge) }] }
+// lay.flat: no runs, so every line is the same height and sits at i * lineH
 function textLayout(o) {
+  const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null;
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = size * 0.4, start = 0;
-  const lines = String(o.text).split('\n').map((t, i) => {
-    const m = lineMetrics(font, o.font, size, ls, t);
-    if (m.width > W) W = m.width;
-    const L = { i, text: t, start, end: start + t.length, m, x: 0, top: i * lineH, base: i * lineH + (lineH - (asc + desc)) / 2 + asc };
+  let W = size * 0.4, start = 0, acc = 0;
+  const lines = text.split('\n').map((t, i) => {
+    let r;
+    if (runs) r = runLine(o, runs, t, start, text.length);
+    else {
+      const m = lineMetrics(font, o.font, size, ls, t);
+      r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, x: 0 }], A: asc, D: desc, S: size };
+    }
+    if (r.m.width > W) W = r.m.width;
+    const h = runs ? r.S * o.lh : lineH, top = runs ? acc : i * lineH;
+    const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A };
+    acc += h;
     start += t.length + 1;   // (the line break counts as a character)
     return L;
   });
   lines.forEach(L => { L.x = o.align === 'center' ? (W - L.m.width) / 2 : o.align === 'right' ? W - L.m.width : 0; });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: lineH * lines.length };
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
+// The line at a height (box coordinates): the nearest one, above the first or below the last
+function lineAtY(lay, y) {
+  const ls = lay.lines;
+  if (lay.flat) return ls[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, ls.length - 1) : 0];
+  let lo = 0, hi = ls.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].top <= y) lo = mid; else hi = mid - 1; }
+  return ls[lo];
+}
 // The line an index is on (an index at the very end of a line is on that line, not the next)
 function lineOfIndex(lay, index) {
   const ls = lay.lines;
@@ -2059,7 +2122,7 @@ function lineOfIndex(lay, index) {
 // Where the caret is drawn for an index: a vertical segment from the font's top to its bottom
 function caretAt(lay, index) {
   const L = lineOfIndex(lay, index), col = clamp(index - L.start, 0, L.text.length);
-  return { x: L.x + L.m.xs[col], y0: L.base - lay.asc, y1: L.base + lay.desc, line: L.i };
+  return { x: L.x + L.m.xs[col], y0: L.base - L.asc, y1: L.base + L.desc, line: L.i };
 }
 // The highlight for a selection from a to b: a rectangle per line. A selection that runs past the end of a line also covers its break.
 function selectionRects(lay, a, b) {
@@ -2069,13 +2132,13 @@ function selectionRects(lay, a, b) {
     const s = Math.max(a, L.start), e = Math.min(b, L.end);
     if (s > e) return;
     const x0 = L.x + L.m.xs[s - L.start], x1 = L.x + L.m.xs[e - L.start] + (b > L.end && L.i < lay.lines.length - 1 ? brk : 0);
-    if (x1 > x0) out.push({ x: x0, y: L.base - lay.asc, w: x1 - x0, h: lay.asc + lay.desc });
+    if (x1 > x0) out.push({ x: x0, y: L.base - L.asc, w: x1 - x0, h: L.asc + L.desc });
   });
   return out;
 }
 // The index nearest a point (box coordinates): the line by height, then the closest gap between letters
 function indexAtPoint(lay, x, y) {
-  const L = lay.lines[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, lay.lines.length - 1) : 0], xs = L.m.xs, n = L.text.length, lx = x - L.x;
+  const L = lineAtY(lay, y), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
   if (lx >= xs[n]) return L.end;
   let lo = 0, hi = n;   // xs[lo] <= lx < xs[hi]
@@ -2093,7 +2156,7 @@ function verticalMove(lay, index, dir, goalX) {
   const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX, j = L.i + dir;
   if (j < 0) return { index: 0, goalX: gx };
   if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
-  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lineH / 2), goalX: gx };
+  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2), goalX: gx };
 }
 // The word at an index, for double-click: a run of letters and digits, of spaces, or of other marks, within one line
 function wordRange(text, index) {
@@ -2129,6 +2192,167 @@ function textBoxAt(p, under) {
     if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && boxContains(o, p)) return o;
   }
   return null;
+}
+/* =====================================================================
+   Text runs: a different color, size or font for part of a text (no DOM; unit tested)
+   A text has one color (o.fill), size (o.size) and font (o.font) for all of it. To style only some
+   letters, o.runs says where they differ: a list of { n, c, s, f } in reading order, each run covering
+   n characters of o.text (the break between two lines counts as one character).
+     c  color   a color, or 'none'; missing = the text's own fill
+     s  size    a multiple of the text's size, so resizing the text keeps the proportions; missing = 1
+     f  font    a face key; missing = the text's own font
+   A text with no differences has no o.runs at all, exactly as before. Runs are kept normalized: neighbours
+   that look the same are one run, and the lengths add up to the length of the text.
+   "Absolute" styles are what the controls show and take: { color, size (pixels), font }.
+   ===================================================================== */
+const RUN_KEYS = ['c', 's', 'f'];
+const runHas = r => r.c !== undefined || r.s !== undefined || r.f !== undefined;
+const runSame = (a, b) => a.c === b.c && a.s === b.s && a.f === b.f;
+const runStyle = r => { const x = {}; RUN_KEYS.forEach(k => { if (r && r[k] !== undefined) x[k] = r[k]; }); return x; };
+
+// Tidy a list of runs for a text of len characters: no empty runs, neighbours that look the same joined,
+// the lengths made to fit. Gives undefined when nothing in it differs from the text's own style.
+function normRuns(runs, len) {
+  const out = [];
+  let total = 0;
+  const add = (n, st) => {
+    const last = out[out.length - 1];
+    if (last && runSame(last, st)) last.n += n; else out.push(Object.assign({ n }, st));
+  };
+  (Array.isArray(runs) ? runs : []).forEach(r => {
+    if (!r) return;
+    const n = Math.min(Math.floor(r.n) || 0, len - total);
+    if (n <= 0) return;
+    const st = runStyle(r);
+    if (st.s === 1) delete st.s;
+    add(n, st);
+    total += n;
+  });
+  if (total < len) add(len - total, {});
+  return out.some(runHas) ? out : undefined;
+}
+// The style (c, s, f; whatever differs) of the character at an index
+function runStyleAt(runs, i) {
+  if (!runs) return {};
+  let pos = 0;
+  for (let k = 0; k < runs.length; k++) { if (i < pos + runs[k].n) return runStyle(runs[k]); pos += runs[k].n; }
+  return {};
+}
+// The stretches of [a, b) that have one style each: [{ a, b, st }], covering all of it
+function runSlices(runs, a, b) {
+  const out = [];
+  let pos = 0, cur = a;
+  (runs || []).forEach(r => {
+    const s = Math.max(a, pos), e = Math.min(b, pos + r.n);
+    if (s < e) { out.push({ a: s, b: e, st: runStyle(r) }); cur = e; }
+    pos += r.n;
+  });
+  if (cur < b) out.push({ a: cur, b, st: {} });   // (runs that stop short: the rest is plain)
+  return out;
+}
+// Set styles on characters a..b. attrs has the keys to change; a key given as null (or undefined) goes back to the text's own.
+function runsApply(runs, len, a, b, attrs) {
+  a = clamp(a, 0, len); b = clamp(b, 0, len);
+  if (a >= b) return normRuns(runs, len);
+  const out = [];
+  runSlices(runs, 0, len).forEach(p => {
+    [[p.a, Math.min(p.b, a)], [Math.max(p.a, a), Math.min(p.b, b)], [Math.max(p.a, b), p.b]].forEach(([s, e], k) => {
+      if (s >= e) return;
+      const st = Object.assign({}, p.st);
+      if (k === 1) RUN_KEYS.forEach(key => { if (key in attrs) { if (attrs[key] === null || attrs[key] === undefined) delete st[key]; else st[key] = attrs[key]; } });
+      out.push(Object.assign({ n: e - s }, st));
+    });
+  });
+  return normRuns(out, len);
+}
+// Replace characters a..b by insLen new ones in the given style (a { c, s, f } with nulls clearing)
+function runsSplice(runs, len, a, b, insLen, style) {
+  const before = [], after = [];
+  runSlices(runs, 0, len).forEach(p => {
+    if (p.a < a) before.push(Object.assign({ n: Math.min(p.b, a) - p.a }, p.st));
+    if (p.b > b) after.push(Object.assign({ n: p.b - Math.max(p.a, b) }, p.st));
+  });
+  const mid = insLen > 0 ? [Object.assign({ n: insLen }, style || {})] : [];
+  return normRuns(before.concat(mid, after), len - (b - a) + insLen);
+}
+// The runs after the text changed from oldText to newText, however it changed (typing, paste, cut, a replaced selection):
+// what changed is found by comparing the two, and new letters take the style of the letter they replace, or else of the
+// one before them (the one after, at the very start). pending: styles chosen at the caret, for the next letters typed.
+function runsForEdit(runs, oldText, newText, pending) {
+  if (oldText === newText) return normRuns(runs, newText.length);
+  const m = Math.min(oldText.length, newText.length);
+  let p = 0, s = 0;
+  while (p < m && oldText.charCodeAt(p) === newText.charCodeAt(p)) p++;
+  while (s < m - p && oldText.charCodeAt(oldText.length - 1 - s) === newText.charCodeAt(newText.length - 1 - s)) s++;
+  const a = p, b = oldText.length - s, ins = newText.length - s - p;
+  const base = Object.assign({}, runStyleAt(runs, b > a ? a : a > 0 ? a - 1 : 0));
+  if (pending) RUN_KEYS.forEach(k => { if (k in pending) { if (pending[k] === null || pending[k] === undefined) delete base[k]; else base[k] = pending[k]; } });
+  return runsSplice(runs, oldText.length, a, b, ins, base);
+}
+// Give a text object its new text, keeping the styles of the letters that stayed (use this, not o.text = ...)
+function setTextValue(o, value, pending) {
+  const runs = runsForEdit(o.runs, String(o.text), value, pending);
+  if (runs) o.runs = runs; else delete o.runs;
+  o.text = value;
+}
+
+/* ---------- absolute styles: what the controls show and take ---------- */
+// What the letter at an index looks like: { color, size (pixels), font }
+function textStyleAt(o, i) {
+  const st = runStyleAt(o.runs, i);
+  return { color: st.c !== undefined ? st.c : o.fill, size: o.size * (st.s !== undefined ? st.s : 1), font: st.f !== undefined ? st.f : o.font };
+}
+// Absolute styles ({ color, size, font }; any of them) as run attributes, for a text's own size, color and font.
+// Anything the same as the text's own becomes null: it is not stored.
+function runAttrsFor(o, attrs) {
+  const r = {};
+  if ('color' in attrs) r.c = attrs.color === o.fill ? null : attrs.color;
+  if ('size' in attrs) { const s = rnd(clamp(attrs.size, 4, 1200) / o.size, 5); r.s = s === 1 ? null : s; }
+  if ('font' in attrs) r.f = attrs.font === o.font ? null : attrs.font;
+  return r;
+}
+// Put absolute styles on characters a..b of a text object. The whole text is the text's own style (and clears what
+// the letters had of it); a part of it becomes runs. Gives true when the text changed.
+function applyTextStyle(o, a, b, attrs) {
+  const len = String(o.text).length;
+  a = clamp(a, 0, len); b = clamp(b, 0, len);
+  if (a >= b) return false;
+  const run = runAttrsFor(o, attrs);
+  if (a === 0 && b === len) {
+    if ('color' in attrs) { o.fill = attrs.color; delete o.grad; run.c = null; }
+    if ('size' in attrs) { o.size = clamp(attrs.size, 4, 1200); run.s = null; }
+    if ('font' in attrs) { o.font = attrs.font; run.f = null; }
+  }
+  const runs = runsApply(o.runs, len, a, b, run);
+  if (runs) o.runs = runs; else delete o.runs;
+  return true;
+}
+// The same for the whole text object (also when there is no text yet): what it is, and no letter set apart in it
+function applyWholeStyle(o, attrs) {
+  if (applyTextStyle(o, 0, String(o.text).length, attrs)) return;
+  if ('color' in attrs) { o.fill = attrs.color; delete o.grad; }
+  if ('size' in attrs) o.size = clamp(attrs.size, 4, 1200);
+  if ('font' in attrs) o.font = attrs.font;
+}
+// True when any letter of the text is set in this face
+const textUsesFont = (o, key) => o.kind === 'text' && (o.font === key || (Array.isArray(o.runs) && o.runs.some(r => r.f === key)));
+// Every face a text uses
+const textFonts = o => Array.from(new Set([o.font].concat((Array.isArray(o.runs) ? o.runs : []).map(r => r.f).filter(Boolean))));
+
+// Runs from a file or a paste, which might be anything: only what is understood is kept. fontOK says whether a face exists.
+function sanitizeRuns(raw, len, fontOK) {
+  if (!Array.isArray(raw)) return undefined;
+  const runs = raw.slice(0, 5000).map(r => {
+    if (!r || typeof r !== 'object') return null;
+    const n = Math.floor(Number(r.n));
+    if (!(n > 0)) return null;
+    const o = { n };
+    if (r.c === 'none' || (typeof r.c === 'string' && /^#[0-9a-f]{3,8}$/i.test(r.c))) o.c = r.c;
+    if (typeof r.s === 'number' && Number.isFinite(r.s)) o.s = rnd(clamp(r.s, 0.02, 300), 5);
+    if (typeof r.f === 'string' && fontOK(r.f)) o.f = r.f;
+    return o;
+  }).filter(Boolean);
+  return normRuns(runs, len);
 }
 /* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
@@ -2258,6 +2482,8 @@ function objView(o, ids) {
       { tag: 'g', a: { 'clip-path': 'url(#' + ids.clip + ')' }, kids: [
         { tag: 'image', a: { x: rnd(pg.x, 3), y: rnd(pg.y, 3), width: rnd(pg.w, 3), height: rnd(pg.h, 3), href: pg.rec.dataUrl, preserveAspectRatio: 'none', transform: spec.a.transform } }] },
       { tag: spec.tag, a: Object.assign({}, spec.a, { fill: 'none' }, sa, { display: sa.stroke === 'none' ? 'none' : null }) });
+  } else if (o.kind === 'text' && o.parts) {   // letters in their own colors: the outline in one piece per color
+    o.parts.forEach(pt => node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st, pt.c ? { fill: pt.c } : null, { d: pt.d }) }));
   } else node.kids.push({ tag: spec.tag, a: Object.assign({}, spec.a, st) });
   const pv = hasPixels(o) ? paintView(o, ids.mask || 'em' + o.id) : null;   // brush strokes not yet saved into a paint layer
   if (pv) { defs.push(...pv.defs); node.kids.push(...pv.kids); }
@@ -3909,12 +4135,17 @@ $('#drop-cancel').addEventListener('click', () => edFinish(null));
    the letters, whatever the zoom, angle, font or length. (Pressing on the text places the caret or selects,
    a double-click picks a word, a triple-click a line.)
    Every keystroke goes into o.text and the outlines underneath are rebuilt as you type.
+   Color, size and font apply to the selected letters (see 04g-text-runs.js); with only a caret they are kept for the
+   letters typed next. The style controls in the Design tab do not end the edit; the rest of the page does.
    Editing ends with Esc, Ctrl+Enter or a click anywhere else, as one undo step. Text that ends up empty is removed.
    A new text object is only added to the undo history when editing ends, so Undo takes it away whole.
    The Design tab's own text box still works; the two never edit at once.
    ===================================================================== */
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
-let te = null;                     // the edit in progress: { id, isNew, before, goalX, hold, clicks }
+let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
+// The controls that style the letters; a press on them leaves the text being edited
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #fill-color, #fill-hex, #fill-none, #palette';
+const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
 
@@ -3944,10 +4175,13 @@ function teOverlay() {
   const lay = textLayout(o), s = teSel(), g = svgEl('g', { transform: objXf(o) });
   g.appendChild(svgEl('rect', { x: 0, y: 0, width: o.w, height: o.h, class: 'ov-line ov-dash' }));
   selectionRects(lay, s.a, s.b).forEach(r => g.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'te-sel' })));
-  const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected)
-  g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b ? 'te-caret' : 'te-caret off' }));
+  const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected and the keyboard is here)
+  g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b && document.activeElement === teEl ? 'te-caret' : 'te-caret off' }));
   ov.appendChild(g);
   tePlace();
+  if (te.pending && (s.a !== s.b || s.a !== te.pendAt)) te.pending = null;   // a style chosen at the caret is for typing right there
+  const sig = JSON.stringify(teStyleShown(o));
+  if (sig !== te.sig) { te.sig = sig; updateInspector(); }   // the controls show the letters at the caret
   return true;   // no handles while typing
 }
 // The invisible textarea follows the caret, so a phone keyboard or an input method's window opens next to it
@@ -3970,7 +4204,7 @@ function startTextEdit(o, isNew) {
     return;
   }
   S.sel = new Set([o.id]);
-  te = { id: o.id, isNew: !!isNew, before: o.text, goalX: null, hold: false, clicks: { n: 0, t: 0, x: 0, y: 0 } };
+  te = { id: o.id, isNew: !!isNew, before: docJSON(o), goalX: null, hold: false, keep: false, clicks: { n: 0, t: 0, x: 0, y: 0 }, pending: null, pendAt: -1, sig: '' };
   teEl.value = o.text; teEl.hidden = false;
   refreshAll();
   setTimeout(() => { if (te && te.id === o.id) { teEl.focus({ preventScroll: true }); teEl.select(); drawOverlay(); } }, 30);   // after the click that started it is over
@@ -3985,7 +4219,7 @@ function finishTextEdit() {
     else { S.sel = new Set([o.id]); deleteSelected(); }
     return;
   }
-  if (o && (t.isNew || o.text !== t.before)) commit();
+  if (o && (t.isNew || docJSON(o) !== t.before)) commit();   // (changes to the style while editing were not committed one by one)
   refreshAll();
 }
 
@@ -3995,7 +4229,7 @@ function teDown(e, p) {
   const o = teObj();
   if (!o) return false;
   te.hold = false;
-  if (e.button > 0 || !boxContains(o, p, TE_PAD / view.z)) return false;   // elsewhere it works as usual, and the edit ends when the textarea loses focus
+  if (e.button > 0 || !boxContains(o, p, TE_PAD / view.z)) { finishTextEdit(); return false; }   // elsewhere it works as usual, after the edit ends
   const q = worldToBox(o, p.x, p.y), at = indexAtPoint(textLayout(o), q[0], q[1]);
   const c = te.clicks, again = e.timeStamp - c.t < 450 && Math.hypot(e.clientX - c.x, e.clientY - c.y) < 6;
   c.n = again ? Math.min(c.n + 1, 3) : 1; c.t = e.timeStamp; c.x = e.clientX; c.y = e.clientY;   // (a fourth quick press stays on the line)
@@ -4033,7 +4267,8 @@ teEl.addEventListener('input', () => {
   const o = teObj();
   if (!o) return;
   te.goalX = null;
-  o.text = teEl.value; refresh(o);
+  setTextValue(o, teEl.value, te.pending); te.pending = null;   // (letters typed take the style of their neighbours, or the one chosen at the caret)
+  refresh(o);
   render(); renderLayers();
   $('#tx-text').value = o.text;
 });
@@ -4056,12 +4291,50 @@ teEl.addEventListener('keydown', e => {
   teSoon();
 });
 ['keyup', 'select', 'focus'].forEach(n => teEl.addEventListener(n, () => { if (te) teSoon(); }));
+teEl.addEventListener('focus', () => { if (te) te.keep = false; });
 document.addEventListener('selectionchange', () => { if (te && document.activeElement === teEl) teSoon(); });
-teEl.addEventListener('blur', () => {
-  // A press on the text itself takes the keyboard back at once; anything else ends the edit
+teEl.addEventListener('blur', e => {
+  // A press on the text itself takes the keyboard back at once; a style control keeps the edit going; anything else ends it
   if (te && te.hold) { setTimeout(() => { if (te && te.hold) teEl.focus({ preventScroll: true }); }, 0); return; }
+  if (te && (te.keep || teKeeps(e.relatedTarget))) { teSoon(); return; }
   finishTextEdit();
 });
+// A press anywhere outside the text, the stage and the style controls ends the edit (the keyboard may be in a control by then, so there may be no blur)
+document.addEventListener('pointerdown', e => {
+  if (!te) return;
+  te.keep = teKeeps(e.target);
+  if (!te.keep && !e.target.closest('#stage')) finishTextEdit();
+}, true);
+// Esc while the keyboard is in a style control
+document.addEventListener('keydown', e => {
+  if (te && e.key === 'Escape' && document.activeElement !== teEl && !e.defaultPrevented && !(typeof fpIsOpen === 'function' && fpIsOpen())) { finishTextEdit(); stage.focus({ preventScroll: true }); }
+});
+
+/* ---------- color, size and font of the selected letters ---------- */
+// What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font }
+function teStyleShown(o) {
+  const s = teSel(), n = String(o.text).length, st = textStyleAt(o, Math.min(s.a === s.b ? Math.max(s.a - 1, 0) : s.a, Math.max(n - 1, 0))), p = te && te.pending;
+  if (p) {
+    if ('c' in p) st.color = p.c == null ? o.fill : p.c;
+    if ('s' in p) st.size = o.size * (p.s == null ? 1 : p.s);
+    if ('f' in p) st.font = p.f == null ? o.font : p.f;
+  }
+  return st;
+}
+// Set { color, size, font } (any of them) on the selected letters, or at a caret for the letters typed next. False when not editing.
+function teStyle(attrs) {
+  const o = teObj();
+  if (!o) return false;
+  const s = teSel();
+  if (s.a === s.b) { te.pending = Object.assign(te.pending || {}, runAttrsFor(o, attrs)); te.pendAt = s.a; }
+  else { applyTextStyle(o, s.a, s.b, attrs); refresh(o); }
+  render(); renderLayers(); drawOverlay(); updateInspector();
+  return true;
+}
+// Back to typing after a button was pressed
+function teRefocus() { setTimeout(() => { if (te) teEl.focus({ preventScroll: true }); }, 0); }
+// The control was used: while editing the change is saved with the whole edit when it ends, so no separate step now
+function settle() { if (te) teRefocus(); else commit(); }
 window.addEventListener('resize', () => { if (te) drawOverlay(); });
 /* =====================================================================
    Perspective
@@ -4798,11 +5071,12 @@ function updateInspector() {
     if (o.kind === 'rect') setNum(F.r, o.r || 0);
     if (o.kind === 'text') {
       const ta = $('#tx-text'); if (document.activeElement !== ta && ta.value !== o.text) ta.value = o.text;
-      fpSetValue(fonts[o.font] ? o.font : DEFAULT_FONT);
+      const ts = te && te.id === o.id ? teStyleShown(o) : null;   // while typing in place: the letters at the caret
+      fpSetValue(ts ? (fonts[ts.font] ? ts.font : DEFAULT_FONT) : fonts[o.font] ? o.font : DEFAULT_FONT);
       const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
       mh.hidden = !miss.length;
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
-      setNum($('#tx-size'), o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
+      setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
     }
     if (o.kind === 'polygon') {
@@ -4812,7 +5086,8 @@ function updateInspector() {
   }
   if (n) {
     const a = sel.find(hasPaint) || sel[0], onlyLines = sel.every(isStraightLine), onlyPhotos = sel.every(hasPixels);
-    const noFill = onlyLines || onlyPhotos, g = hasGrad(a) ? a.grad : null;
+    const typing = o && o.kind === 'text' && te && te.id === o.id ? teStyleShown(o) : null;   // (letters can take a color of their own, over a gradient too)
+    const noFill = onlyLines || onlyPhotos, g = hasGrad(a) && !typing ? a.grad : null;
     $('#row-filltype').hidden = noFill; $('#row-fill').hidden = noFill || !!g; $('#palette').hidden = noFill || !!g;
     $('#grad-controls').hidden = noFill || !g;
     $$('#fill-type button').forEach(b => b.setAttribute('aria-pressed', b.dataset.ft === (g ? g.type : 'solid') ? 'true' : 'false'));
@@ -4823,7 +5098,7 @@ function updateInspector() {
       if (lin) setNum($('#grad-angle'), Math.round(gradAngle(a)));
     }
     ['#row-stroke', '#row-weight', '#row-corners', '#row-ends'].forEach(s => { $(s).hidden = onlyPhotos; });
-    const fill = a.fill && a.fill !== 'none' ? a.fill : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
+    const fill = (typing ? typing.color : a.fill) && (typing ? typing.color : a.fill) !== 'none' ? (typing ? typing.color : a.fill) : null, stroke = a.stroke && a.stroke !== 'none' ? a.stroke : null;
     if (document.activeElement !== $('#fill-hex')) $('#fill-hex').value = fill ? toHex6(fill) : '';
     $('#fill-color').value = fill ? toHex6(fill) : '#cccccc';
     $('#fill-none').setAttribute('aria-pressed', fill ? 'false' : 'true');
@@ -4857,7 +5132,15 @@ function rememberStyle(o) {
   S.style.sw = o.sw || S.style.sw; S.style.join = o.join; S.style.dash = o.dash;
 }
 // Choosing a plain fill color (or None) turns a gradient fill back into a solid one
-function styleSet(k, v) { forSel(o => { if (hasPixels(o) && k !== 'opacity') return; o[k] = v; if (k === 'fill') delete o.grad; }); rememberStyle(selObjs().find(hasPaint)); render(); }
+function styleSet(k, v) {
+  if (k === 'fill' && te && teStyle({ color: v })) return;   // typing in place: only the selected letters (or the next ones typed)
+  forSel(o => {
+    if (hasPixels(o) && k !== 'opacity') return;
+    o[k] = v;
+    if (k === 'fill') { delete o.grad; if (o.kind === 'text' && o.runs) { applyWholeStyle(o, { color: v }); refresh(o); } }   // (the whole text, so no letter keeps a color of its own)
+  });
+  rememberStyle(selObjs().find(hasPaint)); render();
+}
 
 // Geometry fields
 function onNum(inp, fn, resizes) {
@@ -4865,7 +5148,8 @@ function onNum(inp, fn, resizes) {
     const v = parseFloat(inp.value), o = one();
     if (!o || !isFinite(v)) { updateInspector(); return; }
     const ow = o.w, oh = o.h, p0 = o.pic ? Object.assign({}, o.pic) : null;
-    fn(o, v); refresh(o);
+    if (fn(o, v) === 'live') { refresh(o); render(); renderLayers(); updateInspector(); return; }   // (a change while typing in place is saved when the edit ends)
+    refresh(o);
     if (resizes && p0 && ow > 0 && oh > 0 && (o.w !== ow || o.h !== oh)) rescalePic(o, p0, o.w / ow, o.h / oh);
     commit();
   });
@@ -4897,10 +5181,14 @@ onNum(F.r, (o, v) => { o.r = clamp(v, 0, Math.min(o.w, o.h) / 2); });
 
 // Text
 const txArea = $('#tx-text');
-txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; o.text = txArea.value; refresh(o); render(); renderLayers(); });
+txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; setTextValue(o, txArea.value); refresh(o); render(); renderLayers(); });
 txArea.addEventListener('change', () => commit());
 txArea.addEventListener('keydown', e => { if (e.key === 'Escape') txArea.blur(); });
-onNum($('#tx-size'), (o, v) => { if (o.kind === 'text') o.size = clamp(v, 4, 1200); }, true);
+onNum($('#tx-size'), (o, v) => {
+  if (o.kind !== 'text') return;
+  if (te && te.id === o.id && teStyle({ size: clamp(v, 4, 1200) })) { teRefocus(); return 'live'; }   // the selected letters
+  o.size = clamp(v, 4, 1200);   // the whole text, every letter in proportion
+}, true);
 onNum($('#tx-lh'), (o, v) => { if (o.kind === 'text') o.lh = clamp(v, 0.6, 3); });
 onNum($('#tx-ls'), (o, v) => { if (o.kind === 'text') o.ls = clamp(v, -20, 200) / 100; });
 $$('[data-align]').forEach(b => b.addEventListener('click', () => { const o = one(); if (!o || o.kind !== 'text') return; o.align = b.dataset.align; refresh(o); commit(); }));
@@ -4928,12 +5216,13 @@ $('#pg-inner').addEventListener('change', () => commit());
 function wireColor(colorId, hexId, noneId, key, fallback) {
   const c = $(colorId), h = $(hexId), n = $(noneId);
   c.addEventListener('input', () => { styleSet(key, c.value); });
-  c.addEventListener('change', () => commit());
-  h.addEventListener('change', () => { const v = h.value.trim(); if (HEX.test(v)) { styleSet(key, v.toLowerCase()); commit(); } else updateInspector(); });
+  c.addEventListener('change', () => { if (!te) commit(); });
+  h.addEventListener('change', () => { const v = h.value.trim(); if (HEX.test(v)) { styleSet(key, v.toLowerCase()); settle(); } else updateInspector(); });
   h.addEventListener('keydown', e => { if (e.key === 'Enter') h.blur(); });
   n.addEventListener('click', () => {
     const a = selObjs()[0]; if (!a) return;
-    styleSet(key, a[key] && a[key] !== 'none' ? 'none' : fallback); commit();
+    const cur = key === 'fill' && te && teObj() ? teStyleShown(teObj()).color : a[key];   // (while typing: the letters at the caret)
+    styleSet(key, cur && cur !== 'none' ? 'none' : fallback); settle();
   });
 }
 wireColor('#fill-color', '#fill-hex', '#fill-none', 'fill', '#3b3bf5');
@@ -5113,7 +5402,7 @@ $('#opacity').addEventListener('change', () => commit());
   const box = $('#palette');
   cols.forEach(c => {
     const b = elt('button', 'sw'); b.style.background = c; b.title = c + '. Click to fill, Shift-click to outline.'; b.setAttribute('aria-label', 'Color ' + c);
-    b.addEventListener('click', e => { if (!S.sel.size) return; styleSet(e.shiftKey ? 'stroke' : 'fill', c); commit(); });
+    b.addEventListener('click', e => { if (!S.sel.size) return; styleSet(e.shiftKey ? 'stroke' : 'fill', c); settle(); });
     box.appendChild(b);
   });
 })();
@@ -5184,10 +5473,11 @@ function fpSetValue(key) {
   fpItalic.title = fpItalic.disabled ? F.label + ' has no italic style' : 'Italic (Ctrl+I)';
 }
 
-// Use this face for the selected text. A face that is not here yet is fetched first, so the text never flashes in another font.
+// Use this face for the selected text (while typing in place: for the selected letters, or the letters typed next). A face that is not here yet is fetched first, so the text never flashes in another font.
 async function setTextFace(key) {
   const o = one();
-  if (!o || o.kind !== 'text' || !fonts[key] || o.font === key) return;
+  const typing = !!(o && te && te.id === o.id);
+  if (!o || o.kind !== 'text' || !fonts[key] || (!typing && o.font === key)) return;
   const id = o.id, slow = setTimeout(() => toast('Loading ' + fonts[key].label + '…'), 400);
   const ok = await ensureFonts([key], true);
   clearTimeout(slow);
@@ -5196,14 +5486,21 @@ async function setTextFace(key) {
     if (fonts[FP.shown]) fpStyle.value = FP.shown;   // the menu goes back to the face the text really has
     return;
   }
-  t.font = key; refresh(t); commit();   // (typing in place follows by itself: the caret is drawn from the same layout)
+  if (typing) {   // the edit may have ended while the face was on its way
+    if (te && te.id === id) { teStyle({ font: key }); teRefocus(); }
+    else if (fonts[FP.shown]) fpStyle.value = FP.shown;
+    return;
+  }
+  applyWholeStyle(t, { font: key }); refresh(t); commit();   // (the whole text: no letter keeps a face of its own)
 }
 // Bold or italic on or off for the selected text, by moving to the matching face. say: tell the person when there isn't one (a shortcut gives no other sign).
 function toggleStyle(which, say) {
   const o = one();
   if (!o || o.kind !== 'text' || !fonts[o.font]) return;
-  const to = which === 'bold' ? boldToggled(o.font) : italicToggled(o.font), same = which === 'bold' ? faceIsBold(to) === faceIsBold(o.font) : fonts[to].italic === fonts[o.font].italic;
-  if (same) { if (say) toast(FAMILIES[fonts[o.font].family].label + ' has no ' + which + ' style.'); return; }
+  const cur = te && te.id === o.id ? teStyleShown(o).font : o.font;   // (while typing in place: the letters at the caret)
+  if (!fonts[cur]) return;
+  const to = which === 'bold' ? boldToggled(cur) : italicToggled(cur), same = which === 'bold' ? faceIsBold(to) === faceIsBold(cur) : fonts[to].italic === fonts[cur].italic;
+  if (same) { if (say) toast(FAMILIES[fonts[cur].family].label + ' has no ' + which + ' style.'); return; }
   setTextFace(to);
 }
 fpStyle.addEventListener('change', () => setTextFace(fpStyle.value));
@@ -5278,7 +5575,7 @@ function fpClosePop(focusBtn) {
 // A row is a family: the text keeps its bold and italic where the family has them
 function fpPick(family) {
   const o = one();
-  if (o && o.kind === 'text' && FAMILIES[family]) setTextFace(faceForFamily(family, o.font));
+  if (o && o.kind === 'text' && FAMILIES[family]) setTextFace(faceForFamily(family, te && te.id === o.id ? teStyleShown(o).font : o.font));
   fpClosePop(true);
 }
 
@@ -5335,7 +5632,13 @@ function removeUserFont(key) {
   delete fonts[key]; delete FAMILIES[key]; faceLoads.delete(key);
   if (DB.ok) idbDel('meta', 'font:' + key).catch(() => { /* it is gone for this session either way */ });
   let used = 0;
-  doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { o.font = DEFAULT_FONT; refresh(o); used++; } });
+  doc.objects.forEach(o => {
+    if (o.kind !== 'text' || !textUsesFont(o, key)) return;
+    if (o.font === key) o.font = DEFAULT_FONT;
+    if (o.runs) o.runs = normRuns(o.runs.map(r => r.f === key ? { n: r.n, c: r.c, s: r.s } : r), String(o.text).length);   // (letters set in it go back to the text's own face)
+    if (!o.runs) delete o.runs;
+    refresh(o); used++;
+  });
   if (used) commit();
   FP.shown = null;
   const o = one(); if (o && o.kind === 'text') fpSetValue(fonts[o.font] ? o.font : DEFAULT_FONT);
@@ -5741,6 +6044,8 @@ function sanitizeDoc(d) {
       if (fonts[r.font]) o.font = r.font; else { o.font = DEFAULT_FONT; missingFont = true; }
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
+      const runs = sanitizeRuns(r.runs, o.text.length, k => !!fonts[k]);   // letters set apart from the rest
+      if (runs) o.runs = runs;
     }
     if (r.kind === 'path') {   // (a converted old line already has its outline)
       if (!r.nat || typeof r.nat.d !== 'string') return;

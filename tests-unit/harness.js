@@ -38,6 +38,7 @@ const MODULE_FILES = [
   '04d-erase.js',
   '04e-eyedrop.js',
   '04f-text-layout.js',
+  '04g-text-runs.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '17-projects.js',
@@ -69,6 +70,9 @@ const EXPORT_NAMES = [
   // 04f-text-layout.js
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
   'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
+  // 04g-text-runs.js
+  'normRuns', 'runStyleAt', 'runSlices', 'runsApply', 'runsSplice', 'runsForEdit', 'setTextValue', 'textStyleAt',
+  'runAttrsFor', 'applyTextStyle', 'applyWholeStyle', 'textUsesFont', 'textFonts', 'sanitizeRuns',
   'STYLE_KEYS', 'KIND_PARAMS', 'copyKeys', 'toPlainPath', 'makeImage',
   'lineEnds', 'isStraightLine', 'lineGeometry', 'makeLine', 'setLineEnds',
   'KIND_INFO', 'kindInfo', 'hasPixels', 'hasPaint', 'keepsRatio',

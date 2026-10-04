@@ -43,25 +43,67 @@ function purgeLineMetrics(fontKey) {
 }
 
 /* ---------- the whole text ---------- */
+// A line with runs (04g-text-runs.js) is cut into segments wherever the face or size changes (a change of color alone
+// does not move anything). Each segment is measured and drawn by itself, one after the other along the line.
+function runLine(o, runs, t, start, textLen) {
+  const ls = o.ls || 0, last = Math.max(textLen - 1, 0);
+  const sl = t ? runSlices(runs, start, start + t.length) : [{ a: start, b: start, st: runStyleAt(runs, clamp(start, 0, last)) }];   // (an empty line takes the style of its break)
+  const segs = [];
+  sl.forEach(p => {
+    const f = p.st.f !== undefined ? p.st.f : o.font, size = rnd(o.size * (p.st.s !== undefined ? p.st.s : 1), 3), prev = segs[segs.length - 1];
+    if (prev && prev.f === f && prev.size === size) prev.b = p.b - start;
+    else segs.push({ a: p.a - start, b: p.b - start, f, size });
+  });
+  const xs = [];
+  let x = 0, A = 0, D = 0, S = 0;
+  segs.forEach(g => {
+    g.font = fontOf(g.f);
+    const m = lineMetrics(g.font, g.f, g.size, ls, t.slice(g.a, g.b)), sc = g.size / g.font.unitsPerEm;
+    g.x = x;
+    for (let j = 0; j < g.b - g.a; j++) xs.push(x + m.xs[j]);
+    x += m.width;
+    A = Math.max(A, g.font.ascender * sc); D = Math.max(D, -g.font.descender * sc); S = Math.max(S, g.size);
+  });
+  xs.push(x);
+  return { m: { width: x, xs }, segs, A, D, S };
+}
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
-//             x (left edge, from the alignment), top (its slot), base (its baseline) }
+//             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
+//             segs: [{ a, b (characters of the line), f (face), font, size, x (from the line's left edge) }] }
+// lay.flat: no runs, so every line is the same height and sits at i * lineH
 function textLayout(o) {
+  const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null;
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = size * 0.4, start = 0;
-  const lines = String(o.text).split('\n').map((t, i) => {
-    const m = lineMetrics(font, o.font, size, ls, t);
-    if (m.width > W) W = m.width;
-    const L = { i, text: t, start, end: start + t.length, m, x: 0, top: i * lineH, base: i * lineH + (lineH - (asc + desc)) / 2 + asc };
+  let W = size * 0.4, start = 0, acc = 0;
+  const lines = text.split('\n').map((t, i) => {
+    let r;
+    if (runs) r = runLine(o, runs, t, start, text.length);
+    else {
+      const m = lineMetrics(font, o.font, size, ls, t);
+      r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, x: 0 }], A: asc, D: desc, S: size };
+    }
+    if (r.m.width > W) W = r.m.width;
+    const h = runs ? r.S * o.lh : lineH, top = runs ? acc : i * lineH;
+    const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A };
+    acc += h;
     start += t.length + 1;   // (the line break counts as a character)
     return L;
   });
   lines.forEach(L => { L.x = o.align === 'center' ? (W - L.m.width) / 2 : o.align === 'right' ? W - L.m.width : 0; });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: lineH * lines.length };
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
+// The line at a height (box coordinates): the nearest one, above the first or below the last
+function lineAtY(lay, y) {
+  const ls = lay.lines;
+  if (lay.flat) return ls[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, ls.length - 1) : 0];
+  let lo = 0, hi = ls.length - 1;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].top <= y) lo = mid; else hi = mid - 1; }
+  return ls[lo];
+}
 // The line an index is on (an index at the very end of a line is on that line, not the next)
 function lineOfIndex(lay, index) {
   const ls = lay.lines;
@@ -72,7 +114,7 @@ function lineOfIndex(lay, index) {
 // Where the caret is drawn for an index: a vertical segment from the font's top to its bottom
 function caretAt(lay, index) {
   const L = lineOfIndex(lay, index), col = clamp(index - L.start, 0, L.text.length);
-  return { x: L.x + L.m.xs[col], y0: L.base - lay.asc, y1: L.base + lay.desc, line: L.i };
+  return { x: L.x + L.m.xs[col], y0: L.base - L.asc, y1: L.base + L.desc, line: L.i };
 }
 // The highlight for a selection from a to b: a rectangle per line. A selection that runs past the end of a line also covers its break.
 function selectionRects(lay, a, b) {
@@ -82,13 +124,13 @@ function selectionRects(lay, a, b) {
     const s = Math.max(a, L.start), e = Math.min(b, L.end);
     if (s > e) return;
     const x0 = L.x + L.m.xs[s - L.start], x1 = L.x + L.m.xs[e - L.start] + (b > L.end && L.i < lay.lines.length - 1 ? brk : 0);
-    if (x1 > x0) out.push({ x: x0, y: L.base - lay.asc, w: x1 - x0, h: lay.asc + lay.desc });
+    if (x1 > x0) out.push({ x: x0, y: L.base - L.asc, w: x1 - x0, h: L.asc + L.desc });
   });
   return out;
 }
 // The index nearest a point (box coordinates): the line by height, then the closest gap between letters
 function indexAtPoint(lay, x, y) {
-  const L = lay.lines[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, lay.lines.length - 1) : 0], xs = L.m.xs, n = L.text.length, lx = x - L.x;
+  const L = lineAtY(lay, y), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
   if (lx >= xs[n]) return L.end;
   let lo = 0, hi = n;   // xs[lo] <= lx < xs[hi]
@@ -106,7 +148,7 @@ function verticalMove(lay, index, dir, goalX) {
   const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX, j = L.i + dir;
   if (j < 0) return { index: 0, goalX: gx };
   if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
-  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lineH / 2), goalX: gx };
+  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2), goalX: gx };
 }
 // The word at an index, for double-click: a run of letters and digits, of spaces, or of other marks, within one line
 function wordRange(text, index) {
