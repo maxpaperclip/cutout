@@ -50,3 +50,8 @@ test('version: one source of truth', async (t) => {
     }
   });
 });
+
+test('release note: every build says what is new', () => {
+  const m = /const WHATS_NEW = '([^']+)'/.exec(read('src/js/20-boot.js'));
+  assert.ok(m && m[1].length > 20, 'WHATS_NEW in src/js/20-boot.js should say what changed in this build (see BUILD.md, "Releasing")');
+});

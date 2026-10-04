@@ -12,6 +12,11 @@ const HISTORY = { steps: 100, bytes: 48 * 1048576 };
 const hist = { steps: [], idx: -1, bytes: 0 };
 const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
 function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
+// What to do with the last drawing when FriendShaped opens: 'ask' (a blank page with a button to reopen it; the default),
+// 'open' (reopen it straight away) or 'new' (a blank page). Kept in this browser; see boot in 20-boot.js.
+const RESUME_KEY = 'friendshaped.resume';
+const resumePref = () => { try { const v = localStorage.getItem(RESUME_KEY); return v === 'open' || v === 'new' ? v : 'ask'; } catch (e) { return 'ask'; } };
+let held = null;   // the last drawing, brought back from this browser but not opened yet ('ask'): { doc, lost }
 const AUTOSAVE_KEY = 'friendshaped.autosave.v1';   // fallback when the browser has no IndexedDB
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
@@ -58,6 +63,7 @@ function setStatus(state, detail) {
 }
 function scheduleSave(str) {
   if (suppressSave) return;
+  if (held) { held = null; updateEmpty(); }   // saving replaces the last drawing, so it can no longer be offered
   clearTimeout(saveTimer);
   setStatus('saving', 'Saving your drawing on this device.');
   saveTimer = setTimeout(() => persistNow(str), 600);
@@ -139,9 +145,10 @@ async function registerStored(r) {
   images.set(r.id, { id: r.id, blob: r.blob, dataUrl, w: r.w, h: r.h, mime: r.mime, bytes: r.blob.size, name: r.name || 'Photo', stored: true, mask: !!r.mask });
 }
 // Open the database and bring back the last drawing with its photos
-async function restoreSession() {
+async function restoreSession(wantDoc) {
   DB.db = await idbOpen(); DB.ok = !!DB.db;
   await loadUserFonts();   // before the drawing is read, so text in a font added earlier keeps it (see 13b-font-picker.js)
+  if (!wantDoc) return null;   // (starting blank: the drawing is not needed)
   let raw = null;
   if (DB.ok) { try { const m = await idbGet('meta', 'doc'); raw = m && m.json; } catch (e) { /* fall through */ } }
   if (!raw) { try { raw = localStorage.getItem(AUTOSAVE_KEY); } catch (e) { /* ignore */ } }

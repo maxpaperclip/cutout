@@ -26,7 +26,7 @@ document.addEventListener('click', e => {
   const a = e.target.closest('[data-act]'); if (!a || a.closest('#layers')) return;
   const act = a.dataset.act;
   if (act === 'new') newDrawing(); else if (act === 'open') { closeMenus(); $('#file-project').click(); }
-  else if (act === 'save') saveProject(); else if (act === 'example') loadExample();
+  else if (act === 'save') saveProject(); else if (act === 'example') loadExample(); else if (act === 'resume') reopenLast();
   else if (act === 'import') { closeMenus(); $('#file-photo').click(); }
 });
 $('#file-photo').addEventListener('change', e => { const f = e.target.files; const list = Array.from(f); e.target.value = ''; importFiles(list); });
