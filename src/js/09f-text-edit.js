@@ -8,7 +8,7 @@
    the letters, whatever the zoom, angle, font or length. (Pressing on the text places the caret or selects,
    a double-click picks a word, a triple-click a line.)
    Every keystroke goes into o.text and the outlines underneath are rebuilt as you type.
-   Color, size and font apply to the selected letters (see 04g-text-runs.js); with only a caret they are kept for the
+   Color, size, font, letter spacing and line height apply to the selected letters (see 04g-text-runs.js); with only a caret they are kept for the
    letters typed next. The style controls in the Design tab do not end the edit; the rest of the page does.
    Editing ends with Esc, Ctrl+Enter or a click anywhere else, as one undo step. Text that ends up empty is removed.
    A new text object is only added to the undo history when editing ends, so Undo takes it away whole.
@@ -17,7 +17,7 @@
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
 let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
 // The controls that style the letters; a press on them leaves the text being edited
-const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #fill-color, #fill-hex, #fill-none, #palette';
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette';
 const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
@@ -184,17 +184,19 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- color, size and font of the selected letters ---------- */
-// What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font }
+// What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font, spacing, lineHeight }
 function teStyleShown(o) {
   const s = teSel(), n = String(o.text).length, st = textStyleAt(o, Math.min(s.a === s.b ? Math.max(s.a - 1, 0) : s.a, Math.max(n - 1, 0))), p = te && te.pending;
   if (p) {
     if ('c' in p) st.color = p.c == null ? o.fill : p.c;
     if ('s' in p) st.size = o.size * (p.s == null ? 1 : p.s);
     if ('f' in p) st.font = p.f == null ? o.font : p.f;
+    if ('l' in p) st.spacing = p.l == null ? o.ls || 0 : p.l;
+    if ('h' in p) st.lineHeight = p.h == null ? o.lh : p.h;
   }
   return st;
 }
-// Set { color, size, font } (any of them) on the selected letters, or at a caret for the letters typed next. False when not editing.
+// Set { color, size, font, spacing, lineHeight } (any of them) on the selected letters, or at a caret for the letters typed next. False when not editing.
 function teStyle(attrs) {
   const o = teObj();
   if (!o) return false;

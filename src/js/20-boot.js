@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: FriendShaped opens on a blank page now, with a button to reopen your last drawing (change this under the Page tab, "When it opens"). Also new: select letters while typing in place to change their color, size or font.';
+const WHATS_NEW = 'New: letter spacing and line height can be set on selected letters too (the tallest letter sets a line\'s height). Before that: FriendShaped opens on a blank page with a button to reopen your last drawing, and selected letters can have their own color, size and font.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

@@ -276,14 +276,14 @@ const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 // A stretch of one face and size is drawn as one piece of text; where its color changes it is drawn in pieces that start
 // where the layout says (that already includes the kerning), so coloring a letter never moves anything.
 function buildText(o) {
-  const lay = textLayout(o), opts = { kerning: true, letterSpacing: lay.ls };
+  const lay = textLayout(o);
   const colored = Array.isArray(o.runs) && o.runs.some(r => r.c !== undefined), by = new Map();
   let d = '';
   const add = (c, pd) => { d += pd; if (colored) by.set(c, (by.get(c) || '') + pd); };
   lay.lines.forEach(L => {
     L.segs.forEach(g => {
       if (g.b <= g.a) return;
-      const pieces = [];
+      const opts = { kerning: true, letterSpacing: g.ls }, pieces = [];
       if (colored) runSlices(o.runs, L.start + g.a, L.start + g.b).forEach(p => {
         const last = pieces[pieces.length - 1];
         if (last && last.c === p.st.c) last.b = p.b; else pieces.push({ a: p.a, b: p.b, c: p.st.c });
