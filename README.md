@@ -10,7 +10,7 @@
 accounts, no server-side component. It has a small set of fonts built in, so it stays light enough to email or put on a
 USB stick.
 
-**Hosted:** `npm run build` also makes `dist/site/`: an `index.html` and a `fonts/` folder with the whole font library
+**Hosted:** download the `site/` folder from this repo: an `index.html` and a `fonts/` folder with the whole font library
 (every weight and italic). Upload those two things to any static web host (GitHub Pages, Netlify, a school server) and
 open the address. Fonts are fetched one at a time, only when someone uses them, and the browser keeps them. A page
 opened straight from disk can't fetch its fonts folder; use the single file for that.
@@ -25,5 +25,6 @@ checklist.
 
 ```
 npm run build   # produces dist/Cutout.html (single file) and dist/site/ (hosted) from src/
+npm run release # builds, then copies both to the repo (Cutout.html and site/)
 npm run dev     # rebuilds automatically as you edit src/
 ```

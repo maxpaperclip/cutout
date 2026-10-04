@@ -22,10 +22,14 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Verify the committed root HTML matches a fresh build
+      - name: Verify the committed root HTML and site/ match a fresh build
         run: |
           if ! diff -q dist/Cutout.html Cutout.html; then
             echo "::error::The committed root HTML file is out of date. Run 'npm run release' and commit the result."
+            exit 1
+          fi
+          if ! diff -rq dist/site site; then
+            echo "::error::The committed site/ folder is out of date. Run 'npm run release' and commit the result."
             exit 1
           fi
 
