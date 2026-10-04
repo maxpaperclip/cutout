@@ -1,14 +1,14 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 // RGBA pixels, w wide: rows of [r, g, b, a] lists
 const px = (rows) => Uint8ClampedArray.from(rows.flat(2));
 const R = [255, 0, 0, 255], B = [0, 0, 255, 255], C = [0, 0, 0, 0];
 
 test('eyedropper: which part of the page is drawn', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
   await t.test('the box is what the canvas shows, one picture pixel per screen pixel', () => {
     const r = m.dropRegion({ w: 800, h: 600 }, { x: 100, y: 50, z: 2 });
     assert.deepEqual({ ...r.box }, { x: -50, y: -25, w: 400, h: 300 });
@@ -31,7 +31,7 @@ test('eyedropper: which part of the page is drawn', async (t) => {
 });
 
 test('eyedropper: reading the color', async (t) => {
-  const m = loadCutoutModules();
+  const m = loadAppModules();
   await t.test('one pixel is that pixel', () => {
     const d = px([[R, B]]);
     assert.deepEqual({ ...m.dropAverage(d, 2, 1, 1, 0, 1) }, { r: 0, g: 0, b: 255, a: 1 });

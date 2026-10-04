@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Build script for Cutout.
+ * Build script for FriendShaped.
  *
  * It reads everything under src/ and glues it into two things:
  *
- *   dist/Cutout.html     The "lite" single file: one self-contained HTML file that works from a USB stick or an
+ *   dist/FriendShaped.html     The "lite" single file: one self-contained HTML file that works from a USB stick or an
  *                        email attachment, with a small set of fonts built in ("lite" in src/fonts/builds.json).
  *   dist/site/           The hosted version: index.html plus a fonts/ folder holding every font. The page only
  *                        carries the few fonts it needs to start ("core" in src/fonts/builds.json); the rest are
@@ -21,7 +21,7 @@
  * touching anything else in this file.
  *
  * Usage:
- *   node build.js            build dist/Cutout.html and dist/site/
+ *   node build.js            build dist/FriendShaped.html and dist/site/
  *   node build.js --watch    rebuild on any change under src/
  *   node build.js --minify   also minify the JS with esbuild, if installed
  */
@@ -38,7 +38,7 @@ const PKG = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'ut
 // title, and APP_VERSION in src/js/01-helpers.js). To release a new version:
 //   npm version 1.7.0 --no-git-tag-version
 // which updates package.json and package-lock.json together.
-const LITE_FILE = 'Cutout.html';
+const LITE_FILE = 'FriendShaped.html';
 const SITE_DIR = 'site';
 const VERSION_TOKEN = '__APP_VERSION__';
 function stampVersion(text, where) {

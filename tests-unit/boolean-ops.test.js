@@ -1,11 +1,11 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { loadCutoutModules } = require('./harness');
+const { loadAppModules } = require('./harness');
 
 test('boolean-ops: combineShapes unite', async (t) => {
   await t.test('uniting two overlapping rects gives a single path bounding both', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     const b = m.newShape('rect', { x: 50, y: 50, w: 100, h: 100 });
     const result = m.combineShapes('unite', [a, b]);
@@ -19,7 +19,7 @@ test('boolean-ops: combineShapes unite', async (t) => {
   });
 
   await t.test('the combined shape keeps the bottom (first) shape\'s style', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100, fill: '#ff0000' });
     const b = m.newShape('rect', { x: 50, y: 50, w: 100, h: 100, fill: '#00ff00' });
     const result = m.combineShapes('unite', [a, b]);
@@ -27,7 +27,7 @@ test('boolean-ops: combineShapes unite', async (t) => {
   });
 
   await t.test('uniting three shapes combines them all', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 50, h: 50 });
     const b = m.newShape('rect', { x: 40, y: 0, w: 50, h: 50 });
     const c = m.newShape('rect', { x: 80, y: 0, w: 50, h: 50 });
@@ -39,7 +39,7 @@ test('boolean-ops: combineShapes unite', async (t) => {
 
 test('boolean-ops: combineShapes subtract/intersect/exclude', async (t) => {
   await t.test('subtract removes the second shape from the first', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     const b = m.newShape('rect', { x: 50, y: 0, w: 100, h: 100 });
     const result = m.combineShapes('subtract', [a, b]);
@@ -50,7 +50,7 @@ test('boolean-ops: combineShapes subtract/intersect/exclude', async (t) => {
   });
 
   await t.test('intersect keeps only the overlapping region', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     const b = m.newShape('rect', { x: 50, y: 50, w: 100, h: 100 });
     const result = m.combineShapes('intersect', [a, b]);
@@ -61,7 +61,7 @@ test('boolean-ops: combineShapes subtract/intersect/exclude', async (t) => {
   });
 
   await t.test('exclude removes the overlap, leaving both non-overlapping parts', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     const b = m.newShape('rect', { x: 50, y: 50, w: 100, h: 100 });
     const result = m.combineShapes('exclude', [a, b]);
@@ -77,7 +77,7 @@ test('boolean-ops: combineShapes subtract/intersect/exclude', async (t) => {
 
 test('boolean-ops: edge cases', async (t) => {
   await t.test('intersecting two shapes that do not overlap returns null and shows a toast', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const a = m.newShape('rect', { x: 0, y: 0, w: 10, h: 10 });
     const b = m.newShape('rect', { x: 1000, y: 1000, w: 10, h: 10 });
     const result = m.combineShapes('intersect', [a, b]);
@@ -86,7 +86,7 @@ test('boolean-ops: edge cases', async (t) => {
   });
 
   await t.test('subtracting a shape that fully covers the first leaves nothing and returns null', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const a = m.newShape('rect', { x: 10, y: 10, w: 10, h: 10 });
     const big = m.newShape('rect', { x: 0, y: 0, w: 1000, h: 1000 });
     const result = m.combineShapes('subtract', [a, big]);
@@ -95,7 +95,7 @@ test('boolean-ops: edge cases', async (t) => {
   });
 
   await t.test('combining with a straight line is refused and explained, like any open line', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     const line = m.makeLine({ x: 10, y: 10 }, { x: 90, y: 90 });
     m.doc.objects.push(a, line);
@@ -108,7 +108,7 @@ test('boolean-ops: edge cases', async (t) => {
 
 test('boolean-ops: replaceObjects', async (t) => {
   await t.test('replaces the combined shapes with the result, keeping stacking position', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 10, h: 10 });
     const b = m.newShape('rect', { x: 5, y: 5, w: 10, h: 10 });
     const other = m.newShape('rect', { x: 100, y: 100, w: 10, h: 10 });
@@ -124,7 +124,7 @@ test('boolean-ops: replaceObjects', async (t) => {
   });
 
   await t.test('selects only the new result object', () => {
-    const m = loadCutoutModules();
+    const m = loadAppModules();
     const a = m.newShape('rect', { x: 0, y: 0, w: 10, h: 10 });
     const b = m.newShape('rect', { x: 5, y: 5, w: 10, h: 10 });
     m.doc.objects.push(a, b);
@@ -138,7 +138,7 @@ test('boolean-ops: replaceObjects', async (t) => {
 
 test('boolean-ops: runBoolean (the full user-facing action)', async (t) => {
   await t.test('does nothing and toasts when fewer than two shapes are selected', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const a = m.newShape('rect', { x: 0, y: 0, w: 10, h: 10 });
     m.doc.objects.push(a);
     m.S.sel = new Set([a.id]);
@@ -150,7 +150,7 @@ test('boolean-ops: runBoolean (the full user-facing action)', async (t) => {
   });
 
   await t.test('refuses to combine a photo like a plain shape', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const photo = { id: 1, kind: 'image', x: 0, y: 0, w: 10, h: 10 };
     const rect = m.newShape('rect', { x: 0, y: 0, w: 10, h: 10 });
     m.doc.objects.push(photo, rect);
@@ -163,7 +163,7 @@ test('boolean-ops: runBoolean (the full user-facing action)', async (t) => {
   });
 
   await t.test('combining two selected shapes reduces the document by one object and commits', () => {
-    const m = loadCutoutModules({ recordToasts: true });
+    const m = loadAppModules({ recordToasts: true });
     const a = m.newShape('rect', { x: 0, y: 0, w: 100, h: 100 });
     const b = m.newShape('rect', { x: 50, y: 50, w: 100, h: 100 });
     m.doc.objects.push(a, b);

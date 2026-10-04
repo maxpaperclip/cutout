@@ -69,8 +69,8 @@ async function saveProject() {
   closeMenus();
   const pics = {};
   docImageIds(doc).forEach(id => { const r = images.get(id); if (r) pics[id] = { name: r.name, w: r.w, h: r.h, mime: r.mime, data: r.dataUrl, mask: r.mask ? true : undefined }; });
-  const blob = new Blob(['{"app":"cutout","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
-  try { const r = await saveFile(safeName(X.name) + '.cutout.json', blob); if (r === 'saved') toast('Project saved.'); }
+  const blob = new Blob(['{"app":"friendshaped","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
+  try { const r = await saveFile(safeName(X.name) + '.friendshaped.json', blob); if (r === 'saved') toast('Project saved.'); }
   catch (err) { toast(err.message || 'The project could not be saved.'); }
 }
 function dataUrlToBlob(url) {
@@ -120,6 +120,6 @@ async function openProject(file) {
     delete d._missingFont; delete d._missingPhoto;
     doc = d; S.sel = new Set(); resetHistory(); fit();
     toast(miss ? 'Opened. A font used in this project was missing, so Inter was used instead.' : lostPhoto ? 'Opened. Some photos could not be loaded.' : 'Project opened.');
-  } catch (err) { toast('That file is not a Cutout project.'); }
+  } catch (err) { toast('That file is not a FriendShaped project.'); }
 }
 

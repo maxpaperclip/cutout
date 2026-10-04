@@ -46,9 +46,9 @@ function svgMessage(r) {
   const c = r.counts, n = r.ids.length;
   let t = 'Added ' + n + (n === 1 ? ' object' : ' objects') + (r.top ? ' as the group \u201c' + r.top.name + '\u201d' : '') + '.';
   if (r.scaled) t += ' It was shrunk to fit the page.';
-  if (c.text) t += ' Text uses Cutout\u2019s own font.';
+  if (c.text) t += ' Text uses FriendShaped\u2019s own font.';
   if (c.tooMany) t += ' The file had more than ' + SVG_LIMITS.objects + ' parts, so only the first ones were added.';
-  else if (c.skipped) t += ' A few parts Cutout can\u2019t show were left out.';
+  else if (c.skipped) t += ' A few parts FriendShaped can\u2019t show were left out.';
   return t;
 }
 let persistAsked = false;
@@ -104,7 +104,7 @@ function loadExample() {
   closeMenus();
   doc = blankDoc(); doc.bg = '#eef0fb'; S.sel = new Set();
   const add = (k, p) => { const o = newShape(k, p); doc.objects.push(o); return o; };
-  add('text', { text: 'CUTOUT', font: 'bungee', size: 118, x: 60, y: 40, fill: '#151936', name: 'Title' });
+  add('text', { text: 'FRIENDSHAPED', font: 'bungee', size: 62, x: 60, y: 80, fill: '#151936', name: 'Title' });
   add('ellipse', { x: 70, y: 230, w: 250, h: 250, fill: '#ff5a4f', name: 'Circle' });
   add('polygon', { x: 190, y: 250, w: 290, h: 290, star: true, sides: 5, inner: 0.42, fill: '#ffd23f', rot: 14, name: 'Star' });
   add('rect', { x: 440, y: 260, w: 300, h: 200, r: 36, fill: '#00a6a6', name: 'Rounded rectangle' });

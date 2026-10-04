@@ -28,7 +28,7 @@ browser or another src file:
   font so `newShape('text', ...)` doesn't throw; text-geometry tests aren't
   the goal here.
 
-Every test calls `loadCutoutModules()` to get a **fresh** instance (its own
+Every test calls `loadAppModules()` to get a **fresh** instance (its own
 `vm` context, its own `doc`/`S`/`images`, its own `paper` scope), so tests
 never leak state into one another.
 

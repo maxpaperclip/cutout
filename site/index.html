@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>Cutout v1.19.0</title>
+<title>FriendShaped v1.19.0</title>
 <style>
 
 :root{
@@ -90,6 +90,7 @@ button{font:inherit;color:inherit}
 
 .brand{display:flex;align-items:center;padding:0 8px 0 4px;color:var(--ink)}
 .brand svg{display:block}
+@media (max-width: 560px){.brand{padding:0 4px 0 0}.brand svg{width:auto;height:12px}}   /* the name is long: smaller on phones so the buttons beside it still fit */
 .spacer{flex:1}
 .save-status{padding:0 10px;font-size:12px;color:var(--ink-3);white-space:nowrap}
 .save-status[data-state="failed"]{color:var(--danger);font-weight:600}
@@ -351,7 +352,7 @@ input:disabled,select:disabled{opacity:.45}
 <div id="app">
 
   <header id="top">
-    <div class="brand" aria-label="Cutout"><svg id="wordmark" width="96" height="22" viewBox="0 0 96 22" fill="currentColor" role="img" aria-label="Cutout"></svg></div>
+    <div class="brand" aria-label="FriendShaped"><svg id="wordmark" width="96" height="22" viewBox="0 0 96 22" fill="currentColor" role="img" aria-label="FriendShaped"></svg></div>
 
     <div class="menuwrap">
       <button class="btn" id="btn-file" aria-haspopup="true" aria-expanded="false">File</button>
@@ -789,7 +790,7 @@ input:disabled,select:disabled{opacity:.45}
 'use strict';
 
 if (!window.paper || !window.opentype || !window.FONT_DATA) {
-  document.body.innerHTML = '<div style="padding:32px;font:16px system-ui">Cutout could not load its drawing libraries. Check your connection and reload the page.</div>';
+  document.body.innerHTML = '<div style="padding:32px;font:16px system-ui">FriendShaped could not load its drawing libraries. Check your connection and reload the page.</div>';
   return;
 }
 paper.setup(new paper.Size(16, 16));
@@ -1004,7 +1005,7 @@ function fontFailed() {
   if (Date.now() - fontFailToast < 10000) return;
   fontFailToast = Date.now();
   toast(location.protocol === 'file:'
-    ? 'A font could not be loaded. Cutout fetches fonts from its fonts folder, so open it from a web address, or use the single-file version.'
+    ? 'A font could not be loaded. FriendShaped fetches fonts from its fonts folder, so open it from a web address, or use the single-file version.'
     : 'A font could not be loaded. Are you offline? Inter is shown instead.');
 }
 
@@ -1027,7 +1028,7 @@ const italicToggled = key => nearestFace(fonts[key].family, fonts[key].weight, !
 const faceForFamily = (family, fromKey) => nearestFace(family, fonts[fromKey] && faceIsBold(fromKey) ? 700 : 400, !!(fonts[fromKey] && fonts[fromKey].italic));
 
 // The same fonts for the browser's own text drawing (the picker's previews, typing in place). Loaded once, when first asked for.
-const cssFamily = key => 'cutout-' + String(key).replace(/[^\w-]/g, '_');
+const cssFamily = key => 'friendshaped-' + String(key).replace(/[^\w-]/g, '_');
 const faceLoads = new Map();
 function fontFaceReady(key) {
   if (!faceLoads.has(key)) {
@@ -1056,13 +1057,13 @@ function missingGlyphs(o) {
 (function wordmark() {
   try {
     const f = fontOf('bungee'), size = 20, opts = { kerning: true, letterSpacing: 0.02 };
-    const w = f.getAdvanceWidth('CUTOUT', size, opts);
+    const w = f.getAdvanceWidth('FRIENDSHAPED', size, opts);
     const svg = $('#wordmark');
     svg.setAttribute('viewBox', '0 0 ' + Math.ceil(w) + ' 22');
     svg.setAttribute('width', Math.ceil(w));
-    const p = svgEl('path', { d: f.getPath('CUTOUT', 0, 18.5, size, opts).toPathData(2) });
+    const p = svgEl('path', { d: f.getPath('FRIENDSHAPED', 0, 18.5, size, opts).toPathData(2) });
     svg.appendChild(p);
-  } catch (e) { $('#wordmark').outerHTML = '<b>Cutout</b>'; }
+  } catch (e) { $('#wordmark').outerHTML = '<b>FriendShaped</b>'; }
 })();
 
 /* =====================================================================
@@ -1140,7 +1141,7 @@ const iconFor = o => o.paint ? 'brush' : o.kind === 'polygon' ? (o.star ? 'star'
 /* ---------- blend modes and line ends ----------
    o.blend: how an object mixes with what's under it (absent = normal).
    o.cap:   how open outline ends and dash ends are drawn (absent = automatic: round for lines
-            and drawn lines, flat for everything else, which is how Cutout has always drawn them). */
+            and drawn lines, flat for everything else, which is how FriendShaped has always drawn them). */
 const BLENDS = [['normal', 'Normal'], ['multiply', 'Multiply'], ['screen', 'Screen'], ['overlay', 'Overlay'],
   ['darken', 'Darken'], ['lighten', 'Lighten'], ['color-dodge', 'Color dodge'], ['color-burn', 'Color burn'],
   ['hard-light', 'Hard light'], ['soft-light', 'Soft light'], ['difference', 'Difference'], ['exclusion', 'Exclusion'],
@@ -1181,7 +1182,7 @@ function makeImage(rec, props) {
    Every position is a fraction of the object's box (0,0 = top-left, 1,1 = bottom-right), so
    resizing, flipping and turning the object carry the gradient along with no extra work.
    A radial radius of 0.5 reaches the box edges; on a wide box the circle stretches into an ellipse.
-   o.fill stays a plain color (the first stop) so older versions of Cutout, which drop o.grad when
+   o.fill stays a plain color (the first stop) so older versions of FriendShaped, which drop o.grad when
    they open a drawing, still show a sensible solid color. */
 const GRAD_TYPES = ['linear', 'radial'];
 const GRAD_MAX_STOPS = 8;
@@ -1616,7 +1617,7 @@ function groupsFilledBy(d, objs) {
    Scaling and turning a selection (or group) about a point, from a snapshot taken when the drag
    began (o0), so repeated moves never add up rounding errors. Scaling is always proportional:
    a turned object can be scaled evenly, but stretching it one way would need a skew, which
-   Cutout's objects can't hold. Outline widths, corner rounding, text size and photo fills
+   FriendShaped's objects can't hold. Outline widths, corner rounding, text size and photo fills
    scale along with the shapes. */
 function scaleAbout(o, o0, ax, ay, k) {
   if (o0.sw !== undefined) o.sw = rnd(o0.sw * k, 3);
@@ -2279,7 +2280,7 @@ const HISTORY = { steps: 100, bytes: 48 * 1048576 };
 const hist = { steps: [], idx: -1, bytes: 0 };
 const stepBytes = st => st.json.length * 2 + ((st.change && st.change.bytes) || 0);
 function dropStep(st) { hist.bytes -= stepBytes(st); if (st.change && st.change.forget) { try { st.change.forget(); } catch (e) { /* ignore */ } } }
-const AUTOSAVE_KEY = 'cutout.autosave.v1';       // older versions saved here; read once for migration
+const AUTOSAVE_KEY = 'friendshaped.autosave.v1';   // fallback when the browser has no IndexedDB
 const DB = { db: null, ok: false };
 let importing = 0, suppressSave = false, saveTimer = null, warnedSave = false;
 const fmtMB = n => (n / 1048576).toFixed(n < 10 * 1048576 ? 1 : 0);
@@ -2290,7 +2291,7 @@ function idbOpen() {
     const finish = v => { if (!done) { done = true; resolve(v); } };
     try {
       if (!window.indexedDB) return finish(null);
-      const req = indexedDB.open('cutout', 1);
+      const req = indexedDB.open('friendshaped', 1);
       req.onupgradeneeded = () => { const db = req.result; db.createObjectStore('images', { keyPath: 'id' }); db.createObjectStore('meta', { keyPath: 'key' }); };
       req.onsuccess = () => finish(req.result);
       req.onerror = () => finish(null);
@@ -2350,7 +2351,7 @@ async function persistNow(str) {
     warnedSave = false;
   } catch (err) {
     const quota = err && (err.name === 'QuotaExceededError' || /quota/i.test(String(err.message)));
-    const msg = err && err.message === 'nodb' ? 'This browser is not letting Cutout save photos automatically. Use File > Save project to keep your work.'
+    const msg = err && err.message === 'nodb' ? 'This browser is not letting FriendShaped save photos automatically. Use File > Save project to keep your work.'
       : quota ? 'This browser has no space left for autosave. Use File > Save project to keep your work.'
       : 'Autosave did not work. Use File > Save project to keep your work.';
     setStatus('failed', msg);
@@ -5535,8 +5536,8 @@ async function saveProject() {
   closeMenus();
   const pics = {};
   docImageIds(doc).forEach(id => { const r = images.get(id); if (r) pics[id] = { name: r.name, w: r.w, h: r.h, mime: r.mime, data: r.dataUrl, mask: r.mask ? true : undefined }; });
-  const blob = new Blob(['{"app":"cutout","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
-  try { const r = await saveFile(safeName(X.name) + '.cutout.json', blob); if (r === 'saved') toast('Project saved.'); }
+  const blob = new Blob(['{"app":"friendshaped","version":2,"appVersion":' + JSON.stringify(APP_VERSION) + ',"doc":' + docJSON(doc) + ',"images":' + JSON.stringify(pics) + '}'], { type: 'application/json' });
+  try { const r = await saveFile(safeName(X.name) + '.friendshaped.json', blob); if (r === 'saved') toast('Project saved.'); }
   catch (err) { toast(err.message || 'The project could not be saved.'); }
 }
 function dataUrlToBlob(url) {
@@ -5586,7 +5587,7 @@ async function openProject(file) {
     delete d._missingFont; delete d._missingPhoto;
     doc = d; S.sel = new Set(); resetHistory(); fit();
     toast(miss ? 'Opened. A font used in this project was missing, so Inter was used instead.' : lostPhoto ? 'Opened. Some photos could not be loaded.' : 'Project opened.');
-  } catch (err) { toast('That file is not a Cutout project.'); }
+  } catch (err) { toast('That file is not a FriendShaped project.'); }
 }
 
 /* =====================================================================
@@ -5637,9 +5638,9 @@ function svgMessage(r) {
   const c = r.counts, n = r.ids.length;
   let t = 'Added ' + n + (n === 1 ? ' object' : ' objects') + (r.top ? ' as the group \u201c' + r.top.name + '\u201d' : '') + '.';
   if (r.scaled) t += ' It was shrunk to fit the page.';
-  if (c.text) t += ' Text uses Cutout\u2019s own font.';
+  if (c.text) t += ' Text uses FriendShaped\u2019s own font.';
   if (c.tooMany) t += ' The file had more than ' + SVG_LIMITS.objects + ' parts, so only the first ones were added.';
-  else if (c.skipped) t += ' A few parts Cutout can\u2019t show were left out.';
+  else if (c.skipped) t += ' A few parts FriendShaped can\u2019t show were left out.';
   return t;
 }
 let persistAsked = false;
@@ -5695,7 +5696,7 @@ function loadExample() {
   closeMenus();
   doc = blankDoc(); doc.bg = '#eef0fb'; S.sel = new Set();
   const add = (k, p) => { const o = newShape(k, p); doc.objects.push(o); return o; };
-  add('text', { text: 'CUTOUT', font: 'bungee', size: 118, x: 60, y: 40, fill: '#151936', name: 'Title' });
+  add('text', { text: 'FRIENDSHAPED', font: 'bungee', size: 62, x: 60, y: 80, fill: '#151936', name: 'Title' });
   add('ellipse', { x: 70, y: 230, w: 250, h: 250, fill: '#ff5a4f', name: 'Circle' });
   add('polygon', { x: 190, y: 250, w: 290, h: 290, star: true, sides: 5, inner: 0.42, fill: '#ffd23f', rot: 14, name: 'Star' });
   add('rect', { x: 440, y: 260, w: 300, h: 200, r: 36, fill: '#00a6a6', name: 'Rounded rectangle' });
@@ -5705,15 +5706,15 @@ function loadExample() {
 
 /* =====================================================================
    SVG import
-   Brings an SVG file in as ordinary, editable Cutout objects: shapes become paths, groups become
-   groups, gradients become Cutout gradients, text becomes Cutout text (in Cutout's default font)
+   Brings an SVG file in as ordinary, editable FriendShaped objects: shapes become paths, groups become
+   groups, gradients become FriendShaped gradients, text becomes FriendShaped text (in FriendShaped's default font)
    and embedded pictures become photos. Three steps:
      1. svgSafeParse(text): read the file and make it safe. Students may download SVGs from anywhere,
         so scripts, event handlers, embedded web content, animation and anything that would fetch
         from the internet are removed before anything else happens. <style> rules are copied onto
         the shapes they apply to, because paper.js only reads colors written on the shapes.
      2. paper.js reads the cleaned SVG into its own items (with shapes expanded to paths).
-     3. svgConvert(): walks those items and makes Cutout objects. This step uses only paper.js,
+     3. svgConvert(): walks those items and makes FriendShaped objects. This step uses only paper.js,
         so it can be tested without a browser.
    Embedded pictures are swapped for marker paths before paper.js reads the file (it loads
    pictures later, so their size isn't known in time). The marker's four corners say exactly
@@ -5865,7 +5866,7 @@ function svgScaleOutlines(svg) {
   })(svg, rootScale, 1, false);
 }
 
-// The Cutout font closest to an SVG font: the same name if we have it, else serif, monospace or sans serif, regular or bold
+// The FriendShaped font closest to an SVG font: the same name if we have it, else serif, monospace or sans serif, regular or bold
 function svgFontFor(family, weight) {
   const f = String(family || '').toLowerCase(), bold = /bold|[6-9]00/.test(String(weight || ''));
   if (typeof fonts !== 'undefined') {   // a font we have under that very name (the first one listed), in its bold form where there is one
@@ -5876,14 +5877,14 @@ function svgFontFor(family, weight) {
   return typeof fonts !== 'undefined' && fonts[key] ? key : DEFAULT_FONT;
 }
 
-/* ---------- 3. turning paper.js items into Cutout objects ---------- */
+/* ---------- 3. turning paper.js items into FriendShaped objects ---------- */
 const svgScaleOf = m => Math.sqrt(Math.abs(m.a * m.d - m.b * m.c)) || 1;
 function svgColor(c) {
   if (!c) return null;
   if (c.gradient) { const s = c.gradient.stops[0]; return s ? { hex: normHex(s.color.toCSS(true)) || '#000000', a: s.color.alpha } : null; }
   return { hex: normHex(c.toCSS(true)) || '#000000', a: c.alpha };
 }
-// A paper.js gradient color, as a Cutout gradient laid out over the shape's box (b, page coordinates)
+// A paper.js gradient color, as a FriendShaped gradient laid out over the shape's box (b, page coordinates)
 function svgGradient(c, m, b) {
   if (!c || !c.gradient || c.gradient.stops.length < 2) return null;
   const n = c.gradient.stops.length, w = Math.max(b.width, 1e-6), h = Math.max(b.height, 1e-6);
@@ -5896,7 +5897,7 @@ function svgGradient(c, m, b) {
   const o = P(c.origin), d = P(c.destination);
   let g;
   if (c.gradient.radial) {
-    // Cutout's radial gradients stretch with the box, so a circle on a non-square box is approximate
+    // FriendShaped's radial gradients stretch with the box, so a circle on a non-square box is approximate
     const R = Math.hypot(d.px - o.px, d.py - o.py);
     g = { type: 'radial', stops, cx: o.x, cy: o.y, r: R / Math.sqrt(w * h) };
     if (c.highlight) { const f = P(c.highlight); g.fx = f.x; g.fy = f.y; }
@@ -5904,7 +5905,7 @@ function svgGradient(c, m, b) {
   return sanitizeGrad(g);
 }
 const svgNameOf = item => (item.name && item.name.indexOf(SVG_IMG_MARK) !== 0 ? String(item.name).slice(0, 60) : '');
-// Walk the paper.js items and make Cutout objects in the current drawing's id space.
+// Walk the paper.js items and make FriendShaped objects in the current drawing's id space.
 // Returns { objects, groups, pictures: [{ n, corners }], counts }.
 function svgConvert(root) {
   const out = { objects: [], groups: [], pictures: [], counts: { shapes: 0, text: 0, skipped: 0, clipped: 0, tooMany: false } };
@@ -5913,7 +5914,7 @@ function svgConvert(root) {
   const visibleKids = it => (it.children || []).filter(c => c.visible && !c.clipMask);
   // A plain shape (circle, rect...) as a path, placed the same way
   const asPath = it => { const p = it.toPath(false); return { src: p, mx: p.matrix }; };
-  // blend: the blend mode passed down from a group; Cutout groups have no blend of their own
+  // blend: the blend mode passed down from a group; FriendShaped groups have no blend of their own
   function walk(item, acc, parent, op, clip, depth, blend) {
     if (!item.visible || !room()) return;
     const m = acc.appended(item.matrix), opacity = op * (item.opacity === undefined ? 1 : item.opacity), cls = item.className;
@@ -5997,7 +5998,7 @@ function svgConvert(root) {
     const align = item.justification === 'center' ? 'center' : item.justification === 'right' ? 'right' : 'left';
     const o = newShape('text', { text: content.slice(0, 5000), size: rnd(size, 2), align, font: svgFontFor(item.fontFamily, item.fontWeight),
       fill: fill ? fill.hex : '#000000', stroke: 'none', opacity: rnd(clamp(opacity * (fill ? fill.a : 1), 0, 1), 3) });
-    // Put Cutout's text box where the SVG's first baseline was, then turn it the same way
+    // Put FriendShaped's text box where the SVG's first baseline was, then turn it the same way
     const font = fontOf(o.font), k = o.size / font.unitsPerEm, asc = font.ascender * k, desc = -font.descender * k;
     const baseline = (o.lh * o.size - (asc + desc)) / 2 + asc;
     // the text's own origin is its first baseline; its matrix already holds the position
@@ -6032,16 +6033,16 @@ async function importSVGFile(file) {
   if (file.size > SVG_LIMITS.fileBytes) throw new Error(label + ' is ' + fmtMB(file.size) + ' MB. SVG files can be up to ' + fmtMB(SVG_LIMITS.fileBytes) + ' MB.');
   const { svg, pictures } = svgSafeParse(await file.text());
   let root;
-  try { root = paper.project.importSVG(svg, { insert: false, expandShapes: true }); } catch (e) { console.error(e); throw new Error(label + ' could not be read. It may use SVG features Cutout doesn’t know.'); }
+  try { root = paper.project.importSVG(svg, { insert: false, expandShapes: true }); } catch (e) { console.error(e); throw new Error(label + ' could not be read. It may use SVG features FriendShaped doesn’t know.'); }
   if (!root) throw new Error(label + ' could not be read.');
   if (typeof fontsWithin === 'function') {   // hosted build: text is measured in its own font, so bring in any font it needs first
     try { await fontsWithin(root.getItems({ class: paper.PointText }).map(t => svgFontFor(t.fontFamily, t.fontWeight)), 4000); } catch (e) { /* the default font stands in */ }
   }
   const before = { next: doc.nextId };
   let res;
-  try { res = svgConvert(root); } catch (e) { console.error(e); doc.nextId = before.next; throw new Error(label + ' could not be converted. It may use SVG features Cutout doesn’t know.'); }
+  try { res = svgConvert(root); } catch (e) { console.error(e); doc.nextId = before.next; throw new Error(label + ' could not be converted. It may use SVG features FriendShaped doesn’t know.'); }
   const boxes = res.pictures.map(p => svgPictureBox(p.corners));
-  if (!res.objects.length && !boxes.length) { doc.nextId = before.next; throw new Error(label + ' has nothing in it that Cutout can show.'); }
+  if (!res.objects.length && !boxes.length) { doc.nextId = before.next; throw new Error(label + ' has nothing in it that FriendShaped can show.'); }
   // Fit it on the page if it is too big, and center it
   const all = res.objects.map(aabb).concat(boxes.map(b => ({ x: b.cx - b.w / 2, y: b.cy - b.h / 2, w: b.w, h: b.h })));
   const u = unionBox(all.map(b => ({ x: b.x, y: b.y, w: b.w, h: b.h, rot: 0 })));
@@ -6169,7 +6170,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    ===================================================================== */
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
-$('#about-ver').textContent = 'Cutout v' + APP_VERSION;
+$('#about-ver').textContent = 'FriendShaped v' + APP_VERSION;
 if (window.ResizeObserver) new ResizeObserver(() => { if (!userView) fit(); else drawOverlay(); }).observe($('#stagewrap'));
 (async function boot() {
   let restored = null;

@@ -169,7 +169,7 @@ function groupsFilledBy(d, objs) {
    Scaling and turning a selection (or group) about a point, from a snapshot taken when the drag
    began (o0), so repeated moves never add up rounding errors. Scaling is always proportional:
    a turned object can be scaled evenly, but stretching it one way would need a skew, which
-   Cutout's objects can't hold. Outline widths, corner rounding, text size and photo fills
+   FriendShaped's objects can't hold. Outline widths, corner rounding, text size and photo fills
    scale along with the shapes. */
 function scaleAbout(o, o0, ax, ay, k) {
   if (o0.sw !== undefined) o.sw = rnd(o0.sw * k, 3);

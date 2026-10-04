@@ -82,6 +82,7 @@ button{font:inherit;color:inherit}
 
 .brand{display:flex;align-items:center;padding:0 8px 0 4px;color:var(--ink)}
 .brand svg{display:block}
+@media (max-width: 560px){.brand{padding:0 4px 0 0}.brand svg{width:auto;height:12px}}   /* the name is long: smaller on phones so the buttons beside it still fit */
 .spacer{flex:1}
 .save-status{padding:0 10px;font-size:12px;color:var(--ink-3);white-space:nowrap}
 .save-status[data-state="failed"]{color:var(--danger);font-weight:600}
