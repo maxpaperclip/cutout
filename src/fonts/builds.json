@@ -1,0 +1,4 @@
+{
+  "core": ["inter", "inter-xb", "bungee"],
+  "lite": ["inter", "inter-xb", "nunito-xb", "fredoka", "lora", "lora-b", "bungee", "pacifico", "marker", "mono"]
+}

@@ -1,24 +1,66 @@
 /* =====================================================================
    Font picker
-   A button showing the current font (in its own typeface) that opens a list: category chips along the top,
-   a search box, and every font's name set in that font. Fonts are loaded for the browser's own drawing only
-   as their rows scroll into view (see fontFaceReady in 03-fonts-runtime.js).
+   A button showing the current font family (in the typeface of the face in use) that opens a list: category chips along
+   the top, a search box, and every family's name set in its own regular face. Fonts are loaded for the browser's own
+   drawing only as their rows scroll into view (see fontFaceReady in 03-fonts-runtime.js).
+   Under the button: a Style menu listing the faces of the family (Light, Bold Italic ...) and Bold and Italic
+   buttons that move to the matching face. A family without a bold or italic face has that button switched off:
+   nothing is ever faked. Picking a family keeps bold and italic where the new family has them.
    "Yours" holds fonts added from the computer; they are kept in this browser (the 'meta' store, key 'font:...')
-   so they are still there next time. Picking a font sets o.font on the selected text, like the old drop-down did.
+   so they are still there next time. A face is chosen by setting o.font on the selected text (setTextFace).
    ===================================================================== */
 const FP = { cat: 'all', q: '', active: -1, shown: null };
 const fpBtn = $('#tx-font'), fpPop = $('#fp-pop'), fpQ = $('#fp-q'), fpList = $('#fp-list'), fpTabs = $('#fp-tabs');
+const fpStyle = $('#tx-style'), fpBold = $('#tx-bold'), fpItalic = $('#tx-italic');
 const fpIsOpen = () => !fpPop.hidden;
 const fpFamily = k => "'" + cssFamily(k) + "', sans-serif";
-const fpText = k => fonts[k].label + (FONT_SAMPLES[k] ? ' · ' + FONT_SAMPLES[k] : '');
+const fpText = k => FAMILIES[k].label + (FONT_SAMPLES[k] ? ' · ' + FONT_SAMPLES[k] : '');
 
-// The button's own label
+// The button's own label, and the Style menu and Bold and Italic buttons that go with it
 function fpSetValue(key) {
   if (FP.shown === key) return;
   FP.shown = key;
-  const n = $('#fp-name'); n.textContent = fonts[key].label;
+  const f = fonts[key], F = FAMILIES[f.family];
+  const n = $('#fp-name'); n.textContent = F.label;
   fontFaceReady(key).then(() => { if (FP.shown === key) n.style.fontFamily = fpFamily(key); });
+  fpStyle.textContent = '';
+  F.faces.forEach(k => { const op = elt('option', '', fonts[k].styleLabel); op.value = k; fpStyle.appendChild(op); });
+  fpStyle.value = key; fpStyle.disabled = F.faces.length < 2;
+  const b = boldToggled(key), i = italicToggled(key);
+  fpBold.setAttribute('aria-pressed', String(faceIsBold(key)));
+  fpBold.disabled = faceIsBold(b) === faceIsBold(key);
+  fpBold.title = fpBold.disabled ? F.label + ' has no ' + (faceIsBold(key) ? 'regular' : 'bold') + ' style' : 'Bold (Ctrl+B)';
+  fpItalic.setAttribute('aria-pressed', String(f.italic));
+  fpItalic.disabled = fonts[i].italic === f.italic;
+  fpItalic.title = fpItalic.disabled ? F.label + ' has no italic style' : 'Italic (Ctrl+I)';
 }
+
+// Use this face for the selected text. A face that is not here yet is fetched first, so the text never flashes in another font.
+async function setTextFace(key) {
+  const o = one();
+  if (!o || o.kind !== 'text' || !fonts[key] || o.font === key) return;
+  const id = o.id, slow = setTimeout(() => toast('Loading ' + fonts[key].label + '…'), 400);
+  const ok = await ensureFonts([key], true);
+  clearTimeout(slow);
+  const t = byId(id);
+  if (!ok || !t || t.kind !== 'text') {   // (a face that could not be fetched has already said so)
+    if (fonts[FP.shown]) fpStyle.value = FP.shown;   // the menu goes back to the face the text really has
+    return;
+  }
+  t.font = key; refresh(t); commit();
+  if (te && te.id === id) fontFaceReady(key).then(() => { if (te && te.id === id) tePlace(); });   // typing in place: the box takes the new face
+}
+// Bold or italic on or off for the selected text, by moving to the matching face. say: tell the person when there isn't one (a shortcut gives no other sign).
+function toggleStyle(which, say) {
+  const o = one();
+  if (!o || o.kind !== 'text' || !fonts[o.font]) return;
+  const to = which === 'bold' ? boldToggled(o.font) : italicToggled(o.font), same = which === 'bold' ? faceIsBold(to) === faceIsBold(o.font) : fonts[to].italic === fonts[o.font].italic;
+  if (same) { if (say) toast(FAMILIES[fonts[o.font].family].label + ' has no ' + which + ' style.'); return; }
+  setTextFace(to);
+}
+fpStyle.addEventListener('change', () => setTextFace(fpStyle.value));
+fpBold.addEventListener('click', () => toggleStyle('bold'));
+fpItalic.addEventListener('click', () => toggleStyle('italic'));
 
 function fpTabsRender() {
   fpTabs.textContent = '';
@@ -37,18 +79,18 @@ function fpStyleRow(li) {
 function fpRender() {
   if (fpIO) fpIO.disconnect();
   fpList.textContent = '';
-  const q = FP.q.trim().toLowerCase(), cur = FP.shown;
+  const q = FP.q.trim().toLowerCase(), cur = FP.shown && fonts[FP.shown] ? fonts[FP.shown].family : null;
   let count = 0;
   FONT_CATEGORIES.forEach(([c, cname]) => {
     if (FP.cat !== 'all' && FP.cat !== c) return;
-    const keys = Object.keys(fonts).filter(k => fonts[k].category === c && (!q || fonts[k].label.toLowerCase().includes(q) || cname.toLowerCase().includes(q)));
+    const keys = Object.keys(FAMILIES).filter(k => FAMILIES[k].category === c && (!q || FAMILIES[k].label.toLowerCase().includes(q) || cname.toLowerCase().includes(q)));
     if (!keys.length) return;
     if (FP.cat === 'all') { const h = elt('li', 'fp-head', cname); h.setAttribute('role', 'presentation'); fpList.appendChild(h); }
     keys.forEach(k => {
       const li = elt('li', ''); li.id = 'fp-o' + count++; li.dataset.key = k; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', String(k === cur));
       li.appendChild(elt('span', 'fp-label', fpText(k)));
-      if (fonts[k].category === 'user') {
-        const x = elt('button', 'fp-x', '×'); x.type = 'button'; x.title = 'Remove this font'; x.setAttribute('aria-label', 'Remove ' + fonts[k].label);
+      if (FAMILIES[k].category === 'user') {
+        const x = elt('button', 'fp-x', '×'); x.type = 'button'; x.title = 'Remove this font'; x.setAttribute('aria-label', 'Remove ' + FAMILIES[k].label);
         li.appendChild(x);
       }
       fpList.appendChild(li);
@@ -76,7 +118,7 @@ function fpOpenPop() {
   FP.q = ''; fpQ.value = '';
   fpTabsRender(); fpRender();
   fpPop.hidden = false; fpBtn.setAttribute('aria-expanded', 'true');
-  const rows = $$('#fp-list [role=option]'), at = rows.findIndex(r => r.dataset.key === FP.shown);
+  const rows = $$('#fp-list [role=option]'), at = rows.findIndex(r => r.dataset.key === fonts[FP.shown].family);
   if (at >= 0) { fpActivate(at); rows[at].scrollIntoView({ block: 'center' }); }
   fpQ.focus({ preventScroll: true });
 }
@@ -85,9 +127,10 @@ function fpClosePop(focusBtn) {
   fpPop.hidden = true; fpBtn.setAttribute('aria-expanded', 'false');
   if (focusBtn) fpBtn.focus({ preventScroll: true });
 }
-function fpPick(key) {
+// A row is a family: the text keeps its bold and italic where the family has them
+function fpPick(family) {
   const o = one();
-  if (o && o.kind === 'text' && fonts[key]) { o.font = key; refresh(o); commit(); }
+  if (o && o.kind === 'text' && FAMILIES[family]) setTextFace(faceForFamily(family, o.font));
   fpClosePop(true);
 }
 
@@ -112,12 +155,17 @@ fpList.addEventListener('click', e => {
 document.addEventListener('pointerdown', e => { if (fpIsOpen() && !e.target.closest('#fontpick')) fpClosePop(false); });
 
 /* ---------- fonts added from the computer ---------- */
+// A font from the computer is a family of one face
+function registerUserFont(key, label, font, buf) {
+  fonts[key] = { label, category: 'user', family: key, weight: 400, italic: false, styleLabel: 'Regular', font, buf, data: null };
+  FAMILIES[key] = { id: key, label, category: 'user', faces: [key] };
+}
 async function addUserFont(file) {
   const buf = await file.arrayBuffer();
   const font = opentype.parse(buf);
   const fam = (font.names && font.names.fontFamily && (font.names.fontFamily.en || Object.values(font.names.fontFamily)[0])) || file.name.replace(/\.[^.]+$/, '');
   const key = 'user:' + fam + ':' + Date.now();
-  fonts[key] = { label: fam, category: 'user', font, buf };
+  registerUserFont(key, fam, font, buf);
   let kept = false;
   if (DB.ok) { try { await idbPut('meta', { key: 'font:' + key, label: fam, buf }); kept = true; } catch (e) { /* the font works for this session only */ } }
   return { key, fam, kept };
@@ -129,14 +177,14 @@ async function loadUserFonts() {
     for (const k of keys) {
       try {
         const r = await idbGet('meta', k);
-        if (r && r.buf) fonts[k.slice(5)] = { label: r.label, category: 'user', font: opentype.parse(r.buf.slice(0)), buf: r.buf };
+        if (r && r.buf) registerUserFont(k.slice(5), r.label, opentype.parse(r.buf.slice(0)), r.buf);
       } catch (e) { /* a font that cannot be read is skipped */ }
     }
   } catch (e) { /* none */ }
 }
 function removeUserFont(key) {
   const f = fonts[key]; if (!f || f.category !== 'user') return;
-  delete fonts[key]; faceLoads.delete(key);
+  delete fonts[key]; delete FAMILIES[key]; faceLoads.delete(key);
   if (DB.ok) idbDel('meta', 'font:' + key).catch(() => { /* it is gone for this session either way */ });
   let used = 0;
   doc.objects.forEach(o => { if (o.kind === 'text' && o.font === key) { o.font = DEFAULT_FONT; refresh(o); used++; } });

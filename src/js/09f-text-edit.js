@@ -80,6 +80,8 @@ teEl.addEventListener('input', () => {
 });
 teEl.addEventListener('keydown', e => {
   if (e.key === 'Escape' || (e.key === 'Enter' && (e.ctrlKey || e.metaKey))) { e.preventDefault(); e.stopPropagation(); finishTextEdit(); stage.focus({ preventScroll: true }); return; }
+  const sk = e.key.toLowerCase();
+  if ((e.ctrlKey || e.metaKey) && !e.altKey && (sk === 'b' || sk === 'i')) { e.preventDefault(); e.stopPropagation(); toggleStyle(sk === 'b' ? 'bold' : 'italic', true); return; }   // the one shortcut that works while typing
   e.stopPropagation();   // typing is never a shortcut
 });
 teEl.addEventListener('blur', () => finishTextEdit());

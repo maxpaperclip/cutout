@@ -1,9 +1,16 @@
 # Building Cutout
 
-Cutout ships as **one self-contained HTML file**. No server, no install, no build step required to *use*
-it. But that's not how it's made: instead of hand-editing one
-massive file, you edit smaller files under `src/`, and a build script
-glues them back into the single file you distribute.
+Cutout ships two ways, both made by the same build:
+
+- **`Cutout.html`**, the *lite single file*: one self-contained HTML file with a small set of fonts built in. No server,
+  no install, works from a USB stick or an email attachment.
+- **`dist/site/`**, the *hosted site*: `index.html` plus a `fonts/` folder with every font. The page only carries the
+  fonts it needs to start; any other font is fetched from `fonts/` the first time it is used, and the browser keeps it.
+  To publish it, upload the contents of `dist/site/` to any static web host (GitHub Pages, Netlify, Cloudflare Pages, a
+  school server). Nothing else from the repo is needed. It has to be opened from a web address: a page opened straight
+  from disk can't fetch the fonts folder, and says so.
+
+You don't hand-edit either: instead you edit smaller files under `src/`, and a build script glues them together.
 
 ## Layout
 
@@ -12,15 +19,17 @@ src/
   index.html         Page shell (head, toolbar, panels, dialogs — all the HTML)
   styles.css          All CSS, extracted as-is from the old <style> block
   fonts/
-    manifest.json     Maps font keys (e.g. "inter-xb") to their .woff file
-    *.woff            The actual embedded fonts, as real binary files (Latin subsets, except noto-sans-sc)
+    manifest.json     Maps font keys (e.g. "inter-xb") to their .woff file: every weight and italic is its own entry
+    faces.json        Each family's other weights and italics (made by scripts/fetch-fonts.js)
+    builds.json       Which fonts each build has built into its HTML: "core" (the hosted page) and "lite" (the single file)
+    *.woff            The actual fonts, as real binary files (Latin subsets, except noto-sans-sc)
     licenses/         Each font's license text; CREDITS.md is the table of fonts and licenses
   js/
     manifest.json     Load order for the files below (order matters — see note)
     00-preamble.js     Library check + paper.js setup
     01-helpers.js       $ / $$ / small DOM helpers
     02-icons.js
-    03-fonts-runtime.js The font list (key, label, category), fonts parsed on first use (opentype.js), browser font loading
+    03-fonts-runtime.js The font list (families, their weights and italics), fetching fonts on demand, fonts parsed on first use (opentype.js), browser font loading
     04-document-model.js
     04b-groups.js       Groups (folders in Layers): kept beside the flat object list
     04c-path-edit.js    Path geometry shared by the Pen tool and point editing
@@ -40,7 +49,7 @@ src/
     11-editing-commands.js
     12-ui-chrome.js
     13-inspector.js
-    13b-font-picker.js  The categorized font picker, and fonts added from the computer ("Yours")
+    13b-font-picker.js  The categorized font picker, the Style menu and Bold / Italic buttons, and fonts added from the computer ("Yours")
     14-layers-tab.js
     15-page-tab.js
     16-export.js
@@ -53,7 +62,7 @@ build.js              The build script (plain Node, no required dependencies)
 scripts/copy-to-root.js   Copies a finished build to the repo root for release
 scripts/fetch-fonts.js    Downloads the library's Latin fonts and licenses from Fontsource (npm)
 scripts/subset-cjk.py     Cuts Noto Sans SC down to the common Chinese characters (needs fonttools)
-dist/                  Build output (gitignored by default — see below)
+dist/                  Build output: Cutout.html and site/ (gitignored by default — see below)
 ```
 
 The split follows the section comments that were already in the old file
@@ -80,10 +89,10 @@ behavior change and a structural change never land in the same commit.
 
 ```
 npm install       # only needed once, and only for the optional --minify flag
-npm run build     # builds dist/Cutout.html
+npm run build     # builds dist/Cutout.html (the lite single file) and dist/site/ (the hosted site)
 npm run dev       # builds once, then rebuilds on any change under src/
 npm run build:min # same, but minifies JS and CSS with esbuild (~10% smaller)
-npm run serve     # build once, then serve dist/ on localhost so you can test in a browser
+npm run serve     # build once, then serve dist/site/ on localhost so you can test the hosted version in a browser
 npm run release   # build, then copy the result to the repo root (see below)
 npm test          # run the unit tests in tests-unit/ (see tests-unit/README.md)
 ```
@@ -97,6 +106,11 @@ warning (not an error) and falls back to unminified output if it isn't.
 
 A font's **key** is saved inside every drawing that uses it, so never rename or remove one.
 
+A *family* (Lato) is one row in the picker. Its *faces* are the fonts the text is actually drawn in: Regular, Bold, Light
+Italic and so on, each its own `.woff` file and its own key. Bold and Italic in the text panel, and the Style menu next
+to them, move between the faces of the family. A family with no bold (or no italic) face has that button switched off:
+nothing is ever faked. There are no variable fonts either, because opentype.js can't read their axes.
+
 1. Latin fonts from Google Fonts: add a line `['key', 'fontsource-package', 400]` to `NEW_FONTS` in
    `scripts/fetch-fonts.js` and run `node scripts/fetch-fonts.js` (needs internet). It downloads the Latin subset
    (`src/fonts/<key>.woff`), the license text (`src/fonts/licenses/<key>.txt`), and rewrites `manifest.json` and
@@ -109,13 +123,32 @@ A font's **key** is saved inside every drawing that uses it, so never rename or 
 3. `npm test` (it checks that the list, the manifest, the files and the licenses all agree), then `npm run build`
    and try the font in the picker.
 
-Each weight is its own font (there is no faux bold), so add a second entry only for a weight that is really needed.
-Size matters because every font is embedded in the one HTML file: Latin fonts are about 15 to 65 KB; the Chinese
-font is 0.8 MB, which is why only one is included (`python3 scripts/subset-cjk.py` makes it).
+**Weights and italics come with the family.** `scripts/fetch-fonts.js` downloads every Latin weight and italic the
+Fontsource package has, one `.woff` each, named `<family>-<weight>` with an `i` after for italic (`lato-700i`), and writes
+the list to `src/fonts/faces.json` (`{ "lato": [["lato-100", 100], ["lato-100i", 100, 1], ...] }`), which the build puts in
+both HTML files. So adding Lato to `NEW_FONTS` and `FONT_DEFS` is all it takes to get its ten faces. Faces that already
+had a key of their own keep it (`inter-xb` is Inter at weight 800, `lora-b` is Lora Bold), and a family whose first face
+isn't weight 400 says so in `FONT_DEFS` with `{ w: 800 }` (Nunito, Fredoka). The extra faces share the family's license,
+so they need no license file or credits row. A face added by hand (a font from elsewhere) can be listed right in its
+`FONT_DEFS` entry instead: `{ faces: [['key-700', 700], ['key-700i', 700, 1]] }`.
 
-Fonts are parsed the first time they are used, not at start-up. Fonts a person adds from their computer ("Yours")
-are kept in this browser's IndexedDB (`meta` store, key `font:...`) and loaded before the drawing is restored
-(`loadUserFonts`, called from `restoreSession`).
+**Which build carries which font.** `src/fonts/builds.json` lists the fonts built into each HTML file: `core` for the
+hosted page (just enough to start: the default font, `inter-xb`, and the one the wordmark is drawn in, `bungee`) and
+`lite` for the single file (keep it small: the whole file is downloaded and emailed around). Both must keep
+`inter-xb` and `bungee`. In the single file only the fonts in `lite` exist (a family that isn't there isn't in the picker,
+and text in it opens in Inter with the usual "font was missing" message). The hosted site has every font in
+`manifest.json`.
+
+Size matters most for `lite`, which is embedded as base64 in the one HTML file. Latin fonts are about 15 to 65 KB each;
+the Chinese font is 0.8 MB, which is why only one is included (`python3 scripts/subset-cjk.py` makes it). A hosted font only
+costs a visitor anything when it is used, so the full library can grow much larger.
+
+How a font gets used: fonts are parsed the first time they are used, not at start-up. In the hosted build, a font that
+isn't built in is fetched first: picking it in the picker, opening a drawing or importing an SVG that uses it waits for
+it (opening a drawing waits at most a few seconds). If text is ever laid out before its font has arrived, the default font
+stands in and the text is laid out again when the real one lands (`fontArrived`). A font that can't be fetched leaves the
+text as it was and says so once. Fonts a person adds from their computer ("Yours") are kept in this browser's IndexedDB
+(`meta` store, key `font:...`) and loaded before the drawing is restored (`loadUserFonts`, called from `restoreSession`).
 
 ## Editing a section of the app
 
@@ -156,7 +189,8 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
 ## Releasing an update
 
 1. Make your changes under `src/`.
-2. `npm run build` and open `dist/Cutout.html` in a browser.
+2. `npm run build` and open `dist/Cutout.html` in a browser, and `npm run serve` to try the hosted version
+   (`dist/site/`) at the address it prints, which is where the on-demand fonts get exercised.
    Run `npm test` first, then actually click through it — draw a shape, add text, combine two shapes,
    import a photo and mask it, export a PNG. The unit tests cover
    geometry, SVG export and boolean ops, but not the canvas/editor UI, so this manual pass is the real
@@ -167,8 +201,8 @@ history keeps at most 100 steps and about 48 MB (`HISTORY` in
    is written: the build stamps it into the page title and the About box,
    and the output file is always named `Cutout.html`, so download links never
    change. A unit test fails if a version number is hard-coded anywhere else.
-4. `npm run release` — this rebuilds and copies `Cutout.html` to the repo
-   root.
+4. `npm run release` — this rebuilds and copies `Cutout.html` (the lite single file) to the repo
+   root. The hosted site isn't committed: upload the contents of `dist/site/` to your web host.
 5. Commit both your `src/` changes and the updated root HTML file together.
    CI (`.github/workflows/build.yml`) will fail the build if the root file
    and a fresh build of `src/` ever drift apart, which mostly protects
