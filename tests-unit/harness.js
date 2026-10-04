@@ -37,6 +37,7 @@ const MODULE_FILES = [
   '04c-path-edit.js',
   '04d-erase.js',
   '04e-eyedrop.js',
+  '04f-text-layout.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '17-projects.js',
@@ -65,6 +66,9 @@ const EXPORT_NAMES = [
   'boxToWorld', 'worldToBox', 'editablePath', 'writePath', 'isSmoothPoint', 'setPointSmooth', 'moveHandle',
   'segmentAt', 'removePoints', 'insertPointNear', 'penGeometry', 'snap45',
   'docJSON', 'rebuildOutlines',
+  // 04f-text-layout.js
+  'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
+  'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
   'STYLE_KEYS', 'KIND_PARAMS', 'copyKeys', 'toPlainPath', 'makeImage',
   'lineEnds', 'isStraightLine', 'lineGeometry', 'makeLine', 'setLineEnds',
   'KIND_INFO', 'kindInfo', 'hasPixels', 'hasPaint', 'keepsRatio',
@@ -129,7 +133,13 @@ function loadAppModules({ recordToasts = false } = {}) {
       unitsPerEm: 1000,
       ascender: 800,
       descender: -200,
-      getAdvanceWidth: (text) => text.length * 500,
+      getAdvanceWidth: (text, size = 72, opts = {}) => text.length * (size * 0.5 + (opts.letterSpacing || 0) * size),
+      // the same walk as opentype's: callback(glyph, x) per character; returns the total advance
+      forEachGlyph: (text, x, y, size, opts, cb) => {
+        const step = size * 0.5 + ((opts && opts.letterSpacing) || 0) * size;
+        for (let i = 0; i < text.length; i++) { cb({ index: i }, x, y, size); x += step; }
+        return x;
+      },
       getPath: () => ({ toPathData: () => 'M0 0L1 1Z' }),
     }),
     window: { crypto: (typeof crypto !== 'undefined') ? crypto : undefined },

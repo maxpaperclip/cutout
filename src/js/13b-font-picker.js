@@ -47,8 +47,7 @@ async function setTextFace(key) {
     if (fonts[FP.shown]) fpStyle.value = FP.shown;   // the menu goes back to the face the text really has
     return;
   }
-  t.font = key; refresh(t); commit();
-  if (te && te.id === id) fontFaceReady(key).then(() => { if (te && te.id === id) tePlace(); });   // typing in place: the box takes the new face
+  t.font = key; refresh(t); commit();   // (typing in place follows by itself: the caret is drawn from the same layout)
 }
 // Bold or italic on or off for the selected text, by moving to the matching face. say: tell the person when there isn't one (a shortcut gives no other sign).
 function toggleStyle(which, say) {

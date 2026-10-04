@@ -63,7 +63,7 @@ const hasPaint = o => !!o && !hasPixels(o);       // has a fill, an outline, and
 const keepsRatio = o => !!kindInfo(o).keepsRatio;
 function labelOf(o) {
   if (o.name) return o.name;
-  if (o.kind === 'text') return (o.text || '').split('\n')[0].slice(0, 26) || 'Text';
+  if (o.kind === 'text') { const t = (o.text || '').split('\n')[0].slice(0, 26); return t.trim() ? t : 'Text'; }   // (a first line of only spaces has no name of its own)
   if (o.kind === 'polygon' && o.star) return 'Star';
   if (isStraightLine(o)) return 'Line';
   return kindInfo(o).label || 'Object';
@@ -271,21 +271,12 @@ function pathIsOpen(d) {
 const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 
 /* ---------- geometry builders ---------- */
+// The outline of a text. Where each line goes comes from textLayout (04f-text-layout.js), which the caret and the selection use too.
 function buildText(o) {
-  const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
-  const asc = font.ascender * scale, desc = -font.descender * scale;
-  const lineH = size * o.lh, lines = String(o.text).split('\n');
-  const opts = { kerning: true, letterSpacing: o.ls || 0 };
-  const widths = lines.map(l => l ? font.getAdvanceWidth(l, size, opts) : 0);
-  const W = Math.max(size * 0.4, ...widths);
+  const lay = textLayout(o), opts = { kerning: true, letterSpacing: lay.ls };
   let d = '';
-  lines.forEach((l, i) => {
-    if (!l) return;
-    const x = o.align === 'center' ? (W - widths[i]) / 2 : o.align === 'right' ? W - widths[i] : 0;
-    const y = i * lineH + (lineH - (asc + desc)) / 2 + asc;
-    d += font.getPath(l, x, y, size, opts).toPathData(2);
-  });
-  return { d, w: W, h: lineH * lines.length };
+  lay.lines.forEach(L => { if (L.text) d += lay.font.getPath(L.text, L.x, L.base, lay.size, opts).toPathData(2); });
+  return { d, w: lay.w, h: lay.h };
 }
 function buildPolygon(o) {
   const n = clamp(Math.round(o.sides || 5), 3, 24), star = !!o.star, inner = clamp(o.inner || 0.45, 0.1, 0.95);
@@ -350,7 +341,7 @@ function newShape(kind, props) {
   if (kind === 'rect' && o.r === undefined) o.r = 0;
   if (kind === 'polygon') { o.sides = o.sides || 6; o.star = !!o.star; o.inner = o.inner || 0.45; }
   if (kind === 'text') {
-    o.text = o.text !== undefined ? o.text : 'Text'; o.font = o.font || DEFAULT_FONT; o.size = o.size || 64;
+    o.text = o.text !== undefined ? o.text : ' '; o.font = o.font || DEFAULT_FONT; o.size = o.size || 64;   // a new text starts as one space: selected for typing over, and dropped if nothing is typed (see finishTextEdit)
     o.align = o.align || 'left'; o.lh = o.lh || 1.2; o.ls = o.ls || 0;
     if (!given('fill')) o.fill = '#151936';
     if (!given('stroke')) o.stroke = 'none';

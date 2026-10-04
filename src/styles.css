@@ -162,8 +162,13 @@ input:disabled,select:disabled{opacity:.45}
 .er-f input[type=range]{min-width:60px}
 .er-f output{width:28px;text-align:right;font-variant-numeric:tabular-nums}
 .er-ring-a{fill:none;stroke:#000;stroke-opacity:.55;stroke-width:3;vector-effect:non-scaling-stroke;pointer-events:none}
-#text-edit{position:absolute;min-height:0;z-index:4;box-sizing:border-box;margin:0;border:0;outline:0;background:transparent;resize:none;overflow:hidden;white-space:pre;color:transparent;-webkit-text-fill-color:transparent;caret-color:var(--accent);transform-origin:50% 50%;font-weight:400;font-kerning:normal}
-#text-edit::selection{background:rgba(59,59,245,.3);color:transparent;-webkit-text-fill-color:transparent}
+/* The textarea behind text typed in place only takes the keyboard; the caret and selection are drawn on the canvas (09f-text-edit.js) */
+#text-edit{position:absolute;z-index:4;width:2px;height:20px;min-height:0;box-sizing:border-box;margin:0;padding:0;border:0;outline:0;background:transparent;resize:none;overflow:hidden;white-space:pre;opacity:0;pointer-events:none;color:transparent;caret-color:transparent;font-size:16px;line-height:1}
+.te-sel{fill:rgba(59,59,245,.3);stroke:none;pointer-events:none}
+.te-caret{stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;animation:te-blink 1.06s steps(1) infinite}
+.te-caret.off{opacity:0;animation:none}
+@keyframes te-blink{0%{opacity:1}50%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.te-caret{animation:none}}
 .fontpick{position:relative}
 .fp-btn{display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;height:34px;padding:0 10px;border:1px solid var(--line);border-radius:7px;background:var(--field);color:var(--ink);cursor:pointer;font-size:15px;text-align:left}
 .fp-btn .fp-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

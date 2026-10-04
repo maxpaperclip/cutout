@@ -8,6 +8,7 @@
   "js/04c-path-edit.js",
   "js/04d-erase.js",
   "js/04e-eyedrop.js",
+  "js/04f-text-layout.js",
   "js/05-svg-export.js",
   "js/06-boolean-ops.js",
   "js/07-history-autosave.js",

@@ -57,7 +57,7 @@ test('document model: newShape', async (t) => {
   await t.test('text gets sensible defaults', () => {
     const m = loadAppModules();
     const txt = m.newShape('text', {});
-    assert.equal(txt.text, 'Text');
+    assert.equal(txt.text, ' ');   // a new text is one space: typed over, and dropped if nothing is typed
     assert.equal(txt.align, 'left');
     assert.equal(txt.lh, 1.2);
     assert.equal(txt.fill, '#151936');
@@ -181,6 +181,13 @@ test('document model: labelOf / iconFor', async (t) => {
     const longText = 'This is a very long first line that should be truncated';
     const label = m.labelOf({ kind: 'text', name: '', text: longText + '\nsecond line' });
     assert.equal(label, longText.slice(0, 26));
+  });
+
+  await t.test('a text that is only spaces is called "Text" rather than shown with a blank name', () => {
+    const m = loadAppModules();
+    assert.equal(m.labelOf({ kind: 'text', name: '', text: ' ' }), 'Text');
+    assert.equal(m.labelOf({ kind: 'text', name: '', text: '   \nsecond line' }), 'Text');
+    assert.equal(m.labelOf({ kind: 'text', name: '', text: ' hi' }), ' hi');
   });
 
   await t.test('iconFor a star polygon is "star", a plain polygon is "polygon"', () => {
