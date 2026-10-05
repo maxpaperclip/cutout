@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.22.0</title>
+<title>FriendShaped v1.23.0</title>
 <style>
 
 :root{
@@ -332,6 +332,8 @@ input:disabled,select:disabled{opacity:.45}
 /* ---------- toast ---------- */
 #toast{position:fixed;left:50%;bottom:calc(72px + env(safe-area-inset-bottom,0px));transform:translate(-50%,12px);z-index:80;max-width:min(92vw,460px);padding:9px 14px;border-radius:10px;background:var(--ink);color:var(--chrome);font-weight:500;opacity:0;pointer-events:none;transition:opacity .18s,transform .18s}
 #toast.show{opacity:1;transform:translate(-50%,0)}
+#update-bar{position:fixed;left:50%;top:60px;transform:translateX(-50%);z-index:85;max-width:min(94vw,560px);gap:10px;align-items:center;padding:8px 8px 8px 14px;border-radius:12px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 12px 34px var(--shadow)}
+#update-bar:not([hidden]){display:flex}
 
 /* ---------- narrow screens ---------- */
 @media (max-width: 820px){
@@ -790,6 +792,11 @@ input:disabled,select:disabled{opacity:.45}
 </div>
 
 <div id="busy" hidden aria-hidden="true"></div>
+<div id="update-bar" hidden role="status">
+  <span>A newer version, <strong id="update-ver"></strong>, is ready. Your drawing is saved automatically.</span>
+  <button class="btn primary" id="update-reload">Reload</button>
+  <button class="btn line icon" id="update-close" aria-label="Not now">×</button>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="file-project" accept=".json,application/json" hidden>
 <input type="file" id="file-font" accept=".ttf,.otf,.woff" hidden>
@@ -813,7 +820,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.22.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.23.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -5036,6 +5043,25 @@ function toast(msg, ms) {
   const t = $('#toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms || 3200);
 }
+/* ---------- a newer version exists ----------
+   A browser (or a host) may keep showing a page it already has, so a plain refresh can bring back the old version. The hosted site
+   publishes version.json next to the page (build.js); a page that finds a different version there offers to reload,
+   asking the server for the page again instead of reusing the stored copy. Only for the hosted site: a file opened from a folder is read afresh. */
+let updateChecked = 0;
+async function checkForUpdate() {
+  if (location.protocol !== 'http:' && location.protocol !== 'https:') return;
+  if (Date.now() - updateChecked < 60000) return;
+  updateChecked = Date.now();
+  try {
+    const r = await fetch(new URL('version.json', location.href).href + '?' + Date.now(), { cache: 'no-store' });
+    const v = r.ok ? (await r.json()).version : null;
+    if (typeof v === 'string' && v !== APP_VERSION) { $('#update-ver').textContent = 'v' + v; $('#update-bar').hidden = false; }
+  } catch (e) { /* offline, or no version.json: nothing to say */ }
+}
+async function reloadFresh() {
+  try { await fetch(location.href, { cache: 'reload' }); } catch (e) { /* reload anyway */ }   // replaces the stored copy of the page
+  location.reload();
+}
 function closeMenus() { $('#menu-file').hidden = true; $('#btn-file').setAttribute('aria-expanded', 'false'); }
 function openPanel() { $('#panel').classList.add('open'); $('#btn-panel').setAttribute('aria-pressed', 'true'); }
 function switchTab(name) {
@@ -6698,6 +6724,9 @@ document.addEventListener('click', e => {
   else if (act === 'save') saveProject(); else if (act === 'example') loadExample(); else if (act === 'resume') reopenLast();
   else if (act === 'import') { closeMenus(); $('#file-photo').click(); }
 });
+$('#update-reload').addEventListener('click', reloadFresh);
+$('#update-close').addEventListener('click', () => { $('#update-bar').hidden = true; });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 $('#file-photo').addEventListener('change', e => { const f = e.target.files; const list = Array.from(f); e.target.value = ''; importFiles(list); });
 const dropZone = $('#stagewrap');
 const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;
@@ -6750,7 +6779,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: letter spacing and line height can be set on selected letters too (the tallest letter sets a line\'s height). Before that: FriendShaped opens on a blank page with a button to reopen your last drawing, and selected letters can have their own color, size and font.';
+const WHATS_NEW = 'New: the hosted page now notices when a newer version is available and offers a Reload button, so an update no longer needs a private window to see. Also new: letter spacing and line height on selected letters.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
@@ -6776,6 +6805,7 @@ if (window.ResizeObserver) new ResizeObserver(() => { if (!userView) fit(); else
   try { const seen = localStorage.getItem(SEEN_KEY); updated = !!seen && seen !== APP_VERSION; localStorage.setItem(SEEN_KEY, APP_VERSION); } catch (e) { /* no memory of versions in this browser */ }
   if (updated) note = ('Updated to v' + APP_VERSION + '. ' + WHATS_NEW + ' ' + note).trim();
   requestAnimationFrame(() => { fit(); if (note) toast(note, updated ? 9000 : 3200); });
+  checkForUpdate();
   if (!held) cleanOrphans();   // (the photos of a drawing still waiting to be reopened are kept)
 })();
 

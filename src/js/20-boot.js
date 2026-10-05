@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: letter spacing and line height can be set on selected letters too (the tallest letter sets a line\'s height). Before that: FriendShaped opens on a blank page with a button to reopen your last drawing, and selected letters can have their own color, size and font.';
+const WHATS_NEW = 'New: the hosted page now notices when a newer version is available and offers a Reload button, so an update no longer needs a private window to see. Also new: letter spacing and line height on selected letters.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
@@ -28,6 +28,7 @@ if (window.ResizeObserver) new ResizeObserver(() => { if (!userView) fit(); else
   try { const seen = localStorage.getItem(SEEN_KEY); updated = !!seen && seen !== APP_VERSION; localStorage.setItem(SEEN_KEY, APP_VERSION); } catch (e) { /* no memory of versions in this browser */ }
   if (updated) note = ('Updated to v' + APP_VERSION + '. ' + WHATS_NEW + ' ' + note).trim();
   requestAnimationFrame(() => { fit(); if (note) toast(note, updated ? 9000 : 3200); });
+  checkForUpdate();
   if (!held) cleanOrphans();   // (the photos of a drawing still waiting to be reopened are kept)
 })();
 

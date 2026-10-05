@@ -29,6 +29,9 @@ document.addEventListener('click', e => {
   else if (act === 'save') saveProject(); else if (act === 'example') loadExample(); else if (act === 'resume') reopenLast();
   else if (act === 'import') { closeMenus(); $('#file-photo').click(); }
 });
+$('#update-reload').addEventListener('click', reloadFresh);
+$('#update-close').addEventListener('click', () => { $('#update-bar').hidden = true; });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkForUpdate(); });
 $('#file-photo').addEventListener('change', e => { const f = e.target.files; const list = Array.from(f); e.target.value = ''; importFiles(list); });
 const dropZone = $('#stagewrap');
 const hasFiles = e => e.dataTransfer && Array.from(e.dataTransfer.types || []).indexOf('Files') >= 0;

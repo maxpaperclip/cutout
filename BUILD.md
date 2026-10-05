@@ -9,6 +9,10 @@ FriendShaped ships two ways, both made by the same build:
   To publish it, upload the contents of `site/` to any static web host (GitHub Pages, Netlify, Cloudflare Pages, a
   school server). Nothing else from the repo is needed. It has to be opened from a web address: a page opened straight
   from disk can't fetch the fonts folder, and says so.
+  `site/` also holds `version.json` (the version just built) and `_headers` (no-cache rules that Netlify and Cloudflare Pages read;
+  GitHub Pages ignores it). A page that is already open compares its own version with `version.json` (`checkForUpdate` in
+  `12-ui-chrome.js`) and offers a Reload button when they differ, because a browser or host may keep showing the page it has stored
+  and a plain refresh can bring the old version back. A page opened from disk does not check.
 
 You don't hand-edit either: instead you edit smaller files under `src/`, and a build script glues them together.
 

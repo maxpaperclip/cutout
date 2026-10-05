@@ -448,6 +448,11 @@
 </div>
 
 <div id="busy" hidden aria-hidden="true"></div>
+<div id="update-bar" hidden role="status">
+  <span>A newer version, <strong id="update-ver"></strong>, is ready. Your drawing is saved automatically.</span>
+  <button class="btn primary" id="update-reload">Reload</button>
+  <button class="btn line icon" id="update-close" aria-label="Not now">×</button>
+</div>
 <div id="toast" role="status" aria-live="polite"></div>
 <input type="file" id="file-project" accept=".json,application/json" hidden>
 <input type="file" id="file-font" accept=".ttf,.otf,.woff" hidden>
