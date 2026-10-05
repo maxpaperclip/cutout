@@ -49,27 +49,29 @@ function runLine(o, runs, t, start, textLen) {
   const ls = o.ls || 0, last = Math.max(textLen - 1, 0);
   const sl = t ? runSlices(runs, start, start + t.length) : [{ a: start, b: start, st: runStyleAt(runs, clamp(start, 0, last)) }];   // (an empty line takes the style of its break)
   const segs = [];
+  let H = 0;
   sl.forEach(p => {
-    const f = p.st.f !== undefined ? p.st.f : o.font, size = rnd(o.size * (p.st.s !== undefined ? p.st.s : 1), 3), prev = segs[segs.length - 1];
-    if (prev && prev.f === f && prev.size === size) prev.b = p.b - start;
-    else segs.push({ a: p.a - start, b: p.b - start, f, size });
+    const f = p.st.f !== undefined ? p.st.f : o.font, size = rnd(o.size * (p.st.s !== undefined ? p.st.s : 1), 3), sp = p.st.l !== undefined ? p.st.l : ls, prev = segs[segs.length - 1];
+    H = Math.max(H, size * (p.st.h !== undefined ? p.st.h : o.lh));   // (the tallest letter sets the line's height)
+    if (prev && prev.f === f && prev.size === size && prev.ls === sp) prev.b = p.b - start;
+    else segs.push({ a: p.a - start, b: p.b - start, f, size, ls: sp });
   });
   const xs = [];
-  let x = 0, A = 0, D = 0, S = 0;
+  let x = 0, A = 0, D = 0;
   segs.forEach(g => {
     g.font = fontOf(g.f);
-    const m = lineMetrics(g.font, g.f, g.size, ls, t.slice(g.a, g.b)), sc = g.size / g.font.unitsPerEm;
+    const m = lineMetrics(g.font, g.f, g.size, g.ls, t.slice(g.a, g.b)), sc = g.size / g.font.unitsPerEm;
     g.x = x;
     for (let j = 0; j < g.b - g.a; j++) xs.push(x + m.xs[j]);
     x += m.width;
-    A = Math.max(A, g.font.ascender * sc); D = Math.max(D, -g.font.descender * sc); S = Math.max(S, g.size);
+    A = Math.max(A, g.font.ascender * sc); D = Math.max(D, -g.font.descender * sc);
   });
   xs.push(x);
-  return { m: { width: x, xs }, segs, A, D, S };
+  return { m: { width: x, xs }, segs, A, D, H };
 }
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
 //             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
-//             segs: [{ a, b (characters of the line), f (face), font, size, x (from the line's left edge) }] }
+//             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
 // lay.flat: no runs, so every line is the same height and sits at i * lineH
 function textLayout(o) {
   const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null;
@@ -82,10 +84,10 @@ function textLayout(o) {
     if (runs) r = runLine(o, runs, t, start, text.length);
     else {
       const m = lineMetrics(font, o.font, size, ls, t);
-      r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, x: 0 }], A: asc, D: desc, S: size };
+      r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, ls, x: 0 }], A: asc, D: desc };
     }
     if (r.m.width > W) W = r.m.width;
-    const h = runs ? r.S * o.lh : lineH, top = runs ? acc : i * lineH;
+    const h = runs ? r.H : lineH, top = runs ? acc : i * lineH;
     const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A };
     acc += h;
     start += t.length + 1;   // (the line break counts as a character)

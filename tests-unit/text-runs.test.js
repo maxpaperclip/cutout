@@ -8,7 +8,7 @@ const plain = x => (x === undefined ? undefined : JSON.parse(JSON.stringify(x)))
 const P = f => (...a) => plain(f(...a));
 const normRuns = P(m.normRuns), runsApply = P(m.runsApply), runsSplice = P(m.runsSplice), runsForEdit = P(m.runsForEdit);
 const runSlices = P(m.runSlices), runStyleAt = P(m.runStyleAt), sanitizeRuns = P(m.sanitizeRuns);
-const txt = (text, extra) => Object.assign({ kind: 'text', text, size: 100, fill: '#000000', font: 'sans' }, extra);
+const txt = (text, extra) => Object.assign({ kind: 'text', text, size: 100, fill: '#000000', font: 'sans', ls: 0, lh: 1.2 }, extra);
 
 test('normRuns: no differences means no runs at all', () => {
   assert.equal(normRuns([{ n: 5 }], 5), undefined);
@@ -67,8 +67,11 @@ test('setTextValue keeps o.runs in step, and drops them when nothing differs', (
 });
 test('textStyleAt reports absolute styles', () => {
   const o = txt('abc', { runs: [{ n: 1 }, { n: 1, c: '#f00', s: 2, f: 'serif' }, { n: 1 }] });
-  assert.deepEqual(plain(m.textStyleAt(o, 1)), { color: '#f00', size: 200, font: 'serif' });
-  assert.deepEqual(plain(m.textStyleAt(o, 0)), { color: '#000000', size: 100, font: 'sans' });
+  assert.deepEqual(plain(m.textStyleAt(o, 1)), { color: '#f00', size: 200, font: 'serif', spacing: 0, lineHeight: 1.2 });
+  assert.deepEqual(plain(m.textStyleAt(o, 0)), { color: '#000000', size: 100, font: 'sans', spacing: 0, lineHeight: 1.2 });
+  const p = txt('ab', { runs: [{ n: 1, l: 0.1, h: 2 }, { n: 1 }] });
+  assert.deepEqual(plain(m.textStyleAt(p, 0)).spacing, 0.1);
+  assert.deepEqual(plain(m.textStyleAt(p, 0)).lineHeight, 2);
 });
 test('applyTextStyle: a part becomes runs, the size is stored as a multiple', () => {
   const o = txt('abcd');
@@ -98,6 +101,27 @@ test('applyWholeStyle: also works for a text with no letters, and clears letters
   m.applyWholeStyle(p, { font: 'mono' });
   assert.equal(p.font, 'mono');
   assert.deepEqual(plain(p.runs), [{ n: 1 }, { n: 2, c: '#0f0' }]);
+});
+test('spacing and line height are runs too', () => {
+  const o = txt('abcd');
+  m.applyTextStyle(o, 1, 3, { spacing: 0.1, lineHeight: 2 });
+  assert.deepEqual(plain(o.runs), [{ n: 1 }, { n: 2, l: 0.1, h: 2 }, { n: 1 }]);
+  m.applyTextStyle(o, 1, 3, { spacing: 0, lineHeight: 1.2 });   // the text's own values: nothing to store
+  assert.equal(o.runs, undefined);
+  assert.equal(normRuns([{ n: 2, l: 0.1 }, { n: 2, l: 0.1 }], 4)[0].n, 4);
+  assert.equal(normRuns([{ n: 2, l: 0.1 }, { n: 2, h: 2 }], 4).length, 2);
+});
+test('spacing and line height of the whole text are the text itself', () => {
+  const o = txt('abcd', { runs: [{ n: 2, l: 0.3, h: 2, c: '#f00' }, { n: 2 }] });
+  m.applyTextStyle(o, 0, 4, { spacing: 0.05, lineHeight: 1.5 });
+  assert.equal(o.ls, 0.05); assert.equal(o.lh, 1.5);
+  assert.deepEqual(plain(o.runs), [{ n: 2, c: '#f00' }, { n: 2 }]);
+  const e = txt('');
+  m.applyWholeStyle(e, { spacing: 9, lineHeight: 0 });
+  assert.equal(e.ls, 2); assert.equal(e.lh, 0.6);   // (kept within what the boxes allow)
+});
+test('sanitizeRuns keeps spacing and line height within range', () => {
+  assert.deepEqual(sanitizeRuns([{ n: 2, l: 99, h: -4 }, { n: 1, l: 'x', h: 1.5 }], 3, () => true), [{ n: 2, l: 2, h: 0.6 }, { n: 1, h: 1.5 }]);
 });
 test('textUsesFont and textFonts see the faces in runs', () => {
   const o = txt('ab', { runs: [{ n: 1, f: 'serif' }, { n: 1 }] });

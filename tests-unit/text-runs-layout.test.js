@@ -88,6 +88,41 @@ test('runs layout', async (t) => {
     assert.equal(v.index >= 3 && v.index <= 5, true);
   });
 
+  await t.test('letter spacing of some letters widens only those letters', () => {
+    const { lay } = setup({ text: 'abcd', runs: [{ n: 2 }, { n: 2, l: 0.1 }] });
+    // c and d are 50 + 10 wide each
+    assert.deepEqual(plain(lay().lines[0].m.xs), [0, 50, 100, 160, 220]);
+    assert.deepEqual(plain(lay().lines[0].segs.map(g => [g.a, g.b, g.ls])), [[0, 2, 0], [2, 4, 0.1]]);
+  });
+
+  await t.test('the segments are drawn with their own spacing', () => {
+    const log = [];
+    const { m, o } = setup({ text: 'abcd', runs: [{ n: 2 }, { n: 2, l: 0.1 }] }, log);
+    assert.equal(o.d, 'Pab;Pcd;');
+    assert.equal(m.textLayout(o).lines[0].segs[1].x, 100);
+  });
+
+  await t.test('the largest line height on a line wins', () => {
+    const { o, lay } = setup({ text: 'ab\ncd', runs: [{ n: 1 }, { n: 1, h: 2 }, { n: 3 }] });
+    assert.deepEqual(plain(lay().lines.map(L => [L.top, L.h])), [[0, 200], [200, 120]]);
+    assert.equal(o.h, 320);
+  });
+
+  await t.test('a smaller line height on part of a line is not seen, the rest still has the text own', () => {
+    const { lay } = setup({ text: 'ab\ncd', runs: [{ n: 1, h: 0.7 }, { n: 4 }] });
+    assert.deepEqual(plain(lay().lines.map(L => L.h)), [120, 120]);
+  });
+
+  await t.test('a whole line with a smaller line height tightens that line', () => {
+    const { lay } = setup({ text: 'ab\ncd', runs: [{ n: 2, h: 0.7 }, { n: 3 }] });
+    assert.deepEqual(plain(lay().lines.map(L => L.h)), [70, 120]);
+  });
+
+  await t.test('line height scales with the size of the letters it is set on', () => {
+    const { lay } = setup({ text: 'ab', runs: [{ n: 1, s: 2, h: 1.5 }, { n: 1 }] });
+    assert.equal(lay().lines[0].h, 300);
+  });
+
   await t.test('coloring alone moves nothing', () => {
     const a = setup({ text: 'abcd\nef' }), b = setup({ text: 'abcd\nef', runs: [{ n: 1 }, { n: 3, c: '#f00' }, { n: 2 }] });
     const strip = l => plain(l.lines.map(L => [L.m.xs, L.top, L.base, L.h]));

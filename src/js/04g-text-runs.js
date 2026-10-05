@@ -1,18 +1,21 @@
 /* =====================================================================
-   Text runs: a different color, size or font for part of a text (no DOM; unit tested)
-   A text has one color (o.fill), size (o.size) and font (o.font) for all of it. To style only some
-   letters, o.runs says where they differ: a list of { n, c, s, f } in reading order, each run covering
-   n characters of o.text (the break between two lines counts as one character).
+   Text runs: a different color, size, font, spacing or line height for part of a text (no DOM; unit tested)
+   A text has one color (o.fill), size (o.size), font (o.font), letter spacing (o.ls) and line height (o.lh) for all
+   of it. To style only some letters, o.runs says where they differ: a list of { n, c, s, f, l, h } in reading order,
+   each run covering n characters of o.text (the break between two lines counts as one character).
      c  color   a color, or 'none'; missing = the text's own fill
      s  size    a multiple of the text's size, so resizing the text keeps the proportions; missing = 1
      f  font    a face key; missing = the text's own font
+     l  spacing letter spacing (as o.ls: a fraction of the letter's size); missing = the text's own
+     h  height  line height (as o.lh: a multiple of the letter's size); missing = the text's own.
+                A line is as tall as its tallest letter by this, so the largest line height on a line wins.
    A text with no differences has no o.runs at all, exactly as before. Runs are kept normalized: neighbours
    that look the same are one run, and the lengths add up to the length of the text.
-   "Absolute" styles are what the controls show and take: { color, size (pixels), font }.
+   "Absolute" styles are what the controls show and take: { color, size (pixels), font, spacing, lineHeight }.
    ===================================================================== */
-const RUN_KEYS = ['c', 's', 'f'];
-const runHas = r => r.c !== undefined || r.s !== undefined || r.f !== undefined;
-const runSame = (a, b) => a.c === b.c && a.s === b.s && a.f === b.f;
+const RUN_KEYS = ['c', 's', 'f', 'l', 'h'];
+const runHas = r => RUN_KEYS.some(k => r[k] !== undefined);
+const runSame = (a, b) => RUN_KEYS.every(k => a[k] === b[k]);
 const runStyle = r => { const x = {}; RUN_KEYS.forEach(k => { if (r && r[k] !== undefined) x[k] = r[k]; }); return x; };
 
 // Tidy a list of runs for a text of len characters: no empty runs, neighbours that look the same joined,
@@ -102,18 +105,24 @@ function setTextValue(o, value, pending) {
 }
 
 /* ---------- absolute styles: what the controls show and take ---------- */
-// What the letter at an index looks like: { color, size (pixels), font }
+// What the letter at an index looks like: { color, size (pixels), font, spacing, lineHeight }
 function textStyleAt(o, i) {
   const st = runStyleAt(o.runs, i);
-  return { color: st.c !== undefined ? st.c : o.fill, size: o.size * (st.s !== undefined ? st.s : 1), font: st.f !== undefined ? st.f : o.font };
+  return {
+    color: st.c !== undefined ? st.c : o.fill, size: o.size * (st.s !== undefined ? st.s : 1), font: st.f !== undefined ? st.f : o.font,
+    spacing: st.l !== undefined ? st.l : o.ls || 0, lineHeight: st.h !== undefined ? st.h : o.lh
+  };
 }
-// Absolute styles ({ color, size, font }; any of them) as run attributes, for a text's own size, color and font.
+const clampSpacing = v => rnd(clamp(v, -0.2, 2), 4), clampLineHeight = v => rnd(clamp(v, 0.6, 3), 4);
+// Absolute styles ({ color, size, font, spacing, lineHeight }; any of them) as run attributes, for a text's own settings.
 // Anything the same as the text's own becomes null: it is not stored.
 function runAttrsFor(o, attrs) {
   const r = {};
   if ('color' in attrs) r.c = attrs.color === o.fill ? null : attrs.color;
   if ('size' in attrs) { const s = rnd(clamp(attrs.size, 4, 1200) / o.size, 5); r.s = s === 1 ? null : s; }
   if ('font' in attrs) r.f = attrs.font === o.font ? null : attrs.font;
+  if ('spacing' in attrs) { const l = clampSpacing(attrs.spacing); r.l = l === (o.ls || 0) ? null : l; }
+  if ('lineHeight' in attrs) { const h = clampLineHeight(attrs.lineHeight); r.h = h === o.lh ? null : h; }
   return r;
 }
 // Put absolute styles on characters a..b of a text object. The whole text is the text's own style (and clears what
@@ -127,6 +136,8 @@ function applyTextStyle(o, a, b, attrs) {
     if ('color' in attrs) { o.fill = attrs.color; delete o.grad; run.c = null; }
     if ('size' in attrs) { o.size = clamp(attrs.size, 4, 1200); run.s = null; }
     if ('font' in attrs) { o.font = attrs.font; run.f = null; }
+    if ('spacing' in attrs) { o.ls = clampSpacing(attrs.spacing); run.l = null; }
+    if ('lineHeight' in attrs) { o.lh = clampLineHeight(attrs.lineHeight); run.h = null; }
   }
   const runs = runsApply(o.runs, len, a, b, run);
   if (runs) o.runs = runs; else delete o.runs;
@@ -138,6 +149,8 @@ function applyWholeStyle(o, attrs) {
   if ('color' in attrs) { o.fill = attrs.color; delete o.grad; }
   if ('size' in attrs) o.size = clamp(attrs.size, 4, 1200);
   if ('font' in attrs) o.font = attrs.font;
+  if ('spacing' in attrs) o.ls = clampSpacing(attrs.spacing);
+  if ('lineHeight' in attrs) o.lh = clampLineHeight(attrs.lineHeight);
 }
 // True when any letter of the text is set in this face
 const textUsesFont = (o, key) => o.kind === 'text' && (o.font === key || (Array.isArray(o.runs) && o.runs.some(r => r.f === key)));
@@ -155,6 +168,8 @@ function sanitizeRuns(raw, len, fontOK) {
     if (r.c === 'none' || (typeof r.c === 'string' && /^#[0-9a-f]{3,8}$/i.test(r.c))) o.c = r.c;
     if (typeof r.s === 'number' && Number.isFinite(r.s)) o.s = rnd(clamp(r.s, 0.02, 300), 5);
     if (typeof r.f === 'string' && fontOK(r.f)) o.f = r.f;
+    if (typeof r.l === 'number' && Number.isFinite(r.l)) o.l = clampSpacing(r.l);
+    if (typeof r.h === 'number' && Number.isFinite(r.h)) o.h = clampLineHeight(r.h);
     return o;
   }).filter(Boolean);
   return normRuns(runs, len);

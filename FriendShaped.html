@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.21.0</title>
+<title>FriendShaped v1.22.0</title>
 <style>
 
 :root{
@@ -813,7 +813,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.21.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.22.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1361,14 +1361,14 @@ const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 // A stretch of one face and size is drawn as one piece of text; where its color changes it is drawn in pieces that start
 // where the layout says (that already includes the kerning), so coloring a letter never moves anything.
 function buildText(o) {
-  const lay = textLayout(o), opts = { kerning: true, letterSpacing: lay.ls };
+  const lay = textLayout(o);
   const colored = Array.isArray(o.runs) && o.runs.some(r => r.c !== undefined), by = new Map();
   let d = '';
   const add = (c, pd) => { d += pd; if (colored) by.set(c, (by.get(c) || '') + pd); };
   lay.lines.forEach(L => {
     L.segs.forEach(g => {
       if (g.b <= g.a) return;
-      const pieces = [];
+      const opts = { kerning: true, letterSpacing: g.ls }, pieces = [];
       if (colored) runSlices(o.runs, L.start + g.a, L.start + g.b).forEach(p => {
         const last = pieces[pieces.length - 1];
         if (last && last.c === p.st.c) last.b = p.b; else pieces.push({ a: p.a, b: p.b, c: p.st.c });
@@ -2065,27 +2065,29 @@ function runLine(o, runs, t, start, textLen) {
   const ls = o.ls || 0, last = Math.max(textLen - 1, 0);
   const sl = t ? runSlices(runs, start, start + t.length) : [{ a: start, b: start, st: runStyleAt(runs, clamp(start, 0, last)) }];   // (an empty line takes the style of its break)
   const segs = [];
+  let H = 0;
   sl.forEach(p => {
-    const f = p.st.f !== undefined ? p.st.f : o.font, size = rnd(o.size * (p.st.s !== undefined ? p.st.s : 1), 3), prev = segs[segs.length - 1];
-    if (prev && prev.f === f && prev.size === size) prev.b = p.b - start;
-    else segs.push({ a: p.a - start, b: p.b - start, f, size });
+    const f = p.st.f !== undefined ? p.st.f : o.font, size = rnd(o.size * (p.st.s !== undefined ? p.st.s : 1), 3), sp = p.st.l !== undefined ? p.st.l : ls, prev = segs[segs.length - 1];
+    H = Math.max(H, size * (p.st.h !== undefined ? p.st.h : o.lh));   // (the tallest letter sets the line's height)
+    if (prev && prev.f === f && prev.size === size && prev.ls === sp) prev.b = p.b - start;
+    else segs.push({ a: p.a - start, b: p.b - start, f, size, ls: sp });
   });
   const xs = [];
-  let x = 0, A = 0, D = 0, S = 0;
+  let x = 0, A = 0, D = 0;
   segs.forEach(g => {
     g.font = fontOf(g.f);
-    const m = lineMetrics(g.font, g.f, g.size, ls, t.slice(g.a, g.b)), sc = g.size / g.font.unitsPerEm;
+    const m = lineMetrics(g.font, g.f, g.size, g.ls, t.slice(g.a, g.b)), sc = g.size / g.font.unitsPerEm;
     g.x = x;
     for (let j = 0; j < g.b - g.a; j++) xs.push(x + m.xs[j]);
     x += m.width;
-    A = Math.max(A, g.font.ascender * sc); D = Math.max(D, -g.font.descender * sc); S = Math.max(S, g.size);
+    A = Math.max(A, g.font.ascender * sc); D = Math.max(D, -g.font.descender * sc);
   });
   xs.push(x);
-  return { m: { width: x, xs }, segs, A, D, S };
+  return { m: { width: x, xs }, segs, A, D, H };
 }
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
 //             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
-//             segs: [{ a, b (characters of the line), f (face), font, size, x (from the line's left edge) }] }
+//             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
 // lay.flat: no runs, so every line is the same height and sits at i * lineH
 function textLayout(o) {
   const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null;
@@ -2098,10 +2100,10 @@ function textLayout(o) {
     if (runs) r = runLine(o, runs, t, start, text.length);
     else {
       const m = lineMetrics(font, o.font, size, ls, t);
-      r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, x: 0 }], A: asc, D: desc, S: size };
+      r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, ls, x: 0 }], A: asc, D: desc };
     }
     if (r.m.width > W) W = r.m.width;
-    const h = runs ? r.S * o.lh : lineH, top = runs ? acc : i * lineH;
+    const h = runs ? r.H : lineH, top = runs ? acc : i * lineH;
     const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A };
     acc += h;
     start += t.length + 1;   // (the line break counts as a character)
@@ -2202,20 +2204,23 @@ function textBoxAt(p, under) {
   return null;
 }
 /* =====================================================================
-   Text runs: a different color, size or font for part of a text (no DOM; unit tested)
-   A text has one color (o.fill), size (o.size) and font (o.font) for all of it. To style only some
-   letters, o.runs says where they differ: a list of { n, c, s, f } in reading order, each run covering
-   n characters of o.text (the break between two lines counts as one character).
+   Text runs: a different color, size, font, spacing or line height for part of a text (no DOM; unit tested)
+   A text has one color (o.fill), size (o.size), font (o.font), letter spacing (o.ls) and line height (o.lh) for all
+   of it. To style only some letters, o.runs says where they differ: a list of { n, c, s, f, l, h } in reading order,
+   each run covering n characters of o.text (the break between two lines counts as one character).
      c  color   a color, or 'none'; missing = the text's own fill
      s  size    a multiple of the text's size, so resizing the text keeps the proportions; missing = 1
      f  font    a face key; missing = the text's own font
+     l  spacing letter spacing (as o.ls: a fraction of the letter's size); missing = the text's own
+     h  height  line height (as o.lh: a multiple of the letter's size); missing = the text's own.
+                A line is as tall as its tallest letter by this, so the largest line height on a line wins.
    A text with no differences has no o.runs at all, exactly as before. Runs are kept normalized: neighbours
    that look the same are one run, and the lengths add up to the length of the text.
-   "Absolute" styles are what the controls show and take: { color, size (pixels), font }.
+   "Absolute" styles are what the controls show and take: { color, size (pixels), font, spacing, lineHeight }.
    ===================================================================== */
-const RUN_KEYS = ['c', 's', 'f'];
-const runHas = r => r.c !== undefined || r.s !== undefined || r.f !== undefined;
-const runSame = (a, b) => a.c === b.c && a.s === b.s && a.f === b.f;
+const RUN_KEYS = ['c', 's', 'f', 'l', 'h'];
+const runHas = r => RUN_KEYS.some(k => r[k] !== undefined);
+const runSame = (a, b) => RUN_KEYS.every(k => a[k] === b[k]);
 const runStyle = r => { const x = {}; RUN_KEYS.forEach(k => { if (r && r[k] !== undefined) x[k] = r[k]; }); return x; };
 
 // Tidy a list of runs for a text of len characters: no empty runs, neighbours that look the same joined,
@@ -2305,18 +2310,24 @@ function setTextValue(o, value, pending) {
 }
 
 /* ---------- absolute styles: what the controls show and take ---------- */
-// What the letter at an index looks like: { color, size (pixels), font }
+// What the letter at an index looks like: { color, size (pixels), font, spacing, lineHeight }
 function textStyleAt(o, i) {
   const st = runStyleAt(o.runs, i);
-  return { color: st.c !== undefined ? st.c : o.fill, size: o.size * (st.s !== undefined ? st.s : 1), font: st.f !== undefined ? st.f : o.font };
+  return {
+    color: st.c !== undefined ? st.c : o.fill, size: o.size * (st.s !== undefined ? st.s : 1), font: st.f !== undefined ? st.f : o.font,
+    spacing: st.l !== undefined ? st.l : o.ls || 0, lineHeight: st.h !== undefined ? st.h : o.lh
+  };
 }
-// Absolute styles ({ color, size, font }; any of them) as run attributes, for a text's own size, color and font.
+const clampSpacing = v => rnd(clamp(v, -0.2, 2), 4), clampLineHeight = v => rnd(clamp(v, 0.6, 3), 4);
+// Absolute styles ({ color, size, font, spacing, lineHeight }; any of them) as run attributes, for a text's own settings.
 // Anything the same as the text's own becomes null: it is not stored.
 function runAttrsFor(o, attrs) {
   const r = {};
   if ('color' in attrs) r.c = attrs.color === o.fill ? null : attrs.color;
   if ('size' in attrs) { const s = rnd(clamp(attrs.size, 4, 1200) / o.size, 5); r.s = s === 1 ? null : s; }
   if ('font' in attrs) r.f = attrs.font === o.font ? null : attrs.font;
+  if ('spacing' in attrs) { const l = clampSpacing(attrs.spacing); r.l = l === (o.ls || 0) ? null : l; }
+  if ('lineHeight' in attrs) { const h = clampLineHeight(attrs.lineHeight); r.h = h === o.lh ? null : h; }
   return r;
 }
 // Put absolute styles on characters a..b of a text object. The whole text is the text's own style (and clears what
@@ -2330,6 +2341,8 @@ function applyTextStyle(o, a, b, attrs) {
     if ('color' in attrs) { o.fill = attrs.color; delete o.grad; run.c = null; }
     if ('size' in attrs) { o.size = clamp(attrs.size, 4, 1200); run.s = null; }
     if ('font' in attrs) { o.font = attrs.font; run.f = null; }
+    if ('spacing' in attrs) { o.ls = clampSpacing(attrs.spacing); run.l = null; }
+    if ('lineHeight' in attrs) { o.lh = clampLineHeight(attrs.lineHeight); run.h = null; }
   }
   const runs = runsApply(o.runs, len, a, b, run);
   if (runs) o.runs = runs; else delete o.runs;
@@ -2341,6 +2354,8 @@ function applyWholeStyle(o, attrs) {
   if ('color' in attrs) { o.fill = attrs.color; delete o.grad; }
   if ('size' in attrs) o.size = clamp(attrs.size, 4, 1200);
   if ('font' in attrs) o.font = attrs.font;
+  if ('spacing' in attrs) o.ls = clampSpacing(attrs.spacing);
+  if ('lineHeight' in attrs) o.lh = clampLineHeight(attrs.lineHeight);
 }
 // True when any letter of the text is set in this face
 const textUsesFont = (o, key) => o.kind === 'text' && (o.font === key || (Array.isArray(o.runs) && o.runs.some(r => r.f === key)));
@@ -2358,6 +2373,8 @@ function sanitizeRuns(raw, len, fontOK) {
     if (r.c === 'none' || (typeof r.c === 'string' && /^#[0-9a-f]{3,8}$/i.test(r.c))) o.c = r.c;
     if (typeof r.s === 'number' && Number.isFinite(r.s)) o.s = rnd(clamp(r.s, 0.02, 300), 5);
     if (typeof r.f === 'string' && fontOK(r.f)) o.f = r.f;
+    if (typeof r.l === 'number' && Number.isFinite(r.l)) o.l = clampSpacing(r.l);
+    if (typeof r.h === 'number' && Number.isFinite(r.h)) o.h = clampLineHeight(r.h);
     return o;
   }).filter(Boolean);
   return normRuns(runs, len);
@@ -4150,7 +4167,7 @@ $('#drop-cancel').addEventListener('click', () => edFinish(null));
    the letters, whatever the zoom, angle, font or length. (Pressing on the text places the caret or selects,
    a double-click picks a word, a triple-click a line.)
    Every keystroke goes into o.text and the outlines underneath are rebuilt as you type.
-   Color, size and font apply to the selected letters (see 04g-text-runs.js); with only a caret they are kept for the
+   Color, size, font, letter spacing and line height apply to the selected letters (see 04g-text-runs.js); with only a caret they are kept for the
    letters typed next. The style controls in the Design tab do not end the edit; the rest of the page does.
    Editing ends with Esc, Ctrl+Enter or a click anywhere else, as one undo step. Text that ends up empty is removed.
    A new text object is only added to the undo history when editing ends, so Undo takes it away whole.
@@ -4159,7 +4176,7 @@ $('#drop-cancel').addEventListener('click', () => edFinish(null));
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
 let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
 // The controls that style the letters; a press on them leaves the text being edited
-const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #fill-color, #fill-hex, #fill-none, #palette';
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette';
 const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
@@ -4326,17 +4343,19 @@ document.addEventListener('keydown', e => {
 });
 
 /* ---------- color, size and font of the selected letters ---------- */
-// What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font }
+// What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font, spacing, lineHeight }
 function teStyleShown(o) {
   const s = teSel(), n = String(o.text).length, st = textStyleAt(o, Math.min(s.a === s.b ? Math.max(s.a - 1, 0) : s.a, Math.max(n - 1, 0))), p = te && te.pending;
   if (p) {
     if ('c' in p) st.color = p.c == null ? o.fill : p.c;
     if ('s' in p) st.size = o.size * (p.s == null ? 1 : p.s);
     if ('f' in p) st.font = p.f == null ? o.font : p.f;
+    if ('l' in p) st.spacing = p.l == null ? o.ls || 0 : p.l;
+    if ('h' in p) st.lineHeight = p.h == null ? o.lh : p.h;
   }
   return st;
 }
-// Set { color, size, font } (any of them) on the selected letters, or at a caret for the letters typed next. False when not editing.
+// Set { color, size, font, spacing, lineHeight } (any of them) on the selected letters, or at a caret for the letters typed next. False when not editing.
 function teStyle(attrs) {
   const o = teObj();
   if (!o) return false;
@@ -5104,7 +5123,7 @@ function updateInspector() {
       const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
       mh.hidden = !miss.length;
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
-      setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
+      setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
     }
     if (o.kind === 'polygon') {
@@ -5217,8 +5236,17 @@ onNum($('#tx-size'), (o, v) => {
   if (te && te.id === o.id && teStyle({ size: clamp(v, 4, 1200) })) { teRefocus(); return 'live'; }   // the selected letters
   o.size = clamp(v, 4, 1200);   // the whole text, every letter in proportion
 }, true);
-onNum($('#tx-lh'), (o, v) => { if (o.kind === 'text') o.lh = clamp(v, 0.6, 3); });
-onNum($('#tx-ls'), (o, v) => { if (o.kind === 'text') o.ls = clamp(v, -20, 200) / 100; });
+// Line height and letter spacing: while typing in place, for the selected letters (the tallest letter sets a line's height); otherwise the whole text
+onNum($('#tx-lh'), (o, v) => {
+  if (o.kind !== 'text') return;
+  if (te && te.id === o.id && teStyle({ lineHeight: v })) { teRefocus(); return 'live'; }
+  applyWholeStyle(o, { lineHeight: v });
+});
+onNum($('#tx-ls'), (o, v) => {
+  if (o.kind !== 'text') return;
+  if (te && te.id === o.id && teStyle({ spacing: clamp(v, -20, 200) / 100 })) { teRefocus(); return 'live'; }
+  applyWholeStyle(o, { spacing: clamp(v, -20, 200) / 100 });
+});
 $$('[data-align]').forEach(b => b.addEventListener('click', () => { const o = one(); if (!o || o.kind !== 'text') return; o.align = b.dataset.align; refresh(o); commit(); }));
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
@@ -6722,7 +6750,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: FriendShaped opens on a blank page now, with a button to reopen your last drawing (change this under the Page tab, "When it opens"). Also new: select letters while typing in place to change their color, size or font.';
+const WHATS_NEW = 'New: letter spacing and line height can be set on selected letters too (the tallest letter sets a line\'s height). Before that: FriendShaped opens on a blank page with a button to reopen your last drawing, and selected letters can have their own color, size and font.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

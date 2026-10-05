@@ -63,7 +63,7 @@ function updateInspector() {
       const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
       mh.hidden = !miss.length;
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
-      setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), o.lh); setNum($('#tx-ls'), (o.ls || 0) * 100);
+      setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
     }
     if (o.kind === 'polygon') {
@@ -176,8 +176,17 @@ onNum($('#tx-size'), (o, v) => {
   if (te && te.id === o.id && teStyle({ size: clamp(v, 4, 1200) })) { teRefocus(); return 'live'; }   // the selected letters
   o.size = clamp(v, 4, 1200);   // the whole text, every letter in proportion
 }, true);
-onNum($('#tx-lh'), (o, v) => { if (o.kind === 'text') o.lh = clamp(v, 0.6, 3); });
-onNum($('#tx-ls'), (o, v) => { if (o.kind === 'text') o.ls = clamp(v, -20, 200) / 100; });
+// Line height and letter spacing: while typing in place, for the selected letters (the tallest letter sets a line's height); otherwise the whole text
+onNum($('#tx-lh'), (o, v) => {
+  if (o.kind !== 'text') return;
+  if (te && te.id === o.id && teStyle({ lineHeight: v })) { teRefocus(); return 'live'; }
+  applyWholeStyle(o, { lineHeight: v });
+});
+onNum($('#tx-ls'), (o, v) => {
+  if (o.kind !== 'text') return;
+  if (te && te.id === o.id && teStyle({ spacing: clamp(v, -20, 200) / 100 })) { teRefocus(); return 'live'; }
+  applyWholeStyle(o, { spacing: clamp(v, -20, 200) / 100 });
+});
 $$('[data-align]').forEach(b => b.addEventListener('click', () => { const o = one(); if (!o || o.kind !== 'text') return; o.align = b.dataset.align; refresh(o); commit(); }));
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
