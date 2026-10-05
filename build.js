@@ -161,6 +161,10 @@ function build({ minify = false, outDir = OUT_DIR } = {}) {
   fs.rmSync(siteDir, { recursive: true, force: true });   // so a font taken out of the library doesn't linger
   fs.mkdirSync(siteFonts, { recursive: true });
   const siteFile = path.join(siteDir, 'index.html');
+  // What a page already open checks to learn that a newer one exists (checkForUpdate, in src/js/12-ui-chrome.js), and the
+  // caching rules for hosts that read a _headers file (Netlify, Cloudflare Pages): the page and version.json are never reused without asking.
+  fs.writeFileSync(path.join(siteDir, 'version.json'), JSON.stringify({ version: PKG.version }) + '\n', 'utf8');
+  fs.writeFileSync(path.join(siteDir, '_headers'), '/\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/version.json\n  Cache-Control: no-store\n', 'utf8');
   fs.writeFileSync(siteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.core, 'fonts/', faces) }), 'utf8');
   const keys = Object.keys(manifest);
   keys.forEach((k) => fs.copyFileSync(path.join(FONTS_SRC, path.basename(manifest[k])), path.join(siteFonts, path.basename(manifest[k]))));
