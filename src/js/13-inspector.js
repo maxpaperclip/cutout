@@ -66,6 +66,8 @@ function updateInspector() {
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
+      $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
+      $('#tx-hyph').disabled = !(o.bw > 0);   // (a word is only broken to fit a width)
     }
     if (o.kind === 'polygon') {
       setNum($('#pg-sides'), o.sides); $('#pg-star').checked = !!o.star;
@@ -188,7 +190,21 @@ onNum($('#tx-ls'), (o, v) => {
   if (te && te.id === o.id && teStyle({ spacing: clamp(v, -20, 200) / 100 })) { teRefocus(); return 'live'; }
   applyWholeStyle(o, { spacing: clamp(v, -20, 200) / 100 });
 });
-$$('[data-align]').forEach(b => b.addEventListener('click', () => { const o = one(); if (!o || o.kind !== 'text') return; o.align = b.dataset.align; refresh(o); commit(); }));
+// A text with no fixed width is as wide as its longest line; this pins it to the width it has now, so it can wrap and justify
+function fixTextWidth(o) { if (!(o.bw > 0)) o.bw = Math.max(rnd(o.w, 2), o.size); }
+$$('[data-align]').forEach(b => b.addEventListener('click', () => {
+  const o = one(); if (!o || o.kind !== 'text') return;
+  o.align = b.dataset.align;
+  if (o.align === 'justify') fixTextWidth(o);   // (justified text fills a width, so it needs one)
+  refresh(o); commit();
+}));
+$('#tx-fixed').addEventListener('change', e => {
+  const o = one(); if (!o || o.kind !== 'text') return;
+  if (e.target.checked) fixTextWidth(o); else { delete o.bw; if (o.align === 'justify') o.align = 'left'; }
+  refresh(o); commit();
+});
+$('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); });
+$('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;

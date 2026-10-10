@@ -42,6 +42,7 @@ const ICONS = {
   tleft: '<path d="M4 6h16M4 12h10M4 18h13"/>',
   tcenter: '<path d="M4 6h16M7 12h10M5.5 18h13"/>',
   tright: '<path d="M4 6h16M10 12h10M7 18h13"/>',
+  tjustify: '<path d="M4 6h16M4 10h16M4 14h16M4 18h11"/>',
   eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   eyeoff: '<path d="M3 3l18 18"/><path d="M10.6 6.1A9.7 9.7 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3 3.7M6.6 6.7A17 17 0 0 0 2 12s3.6 7 10 7a9.6 9.6 0 0 0 4.4-1.1"/>',
   lock: '<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
