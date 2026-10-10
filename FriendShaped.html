@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.27.0</title>
+<title>FriendShaped v1.28.0</title>
 <style>
 
 :root{
@@ -549,6 +549,14 @@ input:disabled,select:disabled{opacity:.45}
         </div>
       </section>
 
+      <section class="sec" id="sec-wrap" hidden>
+        <h3>Text wrap</h3>
+        <div class="stack">
+          <label class="inline" title="Text in a box (drag a box with the Text tool, or tick Fixed width) flows around this shape's outline instead of running under it"><input type="checkbox" id="sh-wrap"> Text wraps around this</label>
+          <label class="f" id="wrap-gap" hidden><span style="white-space:nowrap">Gap</span><input type="number" id="sh-wgap" min="0" max="200" step="1" title="How far the text keeps from the shape"></label>
+        </div>
+      </section>
+
       <section class="sec" id="sec-erase" hidden>
         <h3>Eraser</h3>
         <div class="inline">
@@ -827,7 +835,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.27.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.28.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1375,8 +1383,8 @@ const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 // With letters in their own colors (o.runs) it also gives parts: the same outline in pieces, one per color ({ d, c }; no c = the text's own fill).
 // A stretch of one face and size is drawn as one piece of text; where its color changes it is drawn in pieces that start
 // where the layout says (that already includes the kerning), so coloring a letter never moves anything.
-function buildText(o) {
-  const lay = textLayout(o);
+function buildText(o, obs) {
+  const lay = textLayout(o, obs);
   const colored = Array.isArray(o.runs) && o.runs.some(r => r.c !== undefined), by = new Map();
   let d = '';
   const add = (c, pd) => { d += pd; if (colored) by.set(c, (by.get(c) || '') + pd); };
@@ -1443,10 +1451,12 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
-  g = buildText(o);
+  g = buildText(o, obs);
+  g.wsig = sig;
   textLayouts.set(key, g);
   if (textLayouts.size > 400) textLayouts.delete(textLayouts.keys().next().value);
   return g;
@@ -1456,7 +1466,7 @@ const docJSON = d => JSON.stringify(d, function (k, v) { return (k === 'd' || k 
 function rebuildOutlines(d) { d.objects.forEach(o => { try { refresh(o); } catch (e) { /* drawn as nothing until fixed */ } }); }
 
 function refresh(o) {
-  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; if (g.parts) o.parts = g.parts; else delete o.parts; }
+  if (o.kind === 'text') { const g = layoutText(o); wrapSigOf.set(o, g.wsig || ''); o.d = g.d; o.w = g.w; o.h = g.h; if (g.parts) o.parts = g.parts; else delete o.parts; }
   else if (o.kind === 'polygon') o.d = buildPolygon(o);
   else if (o.kind === 'path') o.d = scaledPathD(o.nat, o.w, o.h);
 }
@@ -2153,29 +2163,33 @@ function hangOf(t, xs, a, e, hyw, f) {
 // (a Map: index -> width of the hyphen that would be added) also inside a word at those places. With opt.hang the marks
 // that hang out into the margin do not count toward the width. A word too long for a line of its own is cut where the box is full
 // (that is also how a text with no spaces, in Chinese for one, wraps). Every line has at least one character.
-function breakLinesEx(t, xs, bw, opt) {
-  const n = t.length, out = [], eps = 1e-6, hy = opt && opt.hy, hang = opt && opt.hang ? (opt.hang === true ? 1 : opt.hang) : 0;
-  let a = 0;
-  while (a < n) {
-    let best = -1, bestHy = 0;
-    for (let p = a + 1; p <= n; p++) {
-      const hw = hy && p < n ? hy.get(p) || 0 : 0;
-      const chance = hw > 0 || p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
-      if (!chance) continue;
-      let e = p;
-      while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
-      let wd = xs[e] - xs[a] + hw;
-      if (hang) { const h = hangOf(t, xs, a, e, hw, hang); wd -= h.l + h.r; }
-      if (wd <= bw + eps) { best = p; bestHy = hw; } else break;
-    }
-    if (best < 0) {
-      best = a + 1; bestHy = 0;
-      for (let p = a + 2; p <= n && xs[p] - xs[a] <= bw + eps; p++) best = p;
-      while (best > a + 1 && best < n && (/[\uDC00-\uDFFF]/.test(t[best]) || /^\p{M}$/u.test(t[best]))) best--;   // (never inside a letter with its accent, or a pair of units)
-    }
-    out.push({ end: best, hy: bestHy });
-    a = best;
+function breakAt(t, xs, a, bw, hy, hang, bwFull) {
+  const n = t.length, eps = 1e-6;
+  let best = -1, bestHy = 0, firstWd = -1;
+  for (let p = a + 1; p <= n; p++) {
+    const hw = hy && p < n ? hy.get(p) || 0 : 0;
+    const chance = hw > 0 || p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
+    if (!chance) continue;
+    let e = p;
+    while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
+    let wd = xs[e] - xs[a] + hw;
+    if (hang) { const h = hangOf(t, xs, a, e, hw, hang); wd -= h.l + h.r; }
+    if (firstWd < 0) firstWd = wd;
+    if (wd <= bw + eps) { best = p; bestHy = hw; } else break;
   }
+  if (best < 0) {
+    // A slot narrower than the box (beside a shape) that cannot hold the next word is left empty rather than cutting the word
+    if (bwFull !== undefined && bw < bwFull - eps && firstWd <= bwFull + eps) return null;
+    best = a + 1; bestHy = 0;
+    for (let p = a + 2; p <= n && xs[p] - xs[a] <= bw + eps; p++) best = p;
+    while (best > a + 1 && best < n && (/[\uDC00-\uDFFF]/.test(t[best]) || /^\p{M}$/u.test(t[best]))) best--;   // (never inside a letter with its accent, or a pair of units)
+  }
+  return { end: best, hy: bestHy };
+}
+function breakLinesEx(t, xs, bw, opt) {
+  const n = t.length, out = [], hy = opt && opt.hy, hang = opt && opt.hang ? (opt.hang === true ? 1 : opt.hang) : 0;
+  let a = 0;
+  while (a < n) { const c = breakAt(t, xs, a, bw, hy, hang); out.push(c); a = c.end; }
   return out;
 }
 const breakLines = (t, xs, bw) => breakLinesEx(t, xs, bw).map(c => c.end);
@@ -2197,18 +2211,29 @@ function hyphenPlaces(o, runs, para, ps) {
   }
   return out;
 }
+// What is needed to cut one paragraph into lines of any width: its character positions, where it may be hyphenated, the hang
+function wrapSetup(o, runs, text, para, ps) {
+  const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
+  const places = o.hyph ? hyphenPlaces(o, runs, para, ps) : null;
+  return { para, xs: m.xs, places, hyw: places ? new Map(Array.from(places, ([k, v]) => [k, v.w])) : null, hang: hangFactor(o) };
+}
+// The next line of a paragraph from index a, for a slot of width w (bwFull = the box; a narrower slot may be skipped): { end, hy (spec) } or null
+function takeLine(su, a, w, bwFull) {
+  const c = breakAt(su.para, su.xs, a, w, su.hyw, su.hang, bwFull);
+  return c ? { end: c.end, hy: c.hy ? su.places.get(c.end) : null } : null;
+}
 // The lines of one paragraph for a box bw wide: [{ end, hy }] (end within the paragraph; hy = the hyphen spec added after it, or null)
 function wrapPlan(o, runs, text, para, ps, bw) {
   if (!para.length) return [{ end: 0, hy: null }];
-  const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
-  const places = o.hyph ? hyphenPlaces(o, runs, para, ps) : null;
-  const hyw = places ? new Map(Array.from(places, ([k, v]) => [k, v.w])) : null;
-  return breakLinesEx(para, m.xs, bw, { hy: hyw, hang: hangFactor(o) }).map(c => ({ end: c.end, hy: c.hy ? places.get(c.end) : null }));
+  const su = wrapSetup(o, runs, text, para, ps), out = [];
+  let a = 0;
+  while (a < para.length) { const c = takeLine(su, a, bw); out.push(c); a = c.end; }
+  return out;
 }
 const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, ps, bw).map(c => c.end);
 
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
-//             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
+//             x (left edge, from the alignment), top (its row), h (its height), asc, desc, base (its baseline),
 //             hard (it ends at a line break or the end of the text, not at a wrap),
 //             tw (its width without the spaces hanging at its end, and without the marks that hang into the margin, plus the
 //                 hyphen it ends with: what is aligned; point text counts the spaces),
@@ -2217,25 +2242,27 @@ const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, 
 //             slots (justified lines: the columns of the spaces that were stretched, else null), gap (how much each grew),
 //             cend (the last index the caret can sit at on this line: just after the last word of a wrapped line, so
 //                   the caret does not jump to the next line),
+//             row (which row of the text it is on), sx, sw (the stretch of the row it is laid out in: all of the box, unless a shape
+//                   it wraps around is in the way, which cuts a row into pieces that the text fills one after the other; so
+//                   several lines can share a row, in reading order),
 //             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
-// lay.flat: no runs, so every line is the same height and sits at i * lineH
+// lay.flat: no runs, and one line to a row, so every line is the same height and sits at i * lineH
 // lay.area: wrapped to a box (o.bw); lay.w is then that width
-function textLayout(o) {
+// obs: the shapes the text wraps around (wrapObstacles, in 04i-text-wrap.js); left out, they are looked up
+function textLayout(o, obs) {
   const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null, bw = o.bw > 0 ? o.bw : 0;
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = bw || size * 0.4, acc = 0, ps = 0;
-  const pieces = [];   // the text cut into the pieces laid out one to a line
-  text.split('\n').forEach(para => {
-    const cuts = bw ? wrapPlan(o, runs, text, para, ps, bw) : [{ end: para.length, hy: null }];
-    let a = 0;
-    cuts.forEach((c, k) => { pieces.push({ t: para.slice(a, c.end), start: ps + a, hard: k === cuts.length - 1, hy: c.hy }); a = c.end; });
-    ps += para.length + 1;   // (the line break counts as a character)
-  });
-  const hang = hangFactor(o), justify = o.align === 'justify' && bw > 0;
-  const lines = pieces.map((pc, i) => {
-    const t = pc.t, start = pc.start;
+  let W = bw || size * 0.4, acc = 0, ps = 0, rowIdx = 0, rowTop = 0, blank = 0;
+  let wraps = bw ? (obs === undefined ? wrapObstacles(o) : obs) : [];
+  // A row's slots are chosen for the tallest line it could hold: with letters of different sizes the height is not known until the line is made
+  let hEst = lineH;
+  if (runs) runs.forEach(r => { const st = runStyle(r); hEst = Math.max(hEst, size * (st.s !== undefined ? st.s : 1) * (st.h !== undefined ? st.h : o.lh)); });
+  const minSlot = Math.min(bw, Math.max(size, 8));
+  const lines = [];
+  // One line, laid out but not yet placed: t is its text, start its index, hy the hyphen it ends with, hard whether a line break ends it
+  const makeLine = (t, start, hard, hyph, sx, sw) => {
     let r;
     if (runs) r = runLine(o, runs, t, start, text.length);
     else {
@@ -2245,43 +2272,86 @@ function textLayout(o) {
     let te = t.length;
     if (bw) while (te > 0 && isBreakSpace(t[te - 1])) te--;
     let m = r.m, hy = null, slots = null, gap = 0;
-    const hw = pc.hy ? pc.hy.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw, hang) : { l: 0, r: 0 };
+    const hang = hangFactor(o), hw = hyph ? hyph.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw, hang) : { l: 0, r: 0 };
     let tw = (bw ? m.xs[te] : m.width) + hw - hg.l - hg.r;
-    if (justify && !pc.hard) {   // stretch the spaces between words until the line (less what hangs) is as wide as the box
+    if (o.align === 'justify' && bw > 0 && !hard) {   // stretch the spaces between words until the line (less what hangs) is as wide as its slot
       let f0 = 0;
       while (f0 < te && isBreakSpace(t[f0])) f0++;
       const cols = [];
       for (let c = f0 + 1; c < te; c++) if (isBreakSpace(t[c])) cols.push(c);
-      if (cols.length && bw > tw) {
-        gap = (bw - tw) / cols.length;
+      if (cols.length && sw > tw) {
+        gap = (sw - tw) / cols.length;
         const xs = m.xs.slice();
         let k = 0;
         for (let c = 0; c < xs.length; c++) { while (k < cols.length && cols[k] < c) k++; xs[c] += gap * k; }
         m = { width: xs[xs.length - 1], xs };
         slots = cols;
-        tw = bw;
+        tw = sw;
       }
     }
-    if (pc.hy) hy = { x: m.xs[te], font: pc.hy.font, size: pc.hy.size, ls: pc.hy.ls, f: pc.hy.f };
+    if (hyph) hy = { x: m.xs[te], font: hyph.font, size: hyph.size, ls: hyph.ls, f: hyph.f };
     if (!bw && tw > W) W = tw;
-    const h = runs ? r.H : lineH, top = runs ? acc : i * lineH;
-    const L = { i, text: t, start, end: start + t.length, m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A,
-      hard: pc.hard, tw, hl: hg.l, hr: hg.r, hy, slots, gap, cend: pc.hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
-    acc += h;
-    return L;
+    return { i: 0, text: t, start, end: start + t.length, m, segs: r.segs, x: 0, top: 0, h: runs ? r.H : lineH, asc: r.A, desc: r.D, base: 0,
+      hard, tw, hl: hg.l, hr: hg.r, hy, slots, gap, row: 0, sx, sw,
+      cend: hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
+  };
+  // Put the lines of one row where they go: all on one baseline, as high as the tallest
+  const placeRow = row => {
+    const h = Math.max(...row.map(L => L.h)), A = Math.max(...row.map(L => L.asc)), D = Math.max(...row.map(L => L.desc));
+    const top = runs ? rowTop : rowIdx * lineH;
+    row.forEach(L => { L.top = top; L.h = row.length > 1 ? h : L.h; L.asc = row.length > 1 ? A : L.asc; L.desc = row.length > 1 ? D : L.desc; L.row = rowIdx; L.i = lines.length; L.base = top + (L.h - (L.asc + L.desc)) / 2 + L.asc; lines.push(L); });
+    if (runs) rowTop += h;
+    rowIdx++;
+  };
+  const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
+  text.split('\n').forEach(para => {
+    const su = bw ? wrapSetup(o, runs, text, para, ps) : null;
+    let a = 0;
+    for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
+      const top = runs ? rowTop : rowIdx * lineH;
+      const free = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+      const row = [];
+      if (!bw) row.push(makeLine(para, ps, true, null, 0, 0));
+      else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
+      else free.forEach(sl => {
+        if (a >= para.length) return;
+        const c = takeLine(su, a, sl[1] - sl[0], bw);
+        if (!c) return;
+        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0], sl[1] - sl[0]));
+        a = c.end;
+      });
+      if (!row.length) { nextEmptyRow(); continue; }
+      placeRow(row);
+      if (!bw || a >= para.length) break;
+    }
+    ps += para.length + 1;   // (the line break counts as a character)
   });
-  lines.forEach(L => { L.x = (o.align === 'center' ? (W - L.tw) / 2 : o.align === 'right' ? W - L.tw : 0) - L.hl; });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs, area: !!bw };
+  acc = runs ? rowTop : rowIdx * lineH;
+  lines.forEach(L => {
+    const sw = L.sw || W;
+    L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
+    if (!L.sw) L.sw = W;
+  });
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && lines.every((L, i) => L.row === i), area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
-// The line at a height (box coordinates): the nearest one, above the first or below the last
-function lineAtY(lay, y) {
+// The line at a height (box coordinates): the nearest one, above the first or below the last. Where a shape cuts a row into
+// several lines, the one nearest x (when it is given)
+function lineAtY(lay, y, x) {
   const ls = lay.lines;
   if (lay.flat) return ls[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, ls.length - 1) : 0];
   let lo = 0, hi = ls.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].top <= y) lo = mid; else hi = mid - 1; }
-  return ls[lo];
+  let s = lo;
+  while (s > 0 && ls[s - 1].top === ls[lo].top) s--;
+  if (s === lo || x === undefined) return ls[s];
+  let best = ls[s], bd = Infinity;
+  for (let k = s; k <= lo; k++) {
+    const L = ls[k], d = x < L.sx ? L.sx - x : x > L.sx + L.sw ? x - (L.sx + L.sw) : 0;
+    if (d < bd) { bd = d; best = L; }
+  }
+  return best;
 }
 // The line an index is on (an index at the very end of a line is on that line, not the next; but where a line is wrapped, that index is
 // also the start of the next line, and is on the next one)
@@ -2310,7 +2380,7 @@ function selectionRects(lay, a, b) {
 }
 // The index nearest a point (box coordinates): the line by height, then the closest gap between letters
 function indexAtPoint(lay, x, y) {
-  const L = lineAtY(lay, y), xs = L.m.xs, n = L.text.length, lx = x - L.x;
+  const L = lineAtY(lay, y, x), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
   if (lx >= xs[n]) return L.cend;
   let lo = 0, hi = n;   // xs[lo] <= lx < xs[hi]
@@ -2326,7 +2396,9 @@ function indexAtPoint(lay, x, y) {
 // Up (dir -1) or Down (+1) from an index, keeping to goalX (the column the caret started from; null = where it is now).
 // Up from the first line goes to the start, Down from the last to the end.
 function verticalMove(lay, index, dir, goalX) {
-  const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX, j = L.i + dir;
+  const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX;
+  let j = L.i + dir;
+  while (j >= 0 && j < lay.lines.length && lay.lines[j].top === L.top) j += dir;   // (the lines beside this one, on the same row, are not above or below it)
   if (j < 0) return { index: 0, goalX: gx };
   if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
   return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2), goalX: gx };
@@ -2906,6 +2978,135 @@ function hyphenPoints(word) {
   if (hyphCache.size > 5000) hyphCache.clear();
   hyphCache.set(w, out);
   return out;
+}
+/* =====================================================================
+   Text wrapping around shapes (no DOM except paper.js; unit tested)
+   A shape with o.wrap on (any kind but text) is something that a text with a box (area text, o.bw) flows around, whatever is
+   stacked above or below what. Each row of the text asks "where in this row is the text box free?" and fills those
+   stretches one after the other (textLayout, 04f-text-layout.js).
+   The shape's real outline is used, not its box: a circle leaves the corners free, a star flows into its notches' sides. For
+   a row, the outline is cut to the row's band of height; whatever of it is inside the band blocks everything from its leftmost
+   to its rightmost point (a shape with a hole, or a C, is not flowed into: the text stays out of the whole span). o.wgap is the
+   gap kept around it (WRAP_GAP when not set), applied as a square: the band is made taller by it and the span wider.
+   Everything is in the text's own box coordinates (0,0 = top-left of its box), so a turned or mirrored text, and a turned
+   or mirrored shape, work the same way. wrapSyncAll keeps the texts up to date when a shape moves, turns or changes.
+   ===================================================================== */
+const WRAP_GAP = 8, WRAP_GAP_MAX = 200;
+const wrapGapOf = o => o.wgap >= 0 ? Math.min(+o.wgap, WRAP_GAP_MAX) : WRAP_GAP;
+// Whether a shape can be wrapped around (a text cannot: a text that wraps around a text that wraps around it has no end)
+const canWrapAround = o => !!o && o.kind !== 'text';
+
+// The outline of a shape as closed polygons in its own box coordinates ([[x, y], ...] each), kept for the next time
+const wrapPolyCache = new Map();
+function wrapLocalPolys(o) {
+  const box = [[[0, 0], [o.w, 0], [o.w, o.h], [0, o.h]]];
+  if (o.kind === 'rect' || o.kind === 'image') return box;
+  if (o.kind === 'ellipse') {
+    const pts = [], n = 72;
+    for (let i = 0; i < n; i++) { const a = i * 2 * Math.PI / n; pts.push([o.w / 2 + Math.cos(a) * o.w / 2, o.h / 2 + Math.sin(a) * o.h / 2]); }
+    return [pts];
+  }
+  if (typeof o.d !== 'string' || !o.d) return box;
+  const key = o.d;
+  let polys = wrapPolyCache.get(key);
+  if (polys) return polys;
+  polys = [];
+  try {
+    const item = new paper.CompoundPath({ pathData: o.d, insert: false });
+    item.children.forEach(c => {
+      c.flatten(0.4);
+      const pts = c.segments.map(sg => [sg.point.x, sg.point.y]);
+      if (pts.length) polys.push(pts);
+    });
+  } catch (e) { polys = []; }
+  if (!polys.length) polys = box;
+  wrapPolyCache.set(key, polys);
+  if (wrapPolyCache.size > 120) wrapPolyCache.delete(wrapPolyCache.keys().next().value);
+  return polys;
+}
+
+// The shapes a text (with a box) flows around: [{ polys (in the text's box coordinates), pad, b: { x0, y0, x1, y1 } }]
+function wrapObstacles(t) {
+  if (!(t.bw > 0) || typeof doc === 'undefined' || !doc || !doc.objects) return [];
+  const out = [];
+  doc.objects.forEach(o => {
+    if (!o.wrap || !canWrapAround(o) || o.id === t.id || isHidden(o)) return;
+    const pad = wrapGapOf(o) + (o.stroke && o.stroke !== 'none' && !hasPixels(o) ? (o.sw || 0) / 2 : 0);
+    const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const polys = wrapLocalPolys(o).map(poly => poly.map(([u, v]) => {
+      const lx = o.fx ? o.w - u : u, ly = o.fy ? o.h - v : v;
+      const r = rotPt(o.x + lx, o.y + ly, cx, cy, o.rot || 0), q = worldToBox(t, r.x, r.y);
+      if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1];
+      return q;
+    }));
+    if (x1 < -pad || x0 > t.bw + pad || y1 < -pad) return;   // (left of, right of, or above the text's box: no row of it can be touched)
+    out.push({ polys, pad, b: { x0, y0, x1, y1 } });
+  });
+  return out;
+}
+
+// What a row from y0 to y1 loses to the shapes: sorted, joined stretches [x0, x1] of the box it cannot use
+function wrapBlocked(obs, y0, y1) {
+  const spans = [];
+  obs.forEach(ob => {
+    const Y0 = y0 - ob.pad, Y1 = y1 + ob.pad;
+    if (Y1 <= ob.b.y0 || Y0 >= ob.b.y1) return;   // (a band that only touches the shape is not blocked)
+    let lo = Infinity, hi = -Infinity;
+    const take = x => { if (x < lo) lo = x; if (x > hi) hi = x; };
+    ob.polys.forEach(poly => {
+      for (let i = 0, n = poly.length; i < n; i++) {
+        const p = poly[i], q = poly[(i + 1) % n];
+        if (p[1] >= Y0 && p[1] <= Y1) take(p[0]);   // (a corner inside the band)
+        [Y0, Y1].forEach(yy => { if ((p[1] - yy) * (q[1] - yy) < 0) take(p[0] + (yy - p[1]) / (q[1] - p[1]) * (q[0] - p[0])); });   // (an edge crossing the top or bottom of the band)
+      }
+    });
+    if (lo <= hi) spans.push([lo - ob.pad, hi + ob.pad]);
+  });
+  spans.sort((a, b) => a[0] - b[0]);
+  const out = [];
+  spans.forEach(sp => { const l = out[out.length - 1]; if (l && sp[0] <= l[1]) l[1] = Math.max(l[1], sp[1]); else out.push(sp.slice()); });
+  return out;
+}
+// The stretches of a box bw wide that are free for a row from y0 to y1: [[x0, x1], ...] left to right, none narrower than minW
+function wrapFree(obs, bw, y0, y1, minW) {
+  const blocked = wrapBlocked(obs, y0, y1);
+  if (!blocked.length) return [[0, bw]];
+  const out = [];
+  let x = 0;
+  blocked.forEach(([a, b]) => {
+    if (b <= x) return;
+    if (a >= bw) return;
+    if (a > x && a - x >= minW) out.push([x, a]);
+    x = Math.max(x, b);
+  });
+  if (bw - x >= minW && x < bw) out.push([x, bw]);
+  return out;
+}
+
+// A short string for the shapes a text flows around, to tell one layout from another (in the cache of layouts)
+function wrapSig(obs) {
+  if (!obs.length) return '';
+  let h = 2166136261;
+  const mix = v => { h = Math.imul(h ^ (Math.round(v * 10) | 0), 16777619) >>> 0; };
+  obs.forEach(ob => { mix(ob.pad); ob.polys.forEach(poly => { mix(poly.length); poly.forEach(p => { mix(p[0]); mix(p[1]); }); }); });
+  return h.toString(36) + ':' + obs.length;
+}
+
+// A text is laid out for the shapes around at the time. This remembers for which, so a text can be laid out again when they change
+const wrapSigOf = new WeakMap();
+function wrapSyncAll() {
+  if (typeof doc === 'undefined' || !doc || !doc.objects) return false;
+  const anyWrap = doc.objects.some(o => o.wrap);
+  let changed = false;
+  doc.objects.forEach(t => {
+    if (t.kind !== 'text' || !(t.bw > 0)) return;
+    const used = wrapSigOf.get(t) || '';
+    if (!anyWrap && !used) return;
+    const now = wrapSig(wrapObstacles(t));
+    if (now !== used) { refresh(t); changed = true; }
+  });
+  return changed;
 }
 /* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
@@ -3536,6 +3737,7 @@ function patchKids(parent, nodes) {
 }
 
 function syncObjects() {
+  wrapSyncAll();   // (texts that flow around shapes are laid out again when a shape has moved)
   const seen = new Set();
   doc.objects.forEach(o => {
     seen.add(o.id);
@@ -5768,6 +5970,14 @@ function updateInspector() {
   show('#sec-geom', !!o);
   show('#sec-text', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
+  const wrappable = sel.filter(canWrapAround);
+  show('#sec-wrap', wrappable.length > 0);
+  if (wrappable.length) {
+    const all = wrappable.every(s => s.wrap);
+    $('#sh-wrap').checked = all; $('#sh-wrap').indeterminate = !all && wrappable.some(s => s.wrap);
+    $('#wrap-gap').hidden = !wrappable.some(s => s.wrap);
+    setNum($('#sh-wgap'), wrapGapOf(wrappable.find(s => s.wrap) || wrappable[0]));
+  }
   show('#sec-app', n > 0);
   show('#sec-erase', !!o && canErase(o));
   $('#btn-erase-reset').disabled = !(o && o.erase);
@@ -5960,6 +6170,18 @@ $('#tx-fixed').addEventListener('change', e => {
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
+// Text with a box flows around the selected shapes (see 04i-text-wrap.js); a folder's letters and shapes are all switched together
+$('#sh-wrap').addEventListener('change', e => {
+  const list = selObjs().filter(canWrapAround); if (!list.length) return;
+  list.forEach(s => { if (e.target.checked) s.wrap = true; else { delete s.wrap; delete s.wgap; } });
+  commit();
+});
+$('#sh-wgap').addEventListener('change', e => {
+  const v = parseFloat(e.target.value), list = selObjs().filter(s => canWrapAround(s) && s.wrap);
+  if (!isFinite(v) || !list.length) { updateInspector(); return; }
+  list.forEach(s => { s.wgap = clamp(rnd(v, 1), 0, WRAP_GAP_MAX); });
+  commit();
+});
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
@@ -6787,6 +7009,7 @@ function sanitizeDoc(d) {
     };
     if (r.fx) o.fx = true;
     if (r.fy) o.fy = true;
+    if (r.wrap === true && r.kind !== 'text') { o.wrap = true; if (Number.isFinite(+r.wgap) && +r.wgap >= 0) o.wgap = num(r.wgap, 8, 0, 200); }   // text with a box flows around it (see 04i-text-wrap.js)
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
     if (hasPaint(o) && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
@@ -7470,7 +7693,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: grab a wrapped text box anywhere along its left or right side to change its width, not only at the little square. "Hang quotes and hyphens" now has a Hang % setting, so you can hang them all the way out or just part of the way.';
+const WHATS_NEW = 'New: text can wrap around shapes. Select a shape and tick "Text wraps around this"; any text with a fixed width flows around its outline, and Gap sets how far it keeps away. It follows circles, stars and drawn shapes, and works with photos and folders too.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

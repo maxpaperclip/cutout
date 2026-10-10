@@ -26,6 +26,7 @@ function patchKids(parent, nodes) {
 }
 
 function syncObjects() {
+  wrapSyncAll();   // (texts that flow around shapes are laid out again when a shape has moved)
   const seen = new Set();
   doc.objects.forEach(o => {
     seen.add(o.id);

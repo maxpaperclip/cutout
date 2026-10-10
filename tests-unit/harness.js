@@ -41,6 +41,7 @@ const MODULE_FILES = [
   '04g-text-runs.js',
   '04h-hyphen-data.js',
   '04h-hyphenation.js',
+  '04i-text-wrap.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '06b-break-apart.js',
@@ -74,6 +75,8 @@ const EXPORT_NAMES = [
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
   'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
   'breakLines', 'breakLinesEx', 'wrapCuts', 'wrapPlan', 'hangOf', 'hangFactor', 'HANG_MAX', 'isBreakSpace',
+  // 04i-text-wrap.js
+  'WRAP_GAP', 'wrapGapOf', 'canWrapAround', 'wrapLocalPolys', 'wrapObstacles', 'wrapBlocked', 'wrapFree', 'wrapSig', 'wrapSyncAll', 'wrapSigOf', 'takeLine', 'wrapSetup',
   // 04h-hyphenation.js
   'hyphenPoints', 'HYPH_LEFT_MIN', 'HYPH_RIGHT_MIN', 'HYPH_WORD_MIN',
   // 04g-text-runs.js

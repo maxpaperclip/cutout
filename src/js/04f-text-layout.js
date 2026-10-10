@@ -108,29 +108,33 @@ function hangOf(t, xs, a, e, hyw, f) {
 // (a Map: index -> width of the hyphen that would be added) also inside a word at those places. With opt.hang the marks
 // that hang out into the margin do not count toward the width. A word too long for a line of its own is cut where the box is full
 // (that is also how a text with no spaces, in Chinese for one, wraps). Every line has at least one character.
-function breakLinesEx(t, xs, bw, opt) {
-  const n = t.length, out = [], eps = 1e-6, hy = opt && opt.hy, hang = opt && opt.hang ? (opt.hang === true ? 1 : opt.hang) : 0;
-  let a = 0;
-  while (a < n) {
-    let best = -1, bestHy = 0;
-    for (let p = a + 1; p <= n; p++) {
-      const hw = hy && p < n ? hy.get(p) || 0 : 0;
-      const chance = hw > 0 || p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
-      if (!chance) continue;
-      let e = p;
-      while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
-      let wd = xs[e] - xs[a] + hw;
-      if (hang) { const h = hangOf(t, xs, a, e, hw, hang); wd -= h.l + h.r; }
-      if (wd <= bw + eps) { best = p; bestHy = hw; } else break;
-    }
-    if (best < 0) {
-      best = a + 1; bestHy = 0;
-      for (let p = a + 2; p <= n && xs[p] - xs[a] <= bw + eps; p++) best = p;
-      while (best > a + 1 && best < n && (/[\uDC00-\uDFFF]/.test(t[best]) || /^\p{M}$/u.test(t[best]))) best--;   // (never inside a letter with its accent, or a pair of units)
-    }
-    out.push({ end: best, hy: bestHy });
-    a = best;
+function breakAt(t, xs, a, bw, hy, hang, bwFull) {
+  const n = t.length, eps = 1e-6;
+  let best = -1, bestHy = 0, firstWd = -1;
+  for (let p = a + 1; p <= n; p++) {
+    const hw = hy && p < n ? hy.get(p) || 0 : 0;
+    const chance = hw > 0 || p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
+    if (!chance) continue;
+    let e = p;
+    while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
+    let wd = xs[e] - xs[a] + hw;
+    if (hang) { const h = hangOf(t, xs, a, e, hw, hang); wd -= h.l + h.r; }
+    if (firstWd < 0) firstWd = wd;
+    if (wd <= bw + eps) { best = p; bestHy = hw; } else break;
   }
+  if (best < 0) {
+    // A slot narrower than the box (beside a shape) that cannot hold the next word is left empty rather than cutting the word
+    if (bwFull !== undefined && bw < bwFull - eps && firstWd <= bwFull + eps) return null;
+    best = a + 1; bestHy = 0;
+    for (let p = a + 2; p <= n && xs[p] - xs[a] <= bw + eps; p++) best = p;
+    while (best > a + 1 && best < n && (/[\uDC00-\uDFFF]/.test(t[best]) || /^\p{M}$/u.test(t[best]))) best--;   // (never inside a letter with its accent, or a pair of units)
+  }
+  return { end: best, hy: bestHy };
+}
+function breakLinesEx(t, xs, bw, opt) {
+  const n = t.length, out = [], hy = opt && opt.hy, hang = opt && opt.hang ? (opt.hang === true ? 1 : opt.hang) : 0;
+  let a = 0;
+  while (a < n) { const c = breakAt(t, xs, a, bw, hy, hang); out.push(c); a = c.end; }
   return out;
 }
 const breakLines = (t, xs, bw) => breakLinesEx(t, xs, bw).map(c => c.end);
@@ -152,18 +156,29 @@ function hyphenPlaces(o, runs, para, ps) {
   }
   return out;
 }
+// What is needed to cut one paragraph into lines of any width: its character positions, where it may be hyphenated, the hang
+function wrapSetup(o, runs, text, para, ps) {
+  const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
+  const places = o.hyph ? hyphenPlaces(o, runs, para, ps) : null;
+  return { para, xs: m.xs, places, hyw: places ? new Map(Array.from(places, ([k, v]) => [k, v.w])) : null, hang: hangFactor(o) };
+}
+// The next line of a paragraph from index a, for a slot of width w (bwFull = the box; a narrower slot may be skipped): { end, hy (spec) } or null
+function takeLine(su, a, w, bwFull) {
+  const c = breakAt(su.para, su.xs, a, w, su.hyw, su.hang, bwFull);
+  return c ? { end: c.end, hy: c.hy ? su.places.get(c.end) : null } : null;
+}
 // The lines of one paragraph for a box bw wide: [{ end, hy }] (end within the paragraph; hy = the hyphen spec added after it, or null)
 function wrapPlan(o, runs, text, para, ps, bw) {
   if (!para.length) return [{ end: 0, hy: null }];
-  const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
-  const places = o.hyph ? hyphenPlaces(o, runs, para, ps) : null;
-  const hyw = places ? new Map(Array.from(places, ([k, v]) => [k, v.w])) : null;
-  return breakLinesEx(para, m.xs, bw, { hy: hyw, hang: hangFactor(o) }).map(c => ({ end: c.end, hy: c.hy ? places.get(c.end) : null }));
+  const su = wrapSetup(o, runs, text, para, ps), out = [];
+  let a = 0;
+  while (a < para.length) { const c = takeLine(su, a, bw); out.push(c); a = c.end; }
+  return out;
 }
 const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, ps, bw).map(c => c.end);
 
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
-//             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
+//             x (left edge, from the alignment), top (its row), h (its height), asc, desc, base (its baseline),
 //             hard (it ends at a line break or the end of the text, not at a wrap),
 //             tw (its width without the spaces hanging at its end, and without the marks that hang into the margin, plus the
 //                 hyphen it ends with: what is aligned; point text counts the spaces),
@@ -172,25 +187,27 @@ const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, 
 //             slots (justified lines: the columns of the spaces that were stretched, else null), gap (how much each grew),
 //             cend (the last index the caret can sit at on this line: just after the last word of a wrapped line, so
 //                   the caret does not jump to the next line),
+//             row (which row of the text it is on), sx, sw (the stretch of the row it is laid out in: all of the box, unless a shape
+//                   it wraps around is in the way, which cuts a row into pieces that the text fills one after the other; so
+//                   several lines can share a row, in reading order),
 //             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
-// lay.flat: no runs, so every line is the same height and sits at i * lineH
+// lay.flat: no runs, and one line to a row, so every line is the same height and sits at i * lineH
 // lay.area: wrapped to a box (o.bw); lay.w is then that width
-function textLayout(o) {
+// obs: the shapes the text wraps around (wrapObstacles, in 04i-text-wrap.js); left out, they are looked up
+function textLayout(o, obs) {
   const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null, bw = o.bw > 0 ? o.bw : 0;
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = bw || size * 0.4, acc = 0, ps = 0;
-  const pieces = [];   // the text cut into the pieces laid out one to a line
-  text.split('\n').forEach(para => {
-    const cuts = bw ? wrapPlan(o, runs, text, para, ps, bw) : [{ end: para.length, hy: null }];
-    let a = 0;
-    cuts.forEach((c, k) => { pieces.push({ t: para.slice(a, c.end), start: ps + a, hard: k === cuts.length - 1, hy: c.hy }); a = c.end; });
-    ps += para.length + 1;   // (the line break counts as a character)
-  });
-  const hang = hangFactor(o), justify = o.align === 'justify' && bw > 0;
-  const lines = pieces.map((pc, i) => {
-    const t = pc.t, start = pc.start;
+  let W = bw || size * 0.4, acc = 0, ps = 0, rowIdx = 0, rowTop = 0, blank = 0;
+  let wraps = bw ? (obs === undefined ? wrapObstacles(o) : obs) : [];
+  // A row's slots are chosen for the tallest line it could hold: with letters of different sizes the height is not known until the line is made
+  let hEst = lineH;
+  if (runs) runs.forEach(r => { const st = runStyle(r); hEst = Math.max(hEst, size * (st.s !== undefined ? st.s : 1) * (st.h !== undefined ? st.h : o.lh)); });
+  const minSlot = Math.min(bw, Math.max(size, 8));
+  const lines = [];
+  // One line, laid out but not yet placed: t is its text, start its index, hy the hyphen it ends with, hard whether a line break ends it
+  const makeLine = (t, start, hard, hyph, sx, sw) => {
     let r;
     if (runs) r = runLine(o, runs, t, start, text.length);
     else {
@@ -200,43 +217,86 @@ function textLayout(o) {
     let te = t.length;
     if (bw) while (te > 0 && isBreakSpace(t[te - 1])) te--;
     let m = r.m, hy = null, slots = null, gap = 0;
-    const hw = pc.hy ? pc.hy.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw, hang) : { l: 0, r: 0 };
+    const hang = hangFactor(o), hw = hyph ? hyph.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw, hang) : { l: 0, r: 0 };
     let tw = (bw ? m.xs[te] : m.width) + hw - hg.l - hg.r;
-    if (justify && !pc.hard) {   // stretch the spaces between words until the line (less what hangs) is as wide as the box
+    if (o.align === 'justify' && bw > 0 && !hard) {   // stretch the spaces between words until the line (less what hangs) is as wide as its slot
       let f0 = 0;
       while (f0 < te && isBreakSpace(t[f0])) f0++;
       const cols = [];
       for (let c = f0 + 1; c < te; c++) if (isBreakSpace(t[c])) cols.push(c);
-      if (cols.length && bw > tw) {
-        gap = (bw - tw) / cols.length;
+      if (cols.length && sw > tw) {
+        gap = (sw - tw) / cols.length;
         const xs = m.xs.slice();
         let k = 0;
         for (let c = 0; c < xs.length; c++) { while (k < cols.length && cols[k] < c) k++; xs[c] += gap * k; }
         m = { width: xs[xs.length - 1], xs };
         slots = cols;
-        tw = bw;
+        tw = sw;
       }
     }
-    if (pc.hy) hy = { x: m.xs[te], font: pc.hy.font, size: pc.hy.size, ls: pc.hy.ls, f: pc.hy.f };
+    if (hyph) hy = { x: m.xs[te], font: hyph.font, size: hyph.size, ls: hyph.ls, f: hyph.f };
     if (!bw && tw > W) W = tw;
-    const h = runs ? r.H : lineH, top = runs ? acc : i * lineH;
-    const L = { i, text: t, start, end: start + t.length, m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A,
-      hard: pc.hard, tw, hl: hg.l, hr: hg.r, hy, slots, gap, cend: pc.hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
-    acc += h;
-    return L;
+    return { i: 0, text: t, start, end: start + t.length, m, segs: r.segs, x: 0, top: 0, h: runs ? r.H : lineH, asc: r.A, desc: r.D, base: 0,
+      hard, tw, hl: hg.l, hr: hg.r, hy, slots, gap, row: 0, sx, sw,
+      cend: hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
+  };
+  // Put the lines of one row where they go: all on one baseline, as high as the tallest
+  const placeRow = row => {
+    const h = Math.max(...row.map(L => L.h)), A = Math.max(...row.map(L => L.asc)), D = Math.max(...row.map(L => L.desc));
+    const top = runs ? rowTop : rowIdx * lineH;
+    row.forEach(L => { L.top = top; L.h = row.length > 1 ? h : L.h; L.asc = row.length > 1 ? A : L.asc; L.desc = row.length > 1 ? D : L.desc; L.row = rowIdx; L.i = lines.length; L.base = top + (L.h - (L.asc + L.desc)) / 2 + L.asc; lines.push(L); });
+    if (runs) rowTop += h;
+    rowIdx++;
+  };
+  const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
+  text.split('\n').forEach(para => {
+    const su = bw ? wrapSetup(o, runs, text, para, ps) : null;
+    let a = 0;
+    for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
+      const top = runs ? rowTop : rowIdx * lineH;
+      const free = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+      const row = [];
+      if (!bw) row.push(makeLine(para, ps, true, null, 0, 0));
+      else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
+      else free.forEach(sl => {
+        if (a >= para.length) return;
+        const c = takeLine(su, a, sl[1] - sl[0], bw);
+        if (!c) return;
+        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0], sl[1] - sl[0]));
+        a = c.end;
+      });
+      if (!row.length) { nextEmptyRow(); continue; }
+      placeRow(row);
+      if (!bw || a >= para.length) break;
+    }
+    ps += para.length + 1;   // (the line break counts as a character)
   });
-  lines.forEach(L => { L.x = (o.align === 'center' ? (W - L.tw) / 2 : o.align === 'right' ? W - L.tw : 0) - L.hl; });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs, area: !!bw };
+  acc = runs ? rowTop : rowIdx * lineH;
+  lines.forEach(L => {
+    const sw = L.sw || W;
+    L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
+    if (!L.sw) L.sw = W;
+  });
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && lines.every((L, i) => L.row === i), area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
-// The line at a height (box coordinates): the nearest one, above the first or below the last
-function lineAtY(lay, y) {
+// The line at a height (box coordinates): the nearest one, above the first or below the last. Where a shape cuts a row into
+// several lines, the one nearest x (when it is given)
+function lineAtY(lay, y, x) {
   const ls = lay.lines;
   if (lay.flat) return ls[lay.lineH > 0 ? clamp(Math.floor(y / lay.lineH), 0, ls.length - 1) : 0];
   let lo = 0, hi = ls.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].top <= y) lo = mid; else hi = mid - 1; }
-  return ls[lo];
+  let s = lo;
+  while (s > 0 && ls[s - 1].top === ls[lo].top) s--;
+  if (s === lo || x === undefined) return ls[s];
+  let best = ls[s], bd = Infinity;
+  for (let k = s; k <= lo; k++) {
+    const L = ls[k], d = x < L.sx ? L.sx - x : x > L.sx + L.sw ? x - (L.sx + L.sw) : 0;
+    if (d < bd) { bd = d; best = L; }
+  }
+  return best;
 }
 // The line an index is on (an index at the very end of a line is on that line, not the next; but where a line is wrapped, that index is
 // also the start of the next line, and is on the next one)
@@ -265,7 +325,7 @@ function selectionRects(lay, a, b) {
 }
 // The index nearest a point (box coordinates): the line by height, then the closest gap between letters
 function indexAtPoint(lay, x, y) {
-  const L = lineAtY(lay, y), xs = L.m.xs, n = L.text.length, lx = x - L.x;
+  const L = lineAtY(lay, y, x), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
   if (lx >= xs[n]) return L.cend;
   let lo = 0, hi = n;   // xs[lo] <= lx < xs[hi]
@@ -281,7 +341,9 @@ function indexAtPoint(lay, x, y) {
 // Up (dir -1) or Down (+1) from an index, keeping to goalX (the column the caret started from; null = where it is now).
 // Up from the first line goes to the start, Down from the last to the end.
 function verticalMove(lay, index, dir, goalX) {
-  const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX, j = L.i + dir;
+  const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX;
+  let j = L.i + dir;
+  while (j >= 0 && j < lay.lines.length && lay.lines[j].top === L.top) j += dir;   // (the lines beside this one, on the same row, are not above or below it)
   if (j < 0) return { index: 0, goalX: gx };
   if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
   return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2), goalX: gx };

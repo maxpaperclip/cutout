@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: grab a wrapped text box anywhere along its left or right side to change its width, not only at the little square. "Hang quotes and hyphens" now has a Hang % setting, so you can hang them all the way out or just part of the way.';
+const WHATS_NEW = 'New: text can wrap around shapes. Select a shape and tick "Text wraps around this"; any text with a fixed width flows around its outline, and Gap sets how far it keeps away. It follows circles, stars and drawn shapes, and works with photos and folders too.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

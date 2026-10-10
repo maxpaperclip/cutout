@@ -28,6 +28,7 @@ function sanitizeDoc(d) {
     };
     if (r.fx) o.fx = true;
     if (r.fy) o.fy = true;
+    if (r.wrap === true && r.kind !== 'text') { o.wrap = true; if (Number.isFinite(+r.wgap) && +r.wgap >= 0) o.wgap = num(r.wgap, 8, 0, 200); }   // text with a box flows around it (see 04i-text-wrap.js)
     if (has(r.parent)) o.parent = gmap.get(+r.parent).id;
     if (BLEND_IDS.indexOf(r.blend) > 0) o.blend = r.blend;   // 0 is normal, which isn't stored
     if (hasPaint(o) && CAPS.indexOf(r.cap) >= 0) o.cap = r.cap;
