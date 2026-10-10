@@ -111,7 +111,7 @@ function drawOverlay() {
       const c = centerOf(o);
       const g = svgEl('g', { transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null });
       g.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line' }));
-      const names = keepsRatio(o) ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
+      const names = o.kind === 'text' && o.bw > 0 ? ['nw', 'ne', 'e', 'se', 'sw', 'w'] : keepsRatio(o) ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       names.forEach(n => {
         const hx = n.includes('e') ? 1 : n.includes('w') ? 0 : 0.5, hy = n.includes('s') ? 1 : n.includes('n') ? 0 : 0.5;
         g.appendChild(svgEl('rect', { x: o.x + hx * o.w - hs / 2, y: o.y + hy * o.h - hs / 2, width: hs, height: hs, rx: hs * 0.18, class: 'handle', 'data-h': n }));

@@ -160,6 +160,18 @@ teEl.addEventListener('keydown', e => {
     teSetSel(e.shiftKey ? ends.anchor : m.index, m.index);
     return;
   }
+  // Home and End go to the ends of the line as drawn. The textarea only knows the lines made by line breaks, which is all of them
+  // for point text; a text wrapped to a box has more
+  if ((e.key === 'Home' || e.key === 'End') && !e.altKey && !e.ctrlKey && !e.metaKey && !e.isComposing) {
+    const lay = textLayout(o);
+    if (lay.area) {
+      e.preventDefault();
+      const ends = teEnds(), L = lineOfIndex(lay, ends.focus), at = e.key === 'Home' ? L.start : L.cend;
+      te.goalX = null;
+      teSetSel(e.shiftKey ? ends.anchor : at, at);
+      return;
+    }
+  }
   if (e.key !== 'Shift' && e.key !== 'Control' && e.key !== 'Alt' && e.key !== 'Meta') te.goalX = null;   // anything else starts a new column
   teSoon();
 });

@@ -212,7 +212,22 @@ function beginDraw(e, p) {
 }
 // Shapes and lines: drag to draw (or click for a default size), then back to Select
 [['rect', 'r'], ['ellipse', 'e'], ['polygon', 'p'], ['star', 's'], ['line', 'l']].forEach(([t, key]) => { TOOLS[t] = { key, cursor: 'draw', down: beginDraw }; });
-TOOLS.text = { key: 't', cursor: 'text', down: (e, p) => createText(p) };
+// The Text tool: a click puts a text where it was clicked, as wide as its words; a drag across draws the box the text wraps in
+const TEXTBOX_MIN = 12;   // screen pixels a drag must go sideways to be a box and not a click
+TOOLS.text = { key: 't', cursor: 'text', down: (e, p) => { const s = snapPt(p); drag = { type: 'textbox', start: s, cur: s, sx: e.clientX, sy: e.clientY, wide: false }; } };
+DRAGS.textbox = {
+  move(p, e) { const d = drag; d.cur = snapPt(p); d.wide = Math.abs(e.clientX - d.sx) >= TEXTBOX_MIN; drawOverlay(); },
+  end(d) {
+    if (!d.wide) { createText(d.start); return; }
+    createText({ x: Math.min(d.start.x, d.cur.x), y: Math.min(d.start.y, d.cur.y) }, Math.abs(d.cur.x - d.start.x));
+  },
+  overlay() {
+    const d = drag;
+    if (!d || !d.wide) return false;
+    ov.appendChild(svgEl('rect', { x: Math.min(d.start.x, d.cur.x), y: Math.min(d.start.y, d.cur.y), width: Math.abs(d.cur.x - d.start.x), height: Math.abs(d.cur.y - d.start.y), class: 'ov-line ov-dash' }));
+    return true;
+  }
+};
 DRAGS.draw = { move: (p, e) => updateDraw(p, e), end: (d, e) => finishDraw(d, e) };
 function makeDrawn(tool, box) {
   if (tool === 'rect') return newShape('rect', box);
@@ -291,9 +306,9 @@ function constrainAngle(a, b) {
   const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy), ang = Math.round(Math.atan2(dy, dx) / (Math.PI / 12)) * (Math.PI / 12);
   return { x: a.x + Math.cos(ang) * len, y: a.y + Math.sin(ang) * len };
 }
-function createText(p) {
+function createText(p, bw) {
   const sp = snapPt(p);
-  const o = newShape('text', { x: sp.x, y: sp.y });
+  const o = newShape('text', bw > 0 ? { x: sp.x, y: sp.y, bw: Math.max(rnd(bw, 2), 1) } : { x: sp.x, y: sp.y });   // (with a width, the text wraps in a box that wide)
   doc.objects.push(o); S.sel = new Set([o.id]);
   setTool('select'); startTextEdit(o, true);   // joins the history when the typing ends
 }
@@ -312,7 +327,7 @@ function beginHandle(h, p, e) {
   } else if ((h === 'p1' || h === 'p2') && lineEnds(o)) {
     drag = { type: 'lineend', id: o.id, end: h === 'p1' ? 0 : 1 };
   } else {
-    drag = { type: 'resize', id: o.id, h, o0: { x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot, size: o.size }, pic0: o.pic ? Object.assign({}, o.pic) : null };
+    drag = { type: 'resize', id: o.id, h, o0: { x: o.x, y: o.y, w: o.w, h: o.h, rot: o.rot, size: o.size, bw: o.kind === 'text' && o.bw > 0 ? o.bw : undefined }, pic0: o.pic ? Object.assign({}, o.pic) : null };
   }
 }
 /* ---------- moving several objects as one ----------
@@ -373,13 +388,20 @@ function updateResize(p, e) {
   if (hx === 1) R = Math.max(ux, L + MIN); else if (hx === 0) L = Math.min(ux, R - MIN);
   if (hy === 1) B = Math.max(uy, T + MIN); else if (hy === 0) T = Math.min(uy, B - MIN);
   let w = R - L, h = B - T;
-  const uniform = e.shiftKey || keepsRatio(o);
+  // The side handles of a text wrapped to a box change the width of the box, so its words wrap again; the corners scale all of it
+  const side = o0.bw !== undefined && (hn === 'e' || hn === 'w');
+  const uniform = !side && (e.shiftKey || keepsRatio(o));
+  if (side) {
+    o.bw = Math.max(rnd(w, 2), 1); refresh(o); w = o.w; h = o.h;
+    if (hx === 1) R = L + w; else L = R - w;
+    T = -hh; B = T + h;   // (the top stays where it is, and the height follows the lines)
+  }
   if (uniform) {
     let s;
     if (hx !== 0.5 && hy !== 0.5) s = Math.max(w / o0.w, h / o0.h);
     else if (hx !== 0.5) s = w / o0.w; else s = h / o0.h;
     s = Math.max(s, MIN / Math.max(1, Math.min(o0.w, o0.h)));
-    if (o.kind === 'text') { o.size = Math.max(4, rnd(o0.size * s, 2)); refresh(o); w = o.w; h = o.h; }
+    if (o.kind === 'text') { o.size = Math.max(4, rnd(o0.size * s, 2)); if (o0.bw !== undefined) o.bw = Math.max(rnd(o0.bw * o.size / o0.size, 3), 1); refresh(o); w = o.w; h = o.h; }
     else { w = o0.w * s; h = o0.h * s; }
     if (hx === 1) R = L + w; else if (hx === 0) L = R - w; else { L = -w / 2; R = w / 2; }
     if (hy === 1) B = T + h; else if (hy === 0) T = B - h; else { T = -h / 2; B = h / 2; }

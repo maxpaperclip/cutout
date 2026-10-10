@@ -174,7 +174,7 @@ function groupsFilledBy(d, objs) {
 function scaleAbout(o, o0, ax, ay, k) {
   if (o0.sw !== undefined) o.sw = rnd(o0.sw * k, 3);
   const cx = ax + (o0.x + o0.w / 2 - ax) * k, cy = ay + (o0.y + o0.h / 2 - ay) * k;
-  if (o.kind === 'text') { o.size = Math.max(1, rnd(o0.size * k, 3)); refresh(o); }
+  if (o.kind === 'text') { o.size = Math.max(1, rnd(o0.size * k, 3)); if (o0.bw > 0) o.bw = Math.max(rnd(o0.bw * o.size / o0.size, 3), 1); refresh(o); }   // (a box scales with its letters, so the words wrap the same)
   else {
     o.w = Math.max(o0.w * k, 0.01); o.h = Math.max(o0.h * k, 0.01);
     if (o.kind === 'rect') o.r = (o0.r || 0) * k;

@@ -86,7 +86,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -329,7 +329,7 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o);

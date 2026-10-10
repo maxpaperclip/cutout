@@ -39,7 +39,7 @@ src/
     04c-path-edit.js    Path geometry shared by the Pen tool and point editing
     04d-erase.js        Erase masks: how an erased object is described and drawn (no DOM, unit tested)
     04e-eyedrop.js      Eyedropper sums: which part of the page to draw, and the average color of 1 or 3 x 3 pixels (no DOM, unit tested)
-    04f-text-layout.js  Text layout with a position for every character (the caret, the selection and clicks all come from it, and the outlines are drawn from it), and picking a selected text by its box (no DOM, unit tested)
+    04f-text-layout.js  Text layout with a position for every character (the caret, the selection and clicks all come from it, and the outlines are drawn from it), wrapping a text to a box width (o.bw: area text, as opposed to point text, which has none), and picking a selected text by its box (no DOM, unit tested)
     04g-text-runs.js    Letters of one text in their own color, size or font (o.runs, run-length list): edits, styles applied to a selection, cleaning of loaded runs (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)

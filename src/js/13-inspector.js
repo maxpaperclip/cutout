@@ -154,13 +154,13 @@ onNum(F.x, (o, v) => { if (!setLineField(o, 0, 'x', v)) o.x = v; });
 onNum(F.y, (o, v) => { if (!setLineField(o, 0, 'y', v)) o.y = v; });
 onNum(F.w, (o, v) => {
   if (setLineField(o, 1, 'x', v)) return;
-  else if (o.kind === 'text') { o.size = Math.max(4, o.size * Math.max(v, 1) / o.w); }
+  else if (o.kind === 'text') { if (o.bw > 0) o.bw = Math.max(v, 1); else o.size = Math.max(4, o.size * Math.max(v, 1) / o.w); }   // (a box gets wider; the words wrap again)
   else if (keepsRatio(o)) { const k = Math.max(v, 1) / o.w; o.w *= k; o.h *= k; }
   else o.w = Math.max(v, 1);
 }, true);
 onNum(F.h, (o, v) => {
   if (setLineField(o, 1, 'y', v)) return;
-  else if (o.kind === 'text') { o.size = Math.max(4, o.size * Math.max(v, 1) / o.h); }
+  else if (o.kind === 'text') { const s0 = o.size; o.size = Math.max(4, o.size * Math.max(v, 1) / o.h); if (o.bw > 0) o.bw = Math.max(o.bw * o.size / s0, 1); }   // (a box scales with its letters)
   else if (keepsRatio(o)) { const k = Math.max(v, 1) / o.h; o.w *= k; o.h *= k; }
   else o.h = Math.max(v, 1);
 }, true);

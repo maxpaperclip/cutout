@@ -8,6 +8,11 @@
    the outlines are drawn in; objXf (05-svg-export.js) and worldToBox (04c-path-edit.js) turn those
    into the page, including for turned and mirrored text.
    Indexes are positions in o.text (UTF-16 units, like a textarea's selectionStart).
+   A text is either point text (no o.bw: it is as wide as its longest line, and only a line break starts a new line) or
+   area text (o.bw = the width of its box: words wrap onto new lines to fit it, and the box is that wide whatever is in it).
+   A wrapped line ends in a soft break: nothing in o.text marks it, so the next line starts at the very index the last one
+   ends at, and the spaces where the text was cut stay at the end of the line they ended (hanging past the box, never drawn
+   or counted when aligning). A line break in o.text is a hard break: the next line starts one index after it.
    ===================================================================== */
 
 /* ---------- one line: where each character starts ---------- */
@@ -69,32 +74,85 @@ function runLine(o, runs, t, start, textLen) {
   xs.push(x);
   return { m: { width: x, xs }, segs, A, D, H };
 }
+/* ---------- wrapping ---------- */
+// The characters a line may be cut after, and that hang at its end instead of counting toward its width
+const isBreakSpace = c => c === ' ' || c === '\t' || c === '　' || (c >= ' ' && c <= ' ' && c !== ' ');
+const isHyphenLike = c => c === '-' || c === '‐' || c === '–' || c === '—';
+// Where one paragraph (t, with xs[i] = the x before character i, and xs[t.length] its end) is cut into lines for a box
+// bw wide: the end index of each line, the last being t.length. A line is cut after a run of spaces, or after a hyphen or
+// dash inside a word, as late as it still fits. A word too long for a line of its own is cut where the box is full
+// (that is also how a text with no spaces, in Chinese for one, wraps). Every line has at least one character.
+function breakLines(t, xs, bw) {
+  const n = t.length, ends = [], eps = 1e-6;
+  let a = 0;
+  while (a < n) {
+    let best = -1;
+    for (let p = a + 1; p <= n; p++) {
+      const chance = p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
+      if (!chance) continue;
+      let e = p;
+      while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
+      if (xs[e] - xs[a] <= bw + eps) best = p; else break;
+    }
+    if (best < 0) {
+      best = a + 1;
+      for (let p = a + 2; p <= n && xs[p] - xs[a] <= bw + eps; p++) best = p;
+      while (best > a + 1 && best < n && (/[\uDC00-\uDFFF]/.test(t[best]) || /^\p{M}$/u.test(t[best]))) best--;   // (never inside a letter with its accent, or a pair of units)
+    }
+    ends.push(best);
+    a = best;
+  }
+  return ends;
+}
+// The lines of one paragraph for a box bw wide: the end of each line within the paragraph
+function wrapCuts(o, runs, text, para, ps, bw) {
+  if (!para.length) return [0];
+  const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
+  return breakLines(para, m.xs, bw);
+}
+
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
 //             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
+//             hard (it ends at a line break or the end of the text, not at a wrap),
+//             tw (its width without the spaces hanging at its end: what is aligned; point text counts them),
+//             cend (the last index the caret can sit at on this line: just after the last word of a wrapped line, so
+//                   the caret does not jump to the next line),
 //             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
 // lay.flat: no runs, so every line is the same height and sits at i * lineH
+// lay.area: wrapped to a box (o.bw); lay.w is then that width
 function textLayout(o) {
-  const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null;
+  const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null, bw = o.bw > 0 ? o.bw : 0;
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = size * 0.4, start = 0, acc = 0;
-  const lines = text.split('\n').map((t, i) => {
+  let W = bw || size * 0.4, acc = 0, ps = 0;
+  const pieces = [];   // the text cut into the pieces laid out one to a line
+  text.split('\n').forEach(para => {
+    const cuts = bw ? wrapCuts(o, runs, text, para, ps, bw) : [para.length];
+    let a = 0;
+    cuts.forEach((b, k) => { pieces.push({ t: para.slice(a, b), start: ps + a, hard: k === cuts.length - 1 }); a = b; });
+    ps += para.length + 1;   // (the line break counts as a character)
+  });
+  const lines = pieces.map((pc, i) => {
+    const t = pc.t, start = pc.start;
     let r;
     if (runs) r = runLine(o, runs, t, start, text.length);
     else {
       const m = lineMetrics(font, o.font, size, ls, t);
       r = { m, segs: [{ a: 0, b: t.length, f: o.font, font, size, ls, x: 0 }], A: asc, D: desc };
     }
-    if (r.m.width > W) W = r.m.width;
+    let te = t.length;
+    if (bw) while (te > 0 && isBreakSpace(t[te - 1])) te--;
+    const tw = bw ? r.m.xs[te] : r.m.width;
+    if (!bw && r.m.width > W) W = r.m.width;
     const h = runs ? r.H : lineH, top = runs ? acc : i * lineH;
-    const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A };
+    const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A,
+      hard: pc.hard, tw, cend: pc.hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
     acc += h;
-    start += t.length + 1;   // (the line break counts as a character)
     return L;
   });
-  lines.forEach(L => { L.x = o.align === 'center' ? (W - L.m.width) / 2 : o.align === 'right' ? W - L.m.width : 0; });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs };
+  lines.forEach(L => { L.x = o.align === 'center' ? (W - L.tw) / 2 : o.align === 'right' ? W - L.tw : 0; });
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs, area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
@@ -106,7 +164,8 @@ function lineAtY(lay, y) {
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].top <= y) lo = mid; else hi = mid - 1; }
   return ls[lo];
 }
-// The line an index is on (an index at the very end of a line is on that line, not the next)
+// The line an index is on (an index at the very end of a line is on that line, not the next; but where a line is wrapped, that index is
+// also the start of the next line, and is on the next one)
 function lineOfIndex(lay, index) {
   const ls = lay.lines;
   let lo = 0, hi = ls.length - 1;
@@ -118,14 +177,14 @@ function caretAt(lay, index) {
   const L = lineOfIndex(lay, index), col = clamp(index - L.start, 0, L.text.length);
   return { x: L.x + L.m.xs[col], y0: L.base - L.asc, y1: L.base + L.desc, line: L.i };
 }
-// The highlight for a selection from a to b: a rectangle per line. A selection that runs past the end of a line also covers its break.
+// The highlight for a selection from a to b: a rectangle per line. A selection that runs past the end of a line (a line break, not a wrap) also covers its break.
 function selectionRects(lay, a, b) {
   if (a > b) { const t = a; a = b; b = t; }
   const out = [], brk = Math.max(lay.size * 0.25, 2);
   lay.lines.forEach(L => {
     const s = Math.max(a, L.start), e = Math.min(b, L.end);
     if (s > e) return;
-    const x0 = L.x + L.m.xs[s - L.start], x1 = L.x + L.m.xs[e - L.start] + (b > L.end && L.i < lay.lines.length - 1 ? brk : 0);
+    const x0 = L.x + L.m.xs[s - L.start], x1 = L.x + L.m.xs[e - L.start] + (b > L.end && L.hard && L.i < lay.lines.length - 1 ? brk : 0);
     if (x1 > x0) out.push({ x: x0, y: L.base - L.asc, w: x1 - x0, h: L.asc + L.desc });
   });
   return out;
@@ -134,10 +193,11 @@ function selectionRects(lay, a, b) {
 function indexAtPoint(lay, x, y) {
   const L = lineAtY(lay, y), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
-  if (lx >= xs[n]) return L.end;
+  if (lx >= xs[n]) return L.cend;
   let lo = 0, hi = n;   // xs[lo] <= lx < xs[hi]
   while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xs[mid] <= lx) lo = mid; else hi = mid; }
   let col = lx - xs[lo] < xs[hi] - lx ? lo : hi;
+  if (!L.hard) col = Math.min(col, L.cend - L.start);   // (a wrapped line's end is also the start of the next: stay on this one)
   if (col > 0 && col < n) {   // never between the two halves of one character
     const c1 = L.text.charCodeAt(col - 1), c2 = L.text.charCodeAt(col);
     if (c1 >= 0xD800 && c1 <= 0xDBFF && c2 >= 0xDC00 && c2 <= 0xDFFF) col--;
