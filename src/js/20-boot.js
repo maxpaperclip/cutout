@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: the hosted page now notices when a newer version is available and offers a Reload button, so an update no longer needs a private window to see. Also new: letter spacing and line height on selected letters.';
+const WHATS_NEW = 'New: Break apart into letters (in the Text section) turns a text into one shape per letter, together in a folder, so each letter can be moved, colored or reshaped on its own. It works on up to 100 letters.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

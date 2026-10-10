@@ -29,6 +29,7 @@ function updateInspector() {
   $('#btn-group').disabled = units.length < 2;
   $('#btn-ungroup').disabled = !units.some(u => u.g);
   $('#btn-flatten').disabled = !(o && kindInfo(o).plain);
+  $('#btn-breakapart').disabled = !(o && o.kind === 'text' && !isLocked(o));
   $('#btn-points').disabled = !(o && (o.kind === 'path' || kindInfo(o).plain) && !isLocked(o));
   // photo mask controls
   const nPhoto = sel.filter(hasPixels).length, nShape = n - nPhoto;
@@ -406,6 +407,7 @@ $('#opacity').addEventListener('change', () => commit());
 // Combine + arrange
 $$('[data-bool]').forEach(b => b.addEventListener('click', () => runBoolean(b.dataset.bool)));
 $('#btn-flatten').addEventListener('click', flattenSelected);
+$('#btn-breakapart').addEventListener('click', breakApartSelected);
 $('#btn-points').addEventListener('click', () => enterPointEdit(one()));
 $('#btn-mask').addEventListener('click', useAsMask);
 $('#btn-fit').addEventListener('click', fitPhoto);

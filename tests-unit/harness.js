@@ -41,6 +41,7 @@ const MODULE_FILES = [
   '04g-text-runs.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
+  '06b-break-apart.js',
   '17-projects.js',
   '18b-svg-import.js',
 ];
@@ -93,6 +94,8 @@ const EXPORT_NAMES = [
   'combineShapes', 'replaceObjects', 'runBoolean', 'flattenSelected',
   'localPaper', 'worldPaper', 'lineToPaper', 'useAsMask', 'releaseMask',
   'fitPhoto', 'BOOL_NAME',
+  // 06b-break-apart.js
+  'BREAK_APART_MAX', 'breakClusters', 'glyphGrad', 'breakApartText', 'breakApartSelected',
   // mutable state (04-document-model.js) - use with care; prefer passing
   // plain objects into pure functions where a test can. `images` and `doc`
   // are exposed because a few functions (iconFor/hasPic/useAsMask) read
