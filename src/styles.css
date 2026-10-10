@@ -146,6 +146,7 @@ input:disabled,select:disabled{opacity:.45}
 [data-h^="q"]{cursor:move}
 .q-hit{fill:transparent;stroke:none;pointer-events:all}
 .obj-hit{fill:none;stroke:transparent;pointer-events:stroke}
+.text-hit{fill:transparent;stroke:none;pointer-events:all}
 
 #empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(340px,86%);padding:18px 20px;border-radius:14px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 12px 34px var(--shadow);text-align:left}
 #empty h2{margin:0 0 6px;font-size:15px}

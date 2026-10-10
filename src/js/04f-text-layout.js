@@ -17,6 +17,7 @@
    - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
      The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
      into words (L.slots says where) because the spaces are no longer the width the font gave them.
+   - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in.
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
@@ -205,6 +206,8 @@ function textLayout(o, obs) {
   let hEst = lineH;
   if (runs) runs.forEach(r => { const st = runStyle(r); hEst = Math.max(hEst, size * (st.s !== undefined ? st.s : 1) * (st.h !== undefined ? st.h : o.lh)); });
   const minSlot = Math.min(bw, Math.max(size, 8));
+  // The first line of every paragraph starts this far in (area text only; o.indent is in ems)
+  const indent = bw && o.indent > 0 ? Math.min(+o.indent * size, Math.max(0, bw - minSlot)) : 0;
   const lines = [];
   // One line, laid out but not yet placed: t is its text, start its index, hy the hyphen it ends with, hard whether a line break ends it
   const makeLine = (t, start, hard, hyph, sx, sw) => {
@@ -260,9 +263,10 @@ function textLayout(o, obs) {
       else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
       else free.forEach(sl => {
         if (a >= para.length) return;
-        const c = takeLine(su, a, sl[1] - sl[0], bw);
+        const ind = a === 0 ? indent : 0;   // (only the first line of the paragraph is indented)
+        const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind);
         if (!c) return;
-        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0], sl[1] - sl[0]));
+        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
         a = c.end;
       });
       if (!row.length) { nextEmptyRow(); continue; }
@@ -373,13 +377,30 @@ function boxContains(o, p, pad) {
   const q = worldToBox(o, p.x, p.y), e = pad || 0;
   return q[0] >= -e && q[0] <= o.w + e && q[1] >= -e && q[1] <= o.h + e;
 }
-// A selected text can be picked anywhere in its box, not only on its letters, so the space between and
-// around them is not a dead zone. It only wins over what is under it: `under` is what the click hit
+// Where a text can be picked: one rectangle for each line, as wide as the line's text and as tall as the font (ascent to
+// descent), in the text's box coordinates. Between the letters and between the lines is the text; the empty room beside a short
+// line, a blank line, and the unused part of a text box are not, so a click there goes to whatever is behind.
+function textInkRects(lay) {
+  const out = [];
+  lay.lines.forEach(L => {
+    if (!L.text.trim()) return;
+    out.push({ x: rnd(L.x, 2), y: rnd(L.base - L.asc, 2), w: rnd(L.tw + L.hl + L.hr, 2), h: rnd(L.asc + L.desc, 2) });
+  });
+  if (!out.length) out.push({ x: 0, y: 0, w: rnd(lay.w, 2), h: rnd(lay.h, 2) });   // (a text with nothing but spaces, a new one being typed: all of its box, or it could not be picked)
+  return out;
+}
+// True when a page point is on a text: within pad (in the text's own units) of one of its lines
+function textInkContains(o, p, pad) {
+  const q = worldToBox(o, p.x, p.y), e = pad || 0;
+  return layoutText(o).hit.some(r => q[0] >= r.x - e && q[0] <= r.x + r.w + e && q[1] >= r.y - e && q[1] <= r.y + r.h + e);
+}
+// A selected text is easier to pick than one that is not: a hand's width around its lines counts, so it can be
+// dragged without aiming at the letters. It only wins over what is under it: `under` is what the click hit
 // (null for nothing), and anything drawn above the text still gets the click first.
 function textBoxAt(p, under) {
   for (let i = doc.objects.length - 1; i > (under ? doc.objects.indexOf(under) : -1); i--) {
     const o = doc.objects[i];
-    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && boxContains(o, p)) return o;
+    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && textInkContains(o, p, Math.max(o.size * 0.3, 4))) return o;
   }
   return null;
 }

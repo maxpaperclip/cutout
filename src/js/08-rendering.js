@@ -43,6 +43,8 @@ function syncObjects() {
     const kids = v.node.kids.slice();
     if (hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'))
       kids.push({ tag: v.spec.tag, a: Object.assign({}, v.spec.a, { class: 'obj-hit', 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }) });
+    // A text is picked on its lines (see textInkRects): an invisible box over each, a little taller and wider than it, so the gaps between letters and lines are not dead
+    if (o.kind === 'text') { const pad = o.size * 0.1; layoutText(o).hit.forEach(r => kids.push({ tag: 'rect', a: { x: rnd(r.x - pad, 2), y: rnd(r.y - pad, 2), width: rnd(r.w + 2 * pad, 2), height: rnd(r.h + 2 * pad, 2), class: 'text-hit' } })); }
     patchKids(g, kids);
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });

@@ -56,6 +56,7 @@ function sanitizeDoc(d) {
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right', 'justify'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
       if (Number.isFinite(+r.bw) && +r.bw > 0) o.bw = num(r.bw, 100, 1, 1e5);   // the width of a text wrapped to a box
+      if (Number.isFinite(+r.indent) && +r.indent > 0) o.indent = num(r.indent, 0, 0, 20);   // how far in each paragraph's first line starts, in ems
       if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin (all of their width)
       else if (typeof r.hang === 'number' && r.hang > 0) o.hang = num(r.hang, 1, 0.05, 1.5);   // (or just part of it)
       if (r.hyph === true) o.hyph = true;    // long words are broken with a hyphen

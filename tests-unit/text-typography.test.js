@@ -28,6 +28,7 @@ function setup(props) {
 }
 const xsOf = t => Array.from({ length: t.length + 1 }, (_, i) => i * 5);
 const texts = lay => plain(lay.lines.map(l => l.text));
+const joined = lay => lay.lines.map(l => l.text).join('');
 
 test('hyphenation: breaking a word at the end of a line', async (t) => {
   await t.test('breakLinesEx cuts inside a word where it is allowed, and says a hyphen is added', () => {
@@ -262,5 +263,75 @@ test('the new settings in the rest of the editor', async (t) => {
     assert.equal(r.shapes.length, 12);
     assert.equal(r.shapes[6].name, '-');
     assert.equal(r.shapes[7].name, 'a');
+  });
+});
+
+test('paragraph indent: the first line of every paragraph starts further in', async (t) => {
+  await t.test('after a line break and at the very start, but not on the lines that wrap', () => {
+    const L = setup({ text: 'aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk\nlll mmm nnn ooo ppp qqq', bw: 100, indent: 2 }).lay();
+    const firsts = L.lines.filter((l, i) => i === 0 || L.lines[i - 1].hard);
+    assert.equal(firsts.length, 2);
+    firsts.forEach(l => { assert.equal(l.x, 20); assert.equal(l.sx, 20); assert.equal(l.sw, 80); });
+    L.lines.filter(l => !firsts.includes(l)).forEach(l => { assert.equal(l.x, 0); assert.equal(l.sw, 100); });
+  });
+  await t.test('the first line has less room, so fewer words fit on it', () => {
+    const base = { text: 'aaa bbb ccc ddd eee', bw: 100 };
+    assert.deepEqual(texts(setup(base).lay()), ['aaa bbb ccc ddd eee']);   // 19 characters fit in 20
+    assert.deepEqual(texts(setup(Object.assign({ indent: 2 }, base)).lay()), ['aaa bbb ccc ddd ', 'eee']);   // only 16 fit now
+  });
+  await t.test('it is in ems: it grows with the size of the text', () => {
+    const L = setup({ text: 'aaa bbb', bw: 400, size: 20, indent: 1.5 }).lay();
+    assert.equal(L.lines[0].x, 30);
+  });
+  await t.test('point text and no indent are as before', () => {
+    assert.equal(setup({ text: 'aaa bbb', bw: undefined, indent: 2 }).lay().lines[0].x, 0);
+    assert.equal(setup({ text: 'aaa bbb', indent: 0 }).lay().lines[0].x, 0);
+    assert.equal(setup({ text: 'aaa bbb', indent: -3 }).lay().lines[0].x, 0);
+  });
+  await t.test('empty paragraphs have nothing to indent', () => {
+    const L = setup({ text: 'aaa\n\nbbb', bw: 100, indent: 2 }).lay();
+    assert.deepEqual(plain(L.lines.map(l => l.x)), [20, 20, 20].map((v, i) => i === 1 ? L.lines[1].x : v));
+    assert.equal(L.lines.length, 3);
+  });
+  await t.test('alignment works inside what is left of the first line', () => {
+    const c = setup({ text: 'aaa\nbbb', bw: 100, indent: 2, align: 'center' }).lay();
+    assert.equal(c.lines[0].x, 20 + (80 - 15) / 2);
+    const r = setup({ text: 'aaa\nbbb', bw: 100, indent: 2, align: 'right' }).lay();
+    assert.equal(r.lines[0].x + r.lines[0].tw, 100);
+  });
+  await t.test('a justified first line fills the room it has', () => {
+    const L = setup({ text: 'aaa bbb ccc ddd eee fff ggg hhh iii jjj', bw: 100, indent: 2, align: 'justify' }).lay();
+    const l = L.lines[0];
+    assert.ok(Math.abs(l.tw - l.sw) < 1e-9 && l.sw === 80);
+    assert.ok(Math.abs(l.x + l.tw - 100) < 1e-9);
+  });
+  await t.test('a word too long for the first line is cut, and the text still ends', () => {
+    const L = setup({ text: 'c'.repeat(30), bw: 40, indent: 2 }).lay();
+    assert.equal(joined(L), 'c'.repeat(30));
+    assert.equal(L.lines[0].sw, 20);
+  });
+  await t.test('it cannot take all of the box', () => {
+    const L = setup({ text: 'aaaa bbbb', bw: 40, indent: 50 }).lay();
+    assert.ok(L.lines[0].sw >= 10);
+    assert.equal(joined(L), 'aaaa bbbb');
+  });
+  await t.test('the caret and the picking boxes follow the indent', () => {
+    const { m, lay, o } = setup({ text: 'aaa bbb', bw: 100, indent: 2 });
+    assert.equal(m.caretAt(lay(), 0).x, 20);
+    assert.equal(m.layoutText(o).hit[0].x, 20);
+  });
+  await t.test('a different indent is a different layout, and it is saved and opened', () => {
+    const a = setup({ text: 'aaa', bw: 100, indent: 1 }), b = setup({ text: 'aaa', bw: 100, indent: 2 });
+    a.m.doc.objects.length = 0; a.m.doc.objects.push(a.o);
+    assert.notEqual(a.m.layoutText(a.o).d, b.m.layoutText(b.o).d);
+    const back = a.m.sanitizeDoc(JSON.parse(a.m.docJSON(a.m.doc))).objects[0];
+    assert.equal(back.indent, 1);
+    const d = a.m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, bw: 50, indent: 999 }, { kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, bw: 50, indent: -1 }, { kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, indent: 'x' }] });
+    assert.equal(d.objects[0].indent, 20); assert.equal(d.objects[1].indent, undefined); assert.equal(d.objects[2].indent, undefined);
+  });
+  await t.test('it combines with hyphenation and with a shape in the way', () => {
+    const h = setup({ text: 'an extraordinary result of communication', bw: 80, indent: 1, hyph: true }).lay();
+    assert.equal(h.lines[0].x, 10);
+    assert.equal(h.lines.map(l => l.text).join(''), 'an extraordinary result of communication');
   });
 });
