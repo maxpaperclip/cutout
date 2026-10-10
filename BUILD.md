@@ -43,6 +43,7 @@ src/
     04g-text-runs.js    Letters of one text in their own color, size or font (o.runs, run-length list): edits, styles applied to a selection, cleaning of loaded runs (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
+    06b-break-apart.js  Break apart: a text becomes one plain shape per letter, in a new folder (no DOM, unit tested)
     07-history-autosave.js  Undo/redo + IndexedDB persistence
     08-rendering.js
     09-pointer-interaction.js
