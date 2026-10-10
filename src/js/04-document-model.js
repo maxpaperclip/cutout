@@ -275,8 +275,8 @@ const isOpenPath = o => o.kind === 'path' && pathIsOpen(o.d);
 // With letters in their own colors (o.runs) it also gives parts: the same outline in pieces, one per color ({ d, c }; no c = the text's own fill).
 // A stretch of one face and size is drawn as one piece of text; where its color changes it is drawn in pieces that start
 // where the layout says (that already includes the kerning), so coloring a letter never moves anything.
-function buildText(o) {
-  const lay = textLayout(o);
+function buildText(o, obs) {
+  const lay = textLayout(o, obs);
   const colored = Array.isArray(o.runs) && o.runs.some(r => r.c !== undefined), by = new Map();
   let d = '';
   const add = (c, pd) => { d += pd; if (colored) by.set(c, (by.get(c) || '') + pd); };
@@ -343,10 +343,12 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
-  g = buildText(o);
+  g = buildText(o, obs);
+  g.wsig = sig;
   textLayouts.set(key, g);
   if (textLayouts.size > 400) textLayouts.delete(textLayouts.keys().next().value);
   return g;
@@ -356,7 +358,7 @@ const docJSON = d => JSON.stringify(d, function (k, v) { return (k === 'd' || k 
 function rebuildOutlines(d) { d.objects.forEach(o => { try { refresh(o); } catch (e) { /* drawn as nothing until fixed */ } }); }
 
 function refresh(o) {
-  if (o.kind === 'text') { const g = layoutText(o); o.d = g.d; o.w = g.w; o.h = g.h; if (g.parts) o.parts = g.parts; else delete o.parts; }
+  if (o.kind === 'text') { const g = layoutText(o); wrapSigOf.set(o, g.wsig || ''); o.d = g.d; o.w = g.w; o.h = g.h; if (g.parts) o.parts = g.parts; else delete o.parts; }
   else if (o.kind === 'polygon') o.d = buildPolygon(o);
   else if (o.kind === 'path') o.d = scaledPathD(o.nat, o.w, o.h);
 }
