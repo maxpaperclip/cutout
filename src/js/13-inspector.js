@@ -15,6 +15,14 @@ function updateInspector() {
   show('#sec-geom', !!o);
   show('#sec-text', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
+  const wrappable = sel.filter(canWrapAround);
+  show('#sec-wrap', wrappable.length > 0);
+  if (wrappable.length) {
+    const all = wrappable.every(s => s.wrap);
+    $('#sh-wrap').checked = all; $('#sh-wrap').indeterminate = !all && wrappable.some(s => s.wrap);
+    $('#wrap-gap').hidden = !wrappable.some(s => s.wrap);
+    setNum($('#sh-wgap'), wrapGapOf(wrappable.find(s => s.wrap) || wrappable[0]));
+  }
   show('#sec-app', n > 0);
   show('#sec-erase', !!o && canErase(o));
   $('#btn-erase-reset').disabled = !(o && o.erase);
@@ -207,6 +215,18 @@ $('#tx-fixed').addEventListener('change', e => {
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
+// Text with a box flows around the selected shapes (see 04i-text-wrap.js); a folder's letters and shapes are all switched together
+$('#sh-wrap').addEventListener('change', e => {
+  const list = selObjs().filter(canWrapAround); if (!list.length) return;
+  list.forEach(s => { if (e.target.checked) s.wrap = true; else { delete s.wrap; delete s.wgap; } });
+  commit();
+});
+$('#sh-wgap').addEventListener('change', e => {
+  const v = parseFloat(e.target.value), list = selObjs().filter(s => canWrapAround(s) && s.wrap);
+  if (!isFinite(v) || !list.length) { updateInspector(); return; }
+  list.forEach(s => { s.wgap = clamp(rnd(v, 1), 0, WRAP_GAP_MAX); });
+  commit();
+});
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
   const f = e.target.files[0]; e.target.value = ''; if (!f) return;
