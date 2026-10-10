@@ -13,6 +13,14 @@
    A wrapped line ends in a soft break: nothing in o.text marks it, so the next line starts at the very index the last one
    ends at, and the spaces where the text was cut stay at the end of the line they ended (hanging past the box, never drawn
    or counted when aligning). A line break in o.text is a hard break: the next line starts one index after it.
+   Three typographic options work on area text (they need a box to work against):
+   - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
+     The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
+     into words (L.slots says where) because the spaces are no longer the width the font gave them.
+   - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
+     is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
+   - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
+     out into the margin so the letters line up (L.hl, L.hr = how far). Text with no box hangs too, but nothing wraps differently.
    ===================================================================== */
 
 /* ---------- one line: where each character starts ---------- */
@@ -78,43 +86,85 @@ function runLine(o, runs, t, start, textLen) {
 // The characters a line may be cut after, and that hang at its end instead of counting toward its width
 const isBreakSpace = c => c === ' ' || c === '\t' || c === '　' || (c >= ' ' && c <= ' ' && c !== ' ');
 const isHyphenLike = c => c === '-' || c === '‐' || c === '–' || c === '—';
+// The marks that hang out into the margin (optical margin alignment): opening quotes at the start of a line, closing quotes
+// and hyphens at the end of one. Dashes longer than a hyphen are left in place: hanging them looks like a mistake.
+const HANG_START = new Set(['"', "'", '“', '‘', '„', '‚', '«', '‹']);
+const HANG_END = new Set(['"', "'", '”', '’', '»', '›', '-', '‐', '–']);
+// How far the first and the last mark of a piece of text (t[a..e), xs as for breakLines) hang. hyw: the width of the hyphen the
+// layout adds at the end (it always hangs). The two never hang the same mark.
+function hangOf(t, xs, a, e, hyw) {
+  const l = a < e && HANG_START.has(t[a]) ? xs[a + 1] - xs[a] : 0;
+  const r = hyw ? hyw : e - 1 > a && HANG_END.has(t[e - 1]) ? xs[e] - xs[e - 1] : 0;
+  return { l, r };
+}
 // Where one paragraph (t, with xs[i] = the x before character i, and xs[t.length] its end) is cut into lines for a box
-// bw wide: the end index of each line, the last being t.length. A line is cut after a run of spaces, or after a hyphen or
-// dash inside a word, as late as it still fits. A word too long for a line of its own is cut where the box is full
+// bw wide: [{ end, hy }], the end index of each line (the last being t.length) and whether a hyphen is added after it (hy = its width).
+// A line is cut after a run of spaces, or after a hyphen or dash inside a word, as late as it still fits; with opt.hy
+// (a Map: index -> width of the hyphen that would be added) also inside a word at those places. With opt.hang the marks
+// that hang out into the margin do not count toward the width. A word too long for a line of its own is cut where the box is full
 // (that is also how a text with no spaces, in Chinese for one, wraps). Every line has at least one character.
-function breakLines(t, xs, bw) {
-  const n = t.length, ends = [], eps = 1e-6;
+function breakLinesEx(t, xs, bw, opt) {
+  const n = t.length, out = [], eps = 1e-6, hy = opt && opt.hy, hang = !!(opt && opt.hang);
   let a = 0;
   while (a < n) {
-    let best = -1;
+    let best = -1, bestHy = 0;
     for (let p = a + 1; p <= n; p++) {
-      const chance = p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
+      const hw = hy && p < n ? hy.get(p) || 0 : 0;
+      const chance = hw > 0 || p === n || (isBreakSpace(t[p - 1]) && !isBreakSpace(t[p])) || (isHyphenLike(t[p - 1]) && p - 1 > a && !isBreakSpace(t[p]) && !isHyphenLike(t[p]));
       if (!chance) continue;
       let e = p;
       while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
-      if (xs[e] - xs[a] <= bw + eps) best = p; else break;
+      let wd = xs[e] - xs[a] + hw;
+      if (hang) { const h = hangOf(t, xs, a, e, hw); wd -= h.l + h.r; }
+      if (wd <= bw + eps) { best = p; bestHy = hw; } else break;
     }
     if (best < 0) {
-      best = a + 1;
+      best = a + 1; bestHy = 0;
       for (let p = a + 2; p <= n && xs[p] - xs[a] <= bw + eps; p++) best = p;
       while (best > a + 1 && best < n && (/[\uDC00-\uDFFF]/.test(t[best]) || /^\p{M}$/u.test(t[best]))) best--;   // (never inside a letter with its accent, or a pair of units)
     }
-    ends.push(best);
+    out.push({ end: best, hy: bestHy });
     a = best;
   }
-  return ends;
+  return out;
 }
-// The lines of one paragraph for a box bw wide: the end of each line within the paragraph
-function wrapCuts(o, runs, text, para, ps, bw) {
-  if (!para.length) return [0];
+const breakLines = (t, xs, bw) => breakLinesEx(t, xs, bw).map(c => c.end);
+
+// The hyphen a line gets when it is cut inside a word: the face, size and spacing of the letter before it, and how wide it is
+function hyphenSpec(o, runs, idx) {
+  const st = runs ? runStyleAt(runs, idx) : {}, f = st.f !== undefined ? st.f : o.font, size = rnd(o.size * (st.s !== undefined ? st.s : 1), 3), ls = st.l !== undefined ? st.l : (o.ls || 0);
+  return { f, size, ls, font: fontOf(f), w: lineMetrics(fontOf(f), f, size, ls, '-').width };
+}
+// The places in a paragraph where a word may be broken with a hyphen: Map index -> hyphen spec. Only whole words of plain English letters
+// (a word touching an accented letter, a digit or an apostrophe is left alone).
+function hyphenPlaces(o, runs, para, ps) {
+  const out = new Map(), re = /[A-Za-z]+/g;
+  let m;
+  while ((m = re.exec(para))) {
+    const before = m.index > 0 ? para[m.index - 1] : '', after = para[m.index + m[0].length] || '';
+    if (/[\p{L}\p{M}\p{N}'’_]/u.test(before) || /[\p{L}\p{M}\p{N}'’_]/u.test(after)) continue;
+    hyphenPoints(m[0]).forEach(k => { const at = m.index + k; out.set(at, hyphenSpec(o, runs, ps + at - 1)); });
+  }
+  return out;
+}
+// The lines of one paragraph for a box bw wide: [{ end, hy }] (end within the paragraph; hy = the hyphen spec added after it, or null)
+function wrapPlan(o, runs, text, para, ps, bw) {
+  if (!para.length) return [{ end: 0, hy: null }];
   const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
-  return breakLines(para, m.xs, bw);
+  const places = o.hyph ? hyphenPlaces(o, runs, para, ps) : null;
+  const hyw = places ? new Map(Array.from(places, ([k, v]) => [k, v.w])) : null;
+  return breakLinesEx(para, m.xs, bw, { hy: hyw, hang: !!o.hang }).map(c => ({ end: c.end, hy: c.hy ? places.get(c.end) : null }));
 }
+const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, ps, bw).map(c => c.end);
 
 // lines[i]: { i, text, start, end (indexes of its first character and just past its last), m: its metrics,
 //             x (left edge, from the alignment), top (its slot), h (its height), asc, desc, base (its baseline),
 //             hard (it ends at a line break or the end of the text, not at a wrap),
-//             tw (its width without the spaces hanging at its end: what is aligned; point text counts them),
+//             tw (its width without the spaces hanging at its end, and without the marks that hang into the margin, plus the
+//                 hyphen it ends with: what is aligned; point text counts the spaces),
+//             hl, hr (how far a mark hangs out past the left / right edge of tw; 0 unless o.hang),
+//             hy ({ x (where it starts in the line), font, size, ls } the hyphen drawn at the end of a line cut inside a word, or null),
+//             slots (justified lines: the columns of the spaces that were stretched, else null), gap (how much each grew),
 //             cend (the last index the caret can sit at on this line: just after the last word of a wrapped line, so
 //                   the caret does not jump to the next line),
 //             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
@@ -128,11 +178,12 @@ function textLayout(o) {
   let W = bw || size * 0.4, acc = 0, ps = 0;
   const pieces = [];   // the text cut into the pieces laid out one to a line
   text.split('\n').forEach(para => {
-    const cuts = bw ? wrapCuts(o, runs, text, para, ps, bw) : [para.length];
+    const cuts = bw ? wrapPlan(o, runs, text, para, ps, bw) : [{ end: para.length, hy: null }];
     let a = 0;
-    cuts.forEach((b, k) => { pieces.push({ t: para.slice(a, b), start: ps + a, hard: k === cuts.length - 1 }); a = b; });
+    cuts.forEach((c, k) => { pieces.push({ t: para.slice(a, c.end), start: ps + a, hard: k === cuts.length - 1, hy: c.hy }); a = c.end; });
     ps += para.length + 1;   // (the line break counts as a character)
   });
+  const hang = !!o.hang, justify = o.align === 'justify' && bw > 0;
   const lines = pieces.map((pc, i) => {
     const t = pc.t, start = pc.start;
     let r;
@@ -143,15 +194,33 @@ function textLayout(o) {
     }
     let te = t.length;
     if (bw) while (te > 0 && isBreakSpace(t[te - 1])) te--;
-    const tw = bw ? r.m.xs[te] : r.m.width;
-    if (!bw && r.m.width > W) W = r.m.width;
+    let m = r.m, hy = null, slots = null, gap = 0;
+    const hw = pc.hy ? pc.hy.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw) : { l: 0, r: 0 };
+    let tw = (bw ? m.xs[te] : m.width) + hw - hg.l - hg.r;
+    if (justify && !pc.hard) {   // stretch the spaces between words until the line (less what hangs) is as wide as the box
+      let f0 = 0;
+      while (f0 < te && isBreakSpace(t[f0])) f0++;
+      const cols = [];
+      for (let c = f0 + 1; c < te; c++) if (isBreakSpace(t[c])) cols.push(c);
+      if (cols.length && bw > tw) {
+        gap = (bw - tw) / cols.length;
+        const xs = m.xs.slice();
+        let k = 0;
+        for (let c = 0; c < xs.length; c++) { while (k < cols.length && cols[k] < c) k++; xs[c] += gap * k; }
+        m = { width: xs[xs.length - 1], xs };
+        slots = cols;
+        tw = bw;
+      }
+    }
+    if (pc.hy) hy = { x: m.xs[te], font: pc.hy.font, size: pc.hy.size, ls: pc.hy.ls, f: pc.hy.f };
+    if (!bw && tw > W) W = tw;
     const h = runs ? r.H : lineH, top = runs ? acc : i * lineH;
-    const L = { i, text: t, start, end: start + t.length, m: r.m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A,
-      hard: pc.hard, tw, cend: pc.hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
+    const L = { i, text: t, start, end: start + t.length, m, segs: r.segs, x: 0, top, h, asc: r.A, desc: r.D, base: top + (h - (r.A + r.D)) / 2 + r.A,
+      hard: pc.hard, tw, hl: hg.l, hr: hg.r, hy, slots, gap, cend: pc.hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
     acc += h;
     return L;
   });
-  lines.forEach(L => { L.x = o.align === 'center' ? (W - L.tw) / 2 : o.align === 'right' ? W - L.tw : 0; });
+  lines.forEach(L => { L.x = (o.align === 'center' ? (W - L.tw) / 2 : o.align === 'right' ? W - L.tw : 0) - L.hl; });
   return { font, size, asc, desc, lineH, ls, lines, w: W, h: runs ? acc : lineH * lines.length, flat: !runs, area: !!bw };
 }
 
