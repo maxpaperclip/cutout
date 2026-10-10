@@ -86,7 +86,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -288,9 +288,23 @@ function buildText(o) {
         const last = pieces[pieces.length - 1];
         if (last && last.c === p.st.c) last.b = p.b; else pieces.push({ a: p.a, b: p.b, c: p.st.c });
       });
-      if (pieces.length < 2) { add(pieces.length ? pieces[0].c : undefined, g.font.getPath(L.text.slice(g.a, g.b), L.x + g.x, L.base, g.size, opts).toPathData(2)); return; }
-      pieces.forEach(p => add(p.c, g.font.getPath(L.text.slice(p.a - L.start, p.b - L.start), L.x + L.m.xs[p.a - L.start], L.base, g.size, opts).toPathData(2)));
+      if (!L.slots && pieces.length < 2) { add(pieces.length ? pieces[0].c : undefined, g.font.getPath(L.text.slice(g.a, g.b), L.x + g.x, L.base, g.size, opts).toPathData(2)); return; }
+      // (a justified line is drawn a word at a time, each where the layout put it: the spaces between are wider than the font's)
+      (pieces.length ? pieces : [{ a: L.start + g.a, b: L.start + g.b, c: undefined }]).forEach(p => {
+        const words = [];
+        let w0 = p.a;
+        const cut = (a, b) => { if (b > a) words.push([a, b]); };
+        if (L.slots) {
+          L.slots.forEach(c => { const i = L.start + c; if (i >= p.a && i < p.b) { cut(w0, i); w0 = i + 1; } });
+        }
+        cut(w0, p.b);
+        words.forEach(([a, b]) => add(p.c, g.font.getPath(L.text.slice(a - L.start, b - L.start), L.x + L.m.xs[a - L.start], L.base, g.size, opts).toPathData(2)));
+      });
     });
+    if (L.hy) {   // the hyphen at the end of a line cut inside a word: not part of the text, it takes the look of the letter before it
+      const c = colored ? runStyleAt(o.runs, L.end - 1).c : undefined;
+      add(c, L.hy.font.getPath('-', L.x + L.hy.x, L.base, L.hy.size, { kerning: true, letterSpacing: L.hy.ls }).toPathData(2));
+    }
   });
   const out = { d, w: lay.w, h: lay.h };
   if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
@@ -329,7 +343,7 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o);
