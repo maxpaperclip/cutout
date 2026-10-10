@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.28.0</title>
+<title>FriendShaped v1.29.0</title>
 <style>
 
 :root{
@@ -154,6 +154,7 @@ input:disabled,select:disabled{opacity:.45}
 [data-h^="q"]{cursor:move}
 .q-hit{fill:transparent;stroke:none;pointer-events:all}
 .obj-hit{fill:none;stroke:transparent;pointer-events:stroke}
+.text-hit{fill:transparent;stroke:none;pointer-events:all}
 
 #empty{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:min(340px,86%);padding:18px 20px;border-radius:14px;background:var(--chrome);border:1px solid var(--line);box-shadow:0 12px 34px var(--shadow);text-align:left}
 #empty h2{margin:0 0 6px;font-size:15px}
@@ -533,6 +534,7 @@ input:disabled,select:disabled{opacity:.45}
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
           <label class="f" id="wrap-hangamt" hidden><span style="white-space:nowrap">Hang %</span><input type="number" id="tx-hangamt" min="5" max="150" step="5" title="How much of each mark hangs out, in percent of its width. 100 hangs it completely; less leaves part of it inside."></label>
+          <label class="f" id="wrap-indent"><span style="white-space:nowrap">Indent</span><input type="number" id="tx-indent" min="0" max="20" step="0.25" title="How far in the first line of each paragraph starts, in ems (one em is the size of the text). Needs a fixed width."></label>
           <label class="inline" title="Break long words with a hyphen at the end of a line (English words, in a text with a fixed width)"><input type="checkbox" id="tx-hyph"> Hyphenate</label>
           <button class="btn line" id="tx-addfont">Add a font from your computer…</button>
           <button class="btn line" id="btn-breakapart" title="Turn each letter into its own shape, together in a new folder. Works on up to 100 letters. The text stops being editable (Undo brings it back).">Break apart into letters</button>
@@ -835,7 +837,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.28.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.29.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1194,7 +1196,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph', 'indent'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -1414,7 +1416,7 @@ function buildText(o, obs) {
       add(c, L.hy.font.getPath('-', L.x + L.hy.x, L.base, L.hy.size, { kerning: true, letterSpacing: L.hy.ls }).toPathData(2));
     }
   });
-  const out = { d, w: lay.w, h: lay.h };
+  const out = { d, w: lay.w, h: lay.h, hit: textInkRects(lay) };
   if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
   return out;
 }
@@ -1452,7 +1454,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.indent > 0 ? 'i' + o.indent : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);
@@ -2072,6 +2074,7 @@ const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16
    - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
      The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
      into words (L.slots says where) because the spaces are no longer the width the font gave them.
+   - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in.
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
@@ -2260,6 +2263,8 @@ function textLayout(o, obs) {
   let hEst = lineH;
   if (runs) runs.forEach(r => { const st = runStyle(r); hEst = Math.max(hEst, size * (st.s !== undefined ? st.s : 1) * (st.h !== undefined ? st.h : o.lh)); });
   const minSlot = Math.min(bw, Math.max(size, 8));
+  // The first line of every paragraph starts this far in (area text only; o.indent is in ems)
+  const indent = bw && o.indent > 0 ? Math.min(+o.indent * size, Math.max(0, bw - minSlot)) : 0;
   const lines = [];
   // One line, laid out but not yet placed: t is its text, start its index, hy the hyphen it ends with, hard whether a line break ends it
   const makeLine = (t, start, hard, hyph, sx, sw) => {
@@ -2315,9 +2320,10 @@ function textLayout(o, obs) {
       else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
       else free.forEach(sl => {
         if (a >= para.length) return;
-        const c = takeLine(su, a, sl[1] - sl[0], bw);
+        const ind = a === 0 ? indent : 0;   // (only the first line of the paragraph is indented)
+        const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind);
         if (!c) return;
-        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0], sl[1] - sl[0]));
+        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
         a = c.end;
       });
       if (!row.length) { nextEmptyRow(); continue; }
@@ -2428,13 +2434,30 @@ function boxContains(o, p, pad) {
   const q = worldToBox(o, p.x, p.y), e = pad || 0;
   return q[0] >= -e && q[0] <= o.w + e && q[1] >= -e && q[1] <= o.h + e;
 }
-// A selected text can be picked anywhere in its box, not only on its letters, so the space between and
-// around them is not a dead zone. It only wins over what is under it: `under` is what the click hit
+// Where a text can be picked: one rectangle for each line, as wide as the line's text and as tall as the font (ascent to
+// descent), in the text's box coordinates. Between the letters and between the lines is the text; the empty room beside a short
+// line, a blank line, and the unused part of a text box are not, so a click there goes to whatever is behind.
+function textInkRects(lay) {
+  const out = [];
+  lay.lines.forEach(L => {
+    if (!L.text.trim()) return;
+    out.push({ x: rnd(L.x, 2), y: rnd(L.base - L.asc, 2), w: rnd(L.tw + L.hl + L.hr, 2), h: rnd(L.asc + L.desc, 2) });
+  });
+  if (!out.length) out.push({ x: 0, y: 0, w: rnd(lay.w, 2), h: rnd(lay.h, 2) });   // (a text with nothing but spaces, a new one being typed: all of its box, or it could not be picked)
+  return out;
+}
+// True when a page point is on a text: within pad (in the text's own units) of one of its lines
+function textInkContains(o, p, pad) {
+  const q = worldToBox(o, p.x, p.y), e = pad || 0;
+  return layoutText(o).hit.some(r => q[0] >= r.x - e && q[0] <= r.x + r.w + e && q[1] >= r.y - e && q[1] <= r.y + r.h + e);
+}
+// A selected text is easier to pick than one that is not: a hand's width around its lines counts, so it can be
+// dragged without aiming at the letters. It only wins over what is under it: `under` is what the click hit
 // (null for nothing), and anything drawn above the text still gets the click first.
 function textBoxAt(p, under) {
   for (let i = doc.objects.length - 1; i > (under ? doc.objects.indexOf(under) : -1); i--) {
     const o = doc.objects[i];
-    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && boxContains(o, p)) return o;
+    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && textInkContains(o, p, Math.max(o.size * 0.3, 4))) return o;
   }
   return null;
 }
@@ -3754,6 +3777,8 @@ function syncObjects() {
     const kids = v.node.kids.slice();
     if (hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'))
       kids.push({ tag: v.spec.tag, a: Object.assign({}, v.spec.a, { class: 'obj-hit', 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }) });
+    // A text is picked on its lines (see textInkRects): an invisible box over each, a little taller and wider than it, so the gaps between letters and lines are not dead
+    if (o.kind === 'text') { const pad = o.size * 0.1; layoutText(o).hit.forEach(r => kids.push({ tag: 'rect', a: { x: rnd(r.x - pad, 2), y: rnd(r.y - pad, 2), width: rnd(r.w + 2 * pad, 2), height: rnd(r.h + 2 * pad, 2), class: 'text-hit' } })); }
     patchKids(g, kids);
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
@@ -6031,7 +6056,7 @@ function updateInspector() {
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
-      $('#tx-hyph').disabled = !(o.bw > 0);   // (a word is only broken to fit a width)
+      $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);   // (a word is only broken to fit a width)
     }
     if (o.kind === 'polygon') {
       setNum($('#pg-sides'), o.sides); $('#pg-star').checked = !!o.star;
@@ -6168,6 +6193,7 @@ $('#tx-fixed').addEventListener('change', e => {
   refresh(o); commit();
 });
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
+onNum($('#tx-indent'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.indent = clamp(rnd(v, 2), 0, 20); else delete o.indent; });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
 // Text with a box flows around the selected shapes (see 04i-text-wrap.js); a folder's letters and shapes are all switched together
@@ -7037,6 +7063,7 @@ function sanitizeDoc(d) {
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right', 'justify'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
       if (Number.isFinite(+r.bw) && +r.bw > 0) o.bw = num(r.bw, 100, 1, 1e5);   // the width of a text wrapped to a box
+      if (Number.isFinite(+r.indent) && +r.indent > 0) o.indent = num(r.indent, 0, 0, 20);   // how far in each paragraph's first line starts, in ems
       if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin (all of their width)
       else if (typeof r.hang === 'number' && r.hang > 0) o.hang = num(r.hang, 1, 0.05, 1.5);   // (or just part of it)
       if (r.hyph === true) o.hyph = true;    // long words are broken with a hyphen
@@ -7693,7 +7720,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: text can wrap around shapes. Select a shape and tick "Text wraps around this"; any text with a fixed width flows around its outline, and Gap sets how far it keeps away. It follows circles, stars and drawn shapes, and works with photos and folders too.';
+const WHATS_NEW = 'New: an Indent setting for text with a fixed width indents the first line of every paragraph. Text is now picked on its lines, so a click in the empty room of a text box, or on a blank line, goes through to whatever is behind it.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

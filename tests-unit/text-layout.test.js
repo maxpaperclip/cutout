@@ -310,7 +310,7 @@ test('picking text by its box', async (t) => {
     return { m, text, under, above };
   }
 
-  await t.test('blank space inside a selected text picks the text, even over a shape beneath it', () => {
+  await t.test('the space around the letters of a selected text picks the text, even over a shape beneath it', () => {
     const { m, text, under } = scene();
     assert.equal(m.textBoxAt({ x: 190, y: 200 }, under), text);   // inside its box, but not on any letter
     assert.equal(m.textBoxAt({ x: 190, y: 200 }, null), text);
@@ -358,5 +358,59 @@ test('picking text by its box', async (t) => {
     m.doc.objects.push(t2); m.S.sel = new Set([t2.id]);
     assert.equal(t2.text, ' ');
     assert.equal(m.textBoxAt({ x: 40, y: 60 }, null), t2);
+  });
+});
+
+test('picking text on its lines, not on all of its box', async (t) => {
+  // a 3-line text: "ab", an empty line, "cd" (a character is 50 wide at size 100; a line slot is 120 tall)
+  function three(props) {
+    const { m, o } = setup(fakeFont(), Object.assign({ text: 'ab\n\ncd', x: 0, y: 0 }, props));
+    const under = m.newShape('rect', { x: -1000, y: -1000, w: 3000, h: 3000 });
+    m.doc.objects.length = 0; m.doc.objects.push(under, o);
+    m.S.sel = new Set([o.id]);
+    return { m, o, under };
+  }
+  await t.test('every line has one box of its own: as wide as its text, as tall as the font', () => {
+    const { m, o } = three();
+    const hit = plain(m.layoutText(o).hit);
+    assert.equal(hit.length, 2);   // the empty line has none
+    assert.deepEqual(hit.map(r => [r.x, r.w, r.h]), [[0, 100, 100], [0, 100, 100]]);
+    assert.ok(hit[1].y > hit[0].y + 100);
+  });
+  await t.test('the empty line and the room beside a short line let a click through, even when the text is selected', () => {
+    const { m, o, under } = three();
+    assert.equal(m.textInkContains(o, { x: 50, y: 60 }, 0), true);      // on "ab"
+    assert.equal(m.textInkContains(o, { x: 50, y: 180 }, 0), false);    // the empty middle line
+    assert.equal(m.textBoxAt({ x: 50, y: 180 }, under), null);
+    assert.equal(m.textInkContains(o, { x: 160, y: 60 }, 0), false);    // beside the short line
+    assert.equal(m.textBoxAt({ x: 400, y: 60 }, under), null);
+  });
+  await t.test('a selected text has a margin around its lines; it does not reach much further', () => {
+    const { m, o, under } = three();
+    assert.equal(m.textBoxAt({ x: 120, y: 60 }, under), o);     // a little beside "ab"
+    assert.equal(m.textBoxAt({ x: 250, y: 60 }, under), null);
+  });
+  await t.test('an area text that is mostly empty is only picked on its lines', () => {
+    const { m, o } = three({ text: 'ab', bw: 800, align: 'left' });
+    assert.equal(m.textInkContains(o, { x: 50, y: 50 }, 0), true);
+    assert.equal(m.textInkContains(o, { x: 600, y: 50 }, 0), false);
+  });
+  await t.test('it follows alignment: a centered short line is picked where it is', () => {
+    const { m, o } = three({ text: 'ab', bw: 800, align: 'center' });
+    assert.equal(m.textInkContains(o, { x: 50, y: 50 }, 0), false);
+    assert.equal(m.textInkContains(o, { x: 400, y: 50 }, 0), true);
+  });
+  await t.test('a turned text is picked on its turned lines', () => {
+    const { m, o } = three({ text: 'abcd', rot: 90, x: 0, y: 0 });   // 200 wide, 120 tall, turned about (100, 60): 120 wide, 200 tall
+    assert.equal(m.textInkContains(o, { x: 100, y: -30 }, 0), true);
+    assert.equal(m.textInkContains(o, { x: 100, y: 60 }, 0), true);
+    assert.equal(m.textInkContains(o, { x: 10, y: 60 }, 0), false);
+  });
+  await t.test('the hit boxes are in the layout, so they follow a change of the text', () => {
+    const { m, o } = three();
+    const a = m.layoutText(o).hit.length;
+    o.text = 'ab\ncd\nef'; m.refresh(o);
+    assert.equal(m.layoutText(o).hit.length, 3);
+    assert.equal(a, 2);
   });
 });
