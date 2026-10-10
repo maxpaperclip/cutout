@@ -17,7 +17,8 @@
    - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
      The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
      into words (L.slots says where) because the spaces are no longer the width the font gave them.
-   - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in.
+   - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in; with
+     o.noind1 the very first paragraph of the text is left out (as under a heading, in a book).
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
@@ -263,7 +264,7 @@ function textLayout(o, obs) {
       else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
       else free.forEach(sl => {
         if (a >= para.length) return;
-        const ind = a === 0 ? indent : 0;   // (only the first line of the paragraph is indented)
+        const ind = a === 0 && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so)
         const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind);
         if (!c) return;
         row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));

@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: an Indent setting for text with a fixed width indents the first line of every paragraph. Text is now picked on its lines, so a click in the empty room of a text box, or on a blank line, goes through to whatever is behind it.';
+const WHATS_NEW = 'New: "Don\u2019t indent the first paragraph" leaves the first paragraph of a text flush left while the ones after it keep their indent.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
