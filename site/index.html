@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.26.0</title>
+<title>FriendShaped v1.27.0</title>
 <style>
 
 :root{
@@ -145,6 +145,7 @@ input:disabled,select:disabled{opacity:.45}
 .ov-fill{fill:var(--accent-soft)}
 .handle{fill:var(--handle);stroke:var(--accent);stroke-width:1.5;vector-effect:non-scaling-stroke;pointer-events:all}
 .handle.rot{cursor:grab}
+.handle.edge{fill:transparent;stroke:none}
 [data-h="nw"],[data-h="se"]{cursor:nwse-resize}
 [data-h="ne"],[data-h="sw"]{cursor:nesw-resize}
 [data-h="n"],[data-h="s"]{cursor:ns-resize}
@@ -531,6 +532,7 @@ input:disabled,select:disabled{opacity:.45}
           </div>
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
+          <label class="f" id="wrap-hangamt" hidden><span style="white-space:nowrap">Hang %</span><input type="number" id="tx-hangamt" min="5" max="150" step="5" title="How much of each mark hangs out, in percent of its width. 100 hangs it completely; less leaves part of it inside."></label>
           <label class="inline" title="Break long words with a hyphen at the end of a line (English words, in a text with a fixed width)"><input type="checkbox" id="tx-hyph"> Hyphenate</label>
           <button class="btn line" id="tx-addfont">Add a font from your computer…</button>
           <button class="btn line" id="btn-breakapart" title="Turn each letter into its own shape, together in a new folder. Works on up to 100 letters. The text stops being editable (Undo brings it back).">Break apart into letters</button>
@@ -825,7 +827,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.26.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.27.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1441,7 +1443,7 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o);
@@ -2063,7 +2065,8 @@ const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
-     out into the margin so the letters line up (L.hl, L.hr = how far). Text with no box hangs too, but nothing wraps differently.
+     out into the margin so the letters line up (L.hl, L.hr = how far). true hangs them the whole of their width; a number is how much of
+     it (0.5 = half; see hangFactor). Text with no box hangs too, but nothing wraps differently.
    ===================================================================== */
 
 /* ---------- one line: where each character starts ---------- */
@@ -2133,11 +2136,15 @@ const isHyphenLike = c => c === '-' || c === '‐' || c === '–' || c === '—'
 // and hyphens at the end of one. Dashes longer than a hyphen are left in place: hanging them looks like a mistake.
 const HANG_START = new Set(['"', "'", '“', '‘', '„', '‚', '«', '‹']);
 const HANG_END = new Set(['"', "'", '”', '’', '»', '›', '-', '‐', '–']);
+// How much of its width a hanging mark hangs: 0 (nothing hangs) up to HANG_MAX; o.hang === true means all of it
+const HANG_MAX = 1.5;
+const hangFactor = o => o.hang === true ? 1 : o.hang > 0 ? Math.min(+o.hang, HANG_MAX) : 0;
 // How far the first and the last mark of a piece of text (t[a..e), xs as for breakLines) hang. hyw: the width of the hyphen the
-// layout adds at the end (it always hangs). The two never hang the same mark.
-function hangOf(t, xs, a, e, hyw) {
-  const l = a < e && HANG_START.has(t[a]) ? xs[a + 1] - xs[a] : 0;
-  const r = hyw ? hyw : e - 1 > a && HANG_END.has(t[e - 1]) ? xs[e] - xs[e - 1] : 0;
+// layout adds at the end (it always hangs). The two never hang the same mark. f: how much of each mark's width (1 = all of it)
+function hangOf(t, xs, a, e, hyw, f) {
+  const k = f === undefined ? 1 : f;
+  const l = a < e && HANG_START.has(t[a]) ? (xs[a + 1] - xs[a]) * k : 0;
+  const r = hyw ? hyw * k : e - 1 > a && HANG_END.has(t[e - 1]) ? (xs[e] - xs[e - 1]) * k : 0;
   return { l, r };
 }
 // Where one paragraph (t, with xs[i] = the x before character i, and xs[t.length] its end) is cut into lines for a box
@@ -2147,7 +2154,7 @@ function hangOf(t, xs, a, e, hyw) {
 // that hang out into the margin do not count toward the width. A word too long for a line of its own is cut where the box is full
 // (that is also how a text with no spaces, in Chinese for one, wraps). Every line has at least one character.
 function breakLinesEx(t, xs, bw, opt) {
-  const n = t.length, out = [], eps = 1e-6, hy = opt && opt.hy, hang = !!(opt && opt.hang);
+  const n = t.length, out = [], eps = 1e-6, hy = opt && opt.hy, hang = opt && opt.hang ? (opt.hang === true ? 1 : opt.hang) : 0;
   let a = 0;
   while (a < n) {
     let best = -1, bestHy = 0;
@@ -2158,7 +2165,7 @@ function breakLinesEx(t, xs, bw, opt) {
       let e = p;
       while (e > a && isBreakSpace(t[e - 1])) e--;   // (the spaces at the end of a line do not count)
       let wd = xs[e] - xs[a] + hw;
-      if (hang) { const h = hangOf(t, xs, a, e, hw); wd -= h.l + h.r; }
+      if (hang) { const h = hangOf(t, xs, a, e, hw, hang); wd -= h.l + h.r; }
       if (wd <= bw + eps) { best = p; bestHy = hw; } else break;
     }
     if (best < 0) {
@@ -2196,7 +2203,7 @@ function wrapPlan(o, runs, text, para, ps, bw) {
   const m = runs ? runLine(o, runs, para, ps, text.length).m : lineMetrics(fontOf(o.font), o.font, o.size, o.ls || 0, para);
   const places = o.hyph ? hyphenPlaces(o, runs, para, ps) : null;
   const hyw = places ? new Map(Array.from(places, ([k, v]) => [k, v.w])) : null;
-  return breakLinesEx(para, m.xs, bw, { hy: hyw, hang: !!o.hang }).map(c => ({ end: c.end, hy: c.hy ? places.get(c.end) : null }));
+  return breakLinesEx(para, m.xs, bw, { hy: hyw, hang: hangFactor(o) }).map(c => ({ end: c.end, hy: c.hy ? places.get(c.end) : null }));
 }
 const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, ps, bw).map(c => c.end);
 
@@ -2226,7 +2233,7 @@ function textLayout(o) {
     cuts.forEach((c, k) => { pieces.push({ t: para.slice(a, c.end), start: ps + a, hard: k === cuts.length - 1, hy: c.hy }); a = c.end; });
     ps += para.length + 1;   // (the line break counts as a character)
   });
-  const hang = !!o.hang, justify = o.align === 'justify' && bw > 0;
+  const hang = hangFactor(o), justify = o.align === 'justify' && bw > 0;
   const lines = pieces.map((pc, i) => {
     const t = pc.t, start = pc.start;
     let r;
@@ -2238,7 +2245,7 @@ function textLayout(o) {
     let te = t.length;
     if (bw) while (te > 0 && isBreakSpace(t[te - 1])) te--;
     let m = r.m, hy = null, slots = null, gap = 0;
-    const hw = pc.hy ? pc.hy.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw) : { l: 0, r: 0 };
+    const hw = pc.hy ? pc.hy.w : 0, hg = hang ? hangOf(t, m.xs, 0, te, hw, hang) : { l: 0, r: 0 };
     let tw = (bw ? m.xs[te] : m.width) + hw - hg.l - hg.r;
     if (justify && !pc.hard) {   // stretch the spaces between words until the line (less what hangs) is as wide as the box
       let f0 = 0;
@@ -3614,6 +3621,8 @@ function drawOverlay() {
       const c = centerOf(o);
       const g = svgEl('g', { transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null });
       g.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line' }));
+      // The whole of the left and right edge of a text wrapped to a box changes its width, not only the square handle (drawn first, so the handles on top win)
+      if (o.kind === 'text' && o.bw > 0) ['w', 'e'].forEach(n => g.appendChild(svgEl('rect', { x: o.x + (n === 'e' ? o.w : 0) - 6 / z, y: o.y, width: 12 / z, height: o.h, class: 'handle edge', 'data-h': n })));
       const names = o.kind === 'text' && o.bw > 0 ? ['nw', 'ne', 'e', 'se', 'sw', 'w'] : keepsRatio(o) ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       names.forEach(n => {
         const hx = n.includes('e') ? 1 : n.includes('w') ? 0 : 0.5, hy = n.includes('s') ? 1 : n.includes('n') ? 0 : 0.5;
@@ -5811,6 +5820,7 @@ function updateInspector() {
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
+      $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
       $('#tx-hyph').disabled = !(o.bw > 0);   // (a word is only broken to fit a width)
     }
     if (o.kind === 'polygon') {
@@ -5947,7 +5957,8 @@ $('#tx-fixed').addEventListener('change', e => {
   if (e.target.checked) fixTextWidth(o); else { delete o.bw; if (o.align === 'justify') o.align = 'left'; }
   refresh(o); commit();
 });
-$('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); });
+$('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
+onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
 $('#tx-addfont').addEventListener('click', () => $('#file-font').click());
 $('#file-font').addEventListener('change', async e => {
@@ -6803,7 +6814,8 @@ function sanitizeDoc(d) {
       o.size = num(r.size, 64, 4, 1200); o.align = ['left', 'center', 'right', 'justify'].indexOf(r.align) >= 0 ? r.align : 'left';
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
       if (Number.isFinite(+r.bw) && +r.bw > 0) o.bw = num(r.bw, 100, 1, 1e5);   // the width of a text wrapped to a box
-      if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin
+      if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin (all of their width)
+      else if (typeof r.hang === 'number' && r.hang > 0) o.hang = num(r.hang, 1, 0.05, 1.5);   // (or just part of it)
       if (r.hyph === true) o.hyph = true;    // long words are broken with a hyphen
       const runs = sanitizeRuns(r.runs, o.text.length, k => !!fonts[k]);   // letters set apart from the rest
       if (runs) o.runs = runs;
@@ -7458,7 +7470,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: text can be justified, and long words can be hyphenated where a line breaks. "Hang quotes and hyphens" pushes them a little into the margin so the letters line up. These work on text with a fixed width: drag a box with the Text tool, or tick "Fixed width".';
+const WHATS_NEW = 'New: grab a wrapped text box anywhere along its left or right side to change its width, not only at the little square. "Hang quotes and hyphens" now has a Hang % setting, so you can hang them all the way out or just part of the way.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

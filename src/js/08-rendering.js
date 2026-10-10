@@ -111,6 +111,8 @@ function drawOverlay() {
       const c = centerOf(o);
       const g = svgEl('g', { transform: o.rot ? 'rotate(' + o.rot + ' ' + c.x + ' ' + c.y + ')' : null });
       g.appendChild(svgEl('rect', { x: o.x, y: o.y, width: o.w, height: o.h, class: 'ov-line' }));
+      // The whole of the left and right edge of a text wrapped to a box changes its width, not only the square handle (drawn first, so the handles on top win)
+      if (o.kind === 'text' && o.bw > 0) ['w', 'e'].forEach(n => g.appendChild(svgEl('rect', { x: o.x + (n === 'e' ? o.w : 0) - 6 / z, y: o.y, width: 12 / z, height: o.h, class: 'handle edge', 'data-h': n })));
       const names = o.kind === 'text' && o.bw > 0 ? ['nw', 'ne', 'e', 'se', 'sw', 'w'] : keepsRatio(o) ? ['nw', 'ne', 'se', 'sw'] : ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'];
       names.forEach(n => {
         const hx = n.includes('e') ? 1 : n.includes('w') ? 0 : 0.5, hy = n.includes('s') ? 1 : n.includes('n') ? 0 : 0.5;

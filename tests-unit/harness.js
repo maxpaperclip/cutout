@@ -73,7 +73,7 @@ const EXPORT_NAMES = [
   // 04f-text-layout.js
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
   'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
-  'breakLines', 'breakLinesEx', 'wrapCuts', 'wrapPlan', 'hangOf', 'isBreakSpace',
+  'breakLines', 'breakLinesEx', 'wrapCuts', 'wrapPlan', 'hangOf', 'hangFactor', 'HANG_MAX', 'isBreakSpace',
   // 04h-hyphenation.js
   'hyphenPoints', 'HYPH_LEFT_MIN', 'HYPH_RIGHT_MIN', 'HYPH_WORD_MIN',
   // 04g-text-runs.js

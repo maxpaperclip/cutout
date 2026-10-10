@@ -205,6 +205,21 @@ test('optical margins: quotes and hyphens hang into the margin', async (t) => {
     assert.equal(l0.x, -5);
     assert.ok(Math.abs(l0.tw - 30) < 1e-9);
   });
+  await t.test('a number says how much of a mark hangs', () => {
+    const half = setup({ text: '"ab-', hang: 0.5 }).lay().lines[0];
+    assert.equal(half.hl, 2.5); assert.equal(half.hr, 2.5);
+    assert.equal(half.tw, 20 - 5);
+    assert.equal(setup({ text: '"ab-', hang: 0 }).lay().lines[0].hl, 0);
+    assert.equal(setup({ text: '"ab-', hang: 9 }).lay().lines[0].hl, 7.5);   // (no more than 150%)
+    assert.equal(setup({ text: '"ab-', hang: true }).lay().lines[0].hl, 5);
+    const L = setup({ text: 'hyphenation', bw: 30, hyph: true, hang: 0.5 }).lay();   // the added hyphen counts for the half that stays in
+    assert.equal(L.lines[0].hr, 2.5);
+  });
+  await t.test('a different amount is a different layout', () => {
+    const a = setup({ text: '"ab', hang: 1 }), b = setup({ text: '"ab', hang: 0.5 });
+    assert.notEqual(a.m.layoutText(a.o), b.m.layoutText(b.o));
+    assert.notEqual(a.m.layoutText(a.o).d, b.m.layoutText(b.o).d);
+  });
   await t.test('the layout cache tells hanging and hyphenating texts apart', () => {
     const a = setup({ text: '"ab', hang: true }), b = setup({ text: '"ab' });
     assert.notEqual(a.m.layoutText(a.o), b.m.layoutText(b.o));
@@ -218,6 +233,13 @@ test('the new settings in the rest of the editor', async (t) => {
     const back = m.sanitizeDoc(JSON.parse(m.docJSON(m.doc))).objects[0];
     assert.equal(back.align, 'justify'); assert.equal(back.hang, true); assert.equal(back.hyph, true); assert.equal(back.bw, 60);
     assert.equal(back.w, 60);
+  });
+  await t.test('a part-way hang is saved too, and a silly amount is kept in range', () => {
+    const { m, o } = setup({ text: '"ab', hang: 0.4 });
+    m.doc.objects.push(o);
+    assert.equal(m.sanitizeDoc(JSON.parse(m.docJSON(m.doc))).objects[0].hang, 0.4);
+    const d = m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, hang: 99 }, { kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, hang: -2 }] });
+    assert.equal(d.objects[0].hang, 1.5); assert.equal(d.objects[1].hang, undefined);
   });
   await t.test('a drawing without them opens as before', () => {
     const { m } = setup({});
