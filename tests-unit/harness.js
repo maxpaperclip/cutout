@@ -39,6 +39,8 @@ const MODULE_FILES = [
   '04e-eyedrop.js',
   '04f-text-layout.js',
   '04g-text-runs.js',
+  '04h-hyphen-data.js',
+  '04h-hyphenation.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '06b-break-apart.js',
@@ -72,6 +74,8 @@ const EXPORT_NAMES = [
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
   'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
   'breakLines', 'wrapCuts', 'isBreakSpace',
+  // 04h-hyphenation.js
+  'hyphenPoints', 'HYPH_LEFT_MIN', 'HYPH_RIGHT_MIN', 'HYPH_WORD_MIN',
   // 04g-text-runs.js
   'normRuns', 'runStyleAt', 'runSlices', 'runsApply', 'runsSplice', 'runsForEdit', 'setTextValue', 'textStyleAt',
   'runAttrsFor', 'applyTextStyle', 'applyWholeStyle', 'textUsesFont', 'textFonts', 'sanitizeRuns',
