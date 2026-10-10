@@ -71,6 +71,7 @@ const EXPORT_NAMES = [
   // 04f-text-layout.js
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
   'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
+  'breakLines', 'wrapCuts', 'isBreakSpace',
   // 04g-text-runs.js
   'normRuns', 'runStyleAt', 'runSlices', 'runsApply', 'runsSplice', 'runsForEdit', 'setTextValue', 'textStyleAt',
   'runAttrsFor', 'applyTextStyle', 'applyWholeStyle', 'textUsesFont', 'textFonts', 'sanitizeRuns',
