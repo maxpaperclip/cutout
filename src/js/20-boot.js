@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: drag a box with the Text tool to make text that wraps inside it. Drag the box\u2019s side handles to change its width and the words wrap again; a plain click still makes text as wide as its words.';
+const WHATS_NEW = 'New: text can be justified, and long words can be hyphenated where a line breaks. "Hang quotes and hyphens" pushes them a little into the margin so the letters line up. These work on text with a fixed width: drag a box with the Text tool, or tick "Fixed width".';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
