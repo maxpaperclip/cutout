@@ -343,7 +343,7 @@ function scaledPathD(nat, w, h) {
    restored. Text layout is the slow part, so recent layouts are kept here. */
 const textLayouts = new Map();
 function layoutText(o) {
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o);
