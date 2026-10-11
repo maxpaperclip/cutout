@@ -6,7 +6,12 @@ let psn = null;   // the live perspective session (see the Perspective section)
 const pointers = new Map();
 const MIN = 2;
 const snapV = v => S.snap ? Math.round(v / S.grid) * S.grid : v;
-const snapPt = p => ({ x: snapV(p.x), y: snapV(p.y) });
+// The column and baseline grids (04j-grids.js) pull a point that comes within a few screen pixels of one of their lines onto it;
+// elsewhere the pixel grid decides, as before. Columns pull sideways (x) and baselines up and down (y).
+const guideTol = () => 8 / view.z;
+const snapX = v => { const g = nearGuide(doc, 'x', v, guideTol()); return g !== null ? g : snapV(v); };
+const snapY = v => { const g = nearGuide(doc, 'y', v, guideTol()); return g !== null ? g : snapV(v); };
+const snapPt = p => ({ x: snapX(p.x), y: snapY(p.y) });
 function toWorld(e) { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.z, y: (e.clientY - r.top - view.y) / view.z }; }
 
 /* ---------- tools ----------
@@ -172,7 +177,13 @@ function updateMove(p, e) {
   let dx = p.x - drag.start.x, dy = p.y - drag.start.y;
   if (e.shiftKey && !drag.shift) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
   const a = drag.orig[0];
-  if (a && S.snap) { dx = snapV(a.x + dx) - a.x; dy = snapV(a.y + dy) - a.y; }
+  if (a) {
+    // A grid line wins when the object's near edge or far edge is close to one; otherwise the pixel grid moves its corner, as before
+    const o0 = byId(a.id), tol = guideTol();
+    const gx = o0 ? guideShift(doc, 'x', a.x + dx, a.x + dx + o0.w, tol) : null, gy = o0 ? guideShift(doc, 'y', a.y + dy, a.y + dy + o0.h, tol) : null;
+    if (gx !== null) dx += gx; else if (S.snap) dx = snapV(a.x + dx) - a.x;
+    if (gy !== null) dy += gy; else if (S.snap) dy = snapV(a.y + dy) - a.y;
+  }
   drag.orig.forEach(s => {
     const o = byId(s.id); if (!o) return;
     o.x = s.x + dx; o.y = s.y + dy;
@@ -377,7 +388,7 @@ function updateLineEnd(p, e) {
 function updateResize(p, e) {
   const o = byId(drag.id); if (!o) return;
   const o0 = drag.o0, hn = drag.h;
-  if (S.snap && !o0.rot) p = snapPt(p);
+  if ((S.snap || gridSnapOn(doc)) && !o0.rot) p = snapPt(p);
   const c0 = { x: o0.x + o0.w / 2, y: o0.y + o0.h / 2 };
   const q = rotPt(p.x, p.y, c0.x, c0.y, -o0.rot), ux = q.x - c0.x, uy = q.y - c0.y;
   const hx = hn.includes('e') ? 1 : hn.includes('w') ? 0 : 0.5, hy = hn.includes('s') ? 1 : hn.includes('n') ? 0 : 0.5;

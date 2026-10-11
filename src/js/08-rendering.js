@@ -67,6 +67,30 @@ function drawArtboard() {
   setA(gridPath, 'd', 'M' + S.grid + ' 0H0V' + S.grid);
   setA(gridPath, 'stroke-width', rnd(1 / view.z, 4));
   setA(outside, 'd', 'M-100000 -100000H100000V100000H-100000Z M0 0V' + doc.h + 'H' + doc.w + 'V0Z');
+  drawGrids();
+}
+
+/* The column grid (thin dashed vertical lines) and the baseline grid (thin dashed horizontal lines), see 04j-grids.js.
+   They sit over the objects but take no clicks (pointer-events: none) and are only here, never in an export.
+   The lines are two paths; their geometry is only rebuilt when a setting or the page size changes (not on every zoom). */
+const gridCols = $('#grid-cols'), gridBase = $('#grid-base');
+let gridDrawn = '';
+function drawGrids() {
+  const g = gridsOf(doc), z = view.z, sw = rnd(1 / z, 4), dash = rnd(5 / z, 3) + ' ' + rnd(4 / z, 3);
+  const key = JSON.stringify([g, doc.w, doc.h]);
+  if (key !== gridDrawn) {
+    gridDrawn = key;
+    setA(gridCols, 'd', g.columns.show ? columnGridPath(g.columns, doc.w, doc.h) : '');
+    setA(gridBase, 'd', g.baseline.show ? baselineGridPath(g.baseline, doc.w, doc.h) : '');
+  }
+  setA(gridCols, 'display', g.columns.show ? null : 'none');
+  setA(gridCols, 'stroke', g.columns.color); setA(gridCols, 'stroke-opacity', g.columns.opacity);
+  setA(gridCols, 'stroke-width', sw); setA(gridCols, 'stroke-dasharray', dash);
+  // lines closer together than a few screen pixels are only a smear, so they are left out while zoomed far out (like the pixel grid)
+  const tooTight = g.baseline.show && baselineRange(g.baseline, doc.h).step * z < 3;
+  setA(gridBase, 'display', g.baseline.show && !tooTight ? null : 'none');
+  setA(gridBase, 'stroke', g.baseline.color); setA(gridBase, 'stroke-opacity', g.baseline.opacity);
+  setA(gridBase, 'stroke-width', sw); setA(gridBase, 'stroke-dasharray', dash);
 }
 function applyView() {
   setA(world, 'transform', 'translate(' + rnd(view.x, 2) + ' ' + rnd(view.y, 2) + ') scale(' + rnd(view.z, 5) + ')');

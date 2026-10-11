@@ -8,6 +8,7 @@ function sanitizeDoc(d) {
   const col = (v, def) => (v === 'none' || (typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v))) ? v : def;
   out.w = num(d.w, 800, 16, 8000); out.h = num(d.h, 600, 16, 8000);
   out.bg = d.bg === 'transparent' ? 'transparent' : col(d.bg, '#ffffff');
+  if (d.grids && typeof d.grids === 'object') out.grids = sanitizeGrids(d.grids);   // column and baseline grids (see 04j-grids.js)
   let missingFont = false, missingPhoto = false;
   // Groups get new ids, like objects do; gmap turns a file's group id into the new group
   const gmap = new Map(), has = v => v !== null && v !== undefined && gmap.has(+v);

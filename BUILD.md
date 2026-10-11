@@ -44,6 +44,7 @@ src/
     04h-hyphen-data.js  English hyphenation patterns (generated from TeX's hyph-en-us.tex; carries the copyright notice that must stay with it). Data only
     04h-hyphenation.js  hyphenPoints(word): where an English word may be broken (Liang's method; no DOM, unit tested)
     04i-text-wrap.js    Text wrapping around shapes: the outline of every shape with o.wrap, cut to a row, gives the stretches of a text box that are free (wrapObstacles, wrapFree; textLayout fills them in turn); wrapSyncAll lays texts out again when a shape moves (paper.js only, unit tested)
+    04j-grids.js        Column grid and baseline grid (doc.grids): defaults, sanitizing, where the lines are, their SVG paths, and snapping to them (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     06b-break-apart.js  Break apart: a text becomes one plain shape per letter, in a new folder (no DOM, unit tested)
@@ -287,6 +288,36 @@ you were using, and goes back to it after a pick, Esc or Cancel.
 - A pick fills the field the dropper was started from by setting its value and sending the same `input` and
   `change` events a person's own choice sends, so each field's existing code applies it and records one undo step.
 - A spot with nothing there (outside the page, or an empty page with no color) picks nothing and keeps the tool.
+
+## How grids work
+
+The Page tab has three grids. The **pixel grid** is the old square one: `S.showGrid`, `S.snap` and `S.grid` live in the session,
+not in the drawing. The **column grid** and the **baseline grid** belong to the drawing: `doc.grids = { columns, baseline }`
+(`04j-grids.js`), so they are saved in project files and autosave, and every change is one undo step. A drawing that never
+used them has no `doc.grids`; `gridsOf(doc)` always returns a complete, clamped copy (both grids off), and `sanitizeGrids`
+is what `sanitizeDoc` uses when a file is opened.
+
+- **They are not objects.** They are never in `doc.objects`, so they can't be selected, don't show in Layers and can't reach
+  an export (`buildSVG` only draws objects). On the canvas they are two `<path>`s in `#grids` (over the objects, under the
+  selection handles) with `pointer-events: none`, so clicks go through them. `drawGrids` (`08-rendering.js`) draws them: thin
+  (1 screen pixel) and dashed whatever the zoom, and the path geometry is only rebuilt when a setting or the page size changes.
+  Baselines closer than 3 screen pixels are left out while zoomed far out.
+- **Percentages.** Column margins (`left`, `right`) and the `gutter` are a % of the page width; baseline `top` and `bottom`
+  (where the grid begins and ends) are a % of the page height. So resizing the page re-spreads the grid. The baseline's spacing
+  is absolute because it is a type size: `size` x `lh`, the same two numbers a text has (`o.size`, `o.lh`).
+  `sanitizeGrids` keeps margins and gutters from squeezing the columns to nothing.
+- **Transparency.** The panel's slider shows transparency; the drawing keeps opacity (`1 - transparency`).
+- **Snapping.** "Snap to columns" pulls x to a column edge and "Snap to baselines" pulls y to a line, only while that grid is
+  showing. A grid line wins when a point (drawing, resizing) or the near or far edge of a moved object is within 8 screen
+  pixels of it (`nearGuide`, `guideShift`; `snapX`, `snapY` and `updateMove` in `09-pointer-interaction.js`); anywhere else the
+  pixel grid decides, as before. An object's own box is snapped, not the baseline of its text.
+- **Match baseline grid.** A button in the Design tab's Text section (`#tx-tobase`, `13-inspector.js`) sets the selected text's size and
+  line height to the baseline grid's with `applyWholeStyle`, so its lines are one grid line apart (a line is `size x lh` tall, which is
+  exactly the baseline's spacing). It is the same as typing the two numbers into Size and Lines for the whole text: letters that had a
+  size or line height of their own are brought back to it. Its label shows the two numbers, and it is off when the text already has them
+  (or is locked). The baseline's size (4 to 400 px) and line height (0.6 to 3) are limited to what a text can be, so a text can always match.
+- **Shortcut.** Ctrl+' (Cmd+' on a Mac) shows or hides the grids that are on (`toggleGrids`, `15-page-tab.js`). It remembers which they
+  were until the page is reloaded, and with none on it shows the column grid. Like the checkboxes, each use is one undo step.
 
 ## How in-place text editing works
 

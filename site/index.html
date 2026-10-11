@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.32.1</title>
+<title>FriendShaped v1.33.0</title>
 <style>
 
 :root{
@@ -426,6 +426,10 @@ input:disabled,select:disabled{opacity:.45}
         <rect id="ab-bg" x="0" y="0" width="800" height="600" fill="#fff"/>
         <rect id="grid-rect" x="0" y="0" width="800" height="600" fill="url(#gridpat)" pointer-events="none"/>
         <g id="layer"></g>
+        <g id="grids" pointer-events="none" aria-hidden="true" style="user-select:none">
+          <path id="grid-cols" fill="none" stroke-linecap="butt" display="none"/>
+          <path id="grid-base" fill="none" stroke-linecap="butt" display="none"/>
+        </g>
         <path id="outside" class="outside" fill-rule="evenodd"/>
         <rect id="ab-frame" x="0" y="0" width="800" height="600" fill="none" stroke="#7b83b0" stroke-opacity=".5" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>
         <g id="overlay"></g>
@@ -531,6 +535,7 @@ input:disabled,select:disabled{opacity:.45}
               <button data-align="justify" title="Justify: stretch the spaces so every line but the last fills the width of the text" aria-label="Justify"><span class="ico" data-icon="tjustify"></span></button>
             </div>
           </div>
+          <button class="btn line" id="tx-tobase">Match baseline grid</button>
           <label class="f"><span style="white-space:nowrap;width:68px">Para space</span><input type="number" id="tx-pspace" min="0" max="10" step="0.1" title="Extra room between paragraphs (after each line break), in ems: one em is the size of the text. 0 is none."></label>
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
@@ -743,12 +748,52 @@ input:disabled,select:disabled{opacity:.45}
         </div>
       </section>
       <section class="sec">
-        <h3>Grid</h3>
+        <h3>Pixel grid</h3>
         <div class="stack">
           <label class="inline"><input type="checkbox" id="grid-show"> Show grid</label>
           <label class="inline"><input type="checkbox" id="grid-snap"> Snap to grid</label>
           <label class="f"><span style="width:56px">Spacing</span><input type="number" id="grid-size" min="2" max="200" step="1"></label>
         </div>
+      </section>
+      <section class="sec">
+        <h3>Column grid</h3>
+        <div class="stack">
+          <label class="inline" title="Ctrl+' shows or hides the grids"><input type="checkbox" id="cg-show"> Show column grid</label>
+          <label class="inline"><input type="checkbox" id="cg-snap"> Snap to columns</label>
+          <div class="grid2">
+            <label class="f"><span style="width:56px">Columns</span><input type="number" id="cg-count" min="1" max="24" step="1" aria-label="Number of columns"></label>
+            <label class="f"><span style="width:56px">Gutter %</span><input type="number" id="cg-gutter" min="0" max="20" step="0.5" aria-label="Gutter between columns, percent of the page width"></label>
+            <label class="f"><span style="width:56px">Left %</span><input type="number" id="cg-left" min="0" max="45" step="0.5" aria-label="Left margin, percent of the page width"></label>
+            <label class="f"><span style="width:56px">Right %</span><input type="number" id="cg-right" min="0" max="45" step="0.5" aria-label="Right margin, percent of the page width"></label>
+          </div>
+          <div class="row">
+            <span class="lbl" style="width:78px">Transparency</span>
+            <input type="range" id="cg-trans" min="0" max="90" step="1" aria-label="Column grid transparency">
+            <output id="cg-trans-val" style="flex:none;width:34px;text-align:right;color:var(--ink-3);font-size:12px"></output>
+            <input type="color" id="cg-color" aria-label="Column grid line color">
+          </div>
+        </div>
+        <p class="help">Margins, gutters and columns are percentages of the page, so the grid stretches when the page size changes.</p>
+      </section>
+      <section class="sec">
+        <h3>Baseline grid</h3>
+        <div class="stack">
+          <label class="inline" title="Ctrl+' shows or hides the grids"><input type="checkbox" id="bl-show"> Show baseline grid</label>
+          <label class="inline"><input type="checkbox" id="bl-snap"> Snap to baselines</label>
+          <div class="grid2">
+            <label class="f"><span style="width:56px">Font size</span><input type="number" id="bl-size" min="4" max="400" step="1" aria-label="Font size in pixels"></label>
+            <label class="f"><span style="width:56px">Line ht.</span><input type="number" id="bl-lh" min="0.6" max="3" step="0.05" aria-label="Line height, a multiple of the font size"></label>
+            <label class="f"><span style="width:56px">Top %</span><input type="number" id="bl-top" min="0" max="45" step="0.5" aria-label="Where the grid begins, percent of the page height from the top"></label>
+            <label class="f"><span style="width:56px">Bottom %</span><input type="number" id="bl-bottom" min="0" max="45" step="0.5" aria-label="Where the grid ends, percent of the page height from the bottom"></label>
+          </div>
+          <div class="row">
+            <span class="lbl" style="width:78px">Transparency</span>
+            <input type="range" id="bl-trans" min="0" max="90" step="1" aria-label="Baseline grid transparency">
+            <output id="bl-trans-val" style="flex:none;width:34px;text-align:right;color:var(--ink-3);font-size:12px"></output>
+            <input type="color" id="bl-color" aria-label="Baseline grid line color">
+          </div>
+        </div>
+        <p class="help" id="bl-info"></p>
       </section>
       <section class="sec">
         <h3>Photos and saving</h3>
@@ -758,7 +803,7 @@ input:disabled,select:disabled{opacity:.45}
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
-        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · B pen · N pencil · T text · D perspective.<br>With the pen, click for corners and drag for curves; click the first point to close, or press Enter to finish. Double-click a shape (or press Enter) to edit its points.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
+        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · B pen · N pencil · T text · D perspective.<br>With the pen, click for corners and drag for curves; click the first point to close, or press Enter to finish. Double-click a shape (or press Enter) to edit its points.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.<br>Ctrl+' (Cmd+' on a Mac) shows or hides the column and baseline grids.</p>
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>
@@ -839,7 +884,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.32.1';   // filled in by build.js from package.json
+const APP_VERSION = '1.33.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -3112,6 +3157,127 @@ function wrapSyncAll() {
   return changed;
 }
 /* =====================================================================
+   Grids: a column grid and a baseline grid (no DOM, unit tested)
+   They are kept on the drawing (doc.grids), so they are saved with it, come back with Undo and
+   Redo, and belong to that page. They are not objects: they are never in doc.objects, so they
+   can't be selected, don't show in Layers and are never exported (see drawGrids in 08-rendering.js).
+
+     doc.grids = { columns: {...}, baseline: {...} }     (absent until a setting is changed)
+
+   Everything that is a position or a width is a PERCENTAGE of the page (of its width for the
+   columns, of its height for the baseline margins), so the grid stretches with the page when its
+   size changes. Only the baseline's own spacing is absolute, because it is a type size:
+   spacing = font size x line height, the same two numbers a text has (o.size, o.lh).
+
+     columns:  show, snap, count (1-24), gutter (% of the width), left, right (margins, % of the width),
+               color, opacity (0.1-1; the panel shows it as transparency)
+     baseline: show, snap, size (px), lh (a multiple of the size), top, bottom (where the grid
+               begins and ends, % of the height), color, opacity
+               (size and lh keep to the limits of a text's own size and line height, 4+ px and 0.6-3, so any text can be set to match)
+   ===================================================================== */
+const GRID_DEFAULTS = {
+  columns: { show: false, snap: false, count: 12, gutter: 2, left: 5, right: 5, color: '#e5457a', opacity: 0.5 },
+  baseline: { show: false, snap: false, size: 16, lh: 1.5, top: 5, bottom: 5, color: '#2f8fe0', opacity: 0.5 }
+};
+const GRID_MAX_LINES = 5000;   // however small the spacing, a baseline grid never draws more lines than this
+
+const gridNum = (v, def, a, b) => { v = +v; return Number.isFinite(v) ? Math.min(b, Math.max(a, v)) : def; };
+const gridRound = (v, n) => { const k = Math.pow(10, n); return Math.round(v * k) / k; };
+
+// Any grids setting (a file's, or one being edited) made complete and safe: every value present and in range
+function sanitizeGrids(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const c = r.columns && typeof r.columns === 'object' ? r.columns : {};
+  const b = r.baseline && typeof r.baseline === 'object' ? r.baseline : {};
+  const D = GRID_DEFAULTS, hex = (v, def) => typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : def;
+  const cols = {
+    show: !!c.show, snap: !!c.snap,
+    count: Math.round(gridNum(c.count, D.columns.count, 1, 24)),
+    gutter: gridNum(c.gutter, D.columns.gutter, 0, 20),
+    left: gridNum(c.left, D.columns.left, 0, 45), right: gridNum(c.right, D.columns.right, 0, 45),
+    color: hex(c.color, D.columns.color), opacity: gridNum(c.opacity, D.columns.opacity, 0.1, 1)
+  };
+  cols.right = Math.min(cols.right, 90 - cols.left);   // the margins leave at least a tenth of the page
+  // and the gutters leave the columns some width: together at least a tenth of what the margins leave
+  if (cols.count > 1) cols.gutter = Math.min(cols.gutter, (100 - cols.left - cols.right) * 0.9 / (cols.count - 1));
+  ['gutter', 'left', 'right'].forEach(k => { cols[k] = gridRound(cols[k], 2); });
+  cols.opacity = gridRound(cols.opacity, 2);
+  const base = {
+    show: !!b.show, snap: !!b.snap,
+    size: gridNum(b.size, D.baseline.size, 4, 400), lh: gridNum(b.lh, D.baseline.lh, 0.6, 3),
+    top: gridNum(b.top, D.baseline.top, 0, 45), bottom: gridNum(b.bottom, D.baseline.bottom, 0, 45),
+    color: hex(b.color, D.baseline.color), opacity: gridNum(b.opacity, D.baseline.opacity, 0.1, 1)
+  };
+  base.bottom = Math.min(base.bottom, 90 - base.top);
+  ['size', 'lh', 'top', 'bottom', 'opacity'].forEach(k => { base[k] = gridRound(base[k], 2); });
+  return { columns: cols, baseline: base };
+}
+// The grids of a drawing, always complete (a drawing that never set any gets the defaults, with both off)
+const gridsOf = d => sanitizeGrids(d && d.grids);
+
+/* ---------- columns ---------- */
+// Each column's left edge and width, in page units, for a page w wide
+function columnBoxes(c, w) {
+  const L = w * c.left / 100, R = w * c.right / 100, gut = w * c.gutter / 100, n = c.count;
+  const cw = (w - L - R - gut * (n - 1)) / n, out = [];
+  for (let i = 0; i < n; i++) out.push({ x: L + i * (cw + gut), w: cw });
+  return out;
+}
+// Every x where a column starts or ends, left to right (with no gutter, neighbours share an edge: listed once)
+function columnEdges(c, w) {
+  const out = [];
+  columnBoxes(c, w).forEach(b => [b.x, b.x + b.w].forEach(x => { x = gridRound(x, 3); if (!out.length || Math.abs(x - out[out.length - 1]) > 0.001) out.push(x); }));
+  return out;
+}
+// One vertical line at each edge, the whole height of the page, as an SVG path
+function columnGridPath(c, w, h) { return columnEdges(c, w).map(x => 'M' + x + ' 0V' + gridRound(h, 3)).join(''); }
+
+/* ---------- baseline ---------- */
+const baselineStep = b => b.size * b.lh;   // the distance between lines, in page units
+// Where the lines start (y0), where they stop (y1), and how far apart they are, for a page h tall
+function baselineRange(b, h) {
+  const step = Math.max(baselineStep(b), h / GRID_MAX_LINES);
+  return { y0: h * b.top / 100, y1: h - h * b.bottom / 100, step };
+}
+function baselineYs(b, h) {
+  const r = baselineRange(b, h), out = [];
+  for (let y = r.y0; y <= r.y1 + 0.001; y += r.step) out.push(gridRound(y, 3));
+  return out;
+}
+// One horizontal line at each baseline, the whole width of the page
+function baselineGridPath(b, w, h) { return baselineYs(b, h).map(y => 'M0 ' + y + 'H' + gridRound(w, 3)).join(''); }
+// The baseline nearest to y, or null when the grid has no line there (it starts and stops at its margins)
+function nearestBaseline(b, h, y) {
+  const r = baselineRange(b, h);
+  if (r.y1 < r.y0) return null;
+  const last = Math.floor((r.y1 - r.y0) / r.step + 1e-9), k = Math.min(last, Math.max(0, Math.round((y - r.y0) / r.step)));
+  return r.y0 + k * r.step;
+}
+
+/* ---------- snapping ---------- */
+// True when a grid is showing and set to snap
+const gridSnapOn = d => { const g = gridsOf(d); return (g.columns.show && g.columns.snap) || (g.baseline.show && g.baseline.snap); };
+// The line of a showing, snapping grid that is within tol of v (axis 'x': column edges; 'y': baselines), or null
+function nearGuide(d, axis, v, tol) {
+  const g = gridsOf(d);
+  if (axis === 'x') {
+    if (!g.columns.show || !g.columns.snap) return null;
+    let best = null;
+    columnEdges(g.columns, d.w).forEach(x => { if (Math.abs(x - v) <= tol && (best === null || Math.abs(x - v) < Math.abs(best - v))) best = x; });
+    return best;
+  }
+  if (!g.baseline.show || !g.baseline.snap) return null;
+  const y = nearestBaseline(g.baseline, d.h, v);
+  return y !== null && Math.abs(y - v) <= tol ? y : null;
+}
+// How far to shift something spanning lo..hi so that its start or its end edge lies on a line (the nearer one wins), or null
+function guideShift(d, axis, lo, hi, tol) {
+  const a = nearGuide(d, axis, lo, tol), b = nearGuide(d, axis, hi, tol);
+  if (a === null && b === null) return null;
+  const da = a === null ? Infinity : a - lo, db = b === null ? Infinity : b - hi;
+  return Math.abs(da) <= Math.abs(db) ? da : db;
+}
+/* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
    ===================================================================== */
 function strokeAttrs(o) {
@@ -3781,6 +3947,30 @@ function drawArtboard() {
   setA(gridPath, 'd', 'M' + S.grid + ' 0H0V' + S.grid);
   setA(gridPath, 'stroke-width', rnd(1 / view.z, 4));
   setA(outside, 'd', 'M-100000 -100000H100000V100000H-100000Z M0 0V' + doc.h + 'H' + doc.w + 'V0Z');
+  drawGrids();
+}
+
+/* The column grid (thin dashed vertical lines) and the baseline grid (thin dashed horizontal lines), see 04j-grids.js.
+   They sit over the objects but take no clicks (pointer-events: none) and are only here, never in an export.
+   The lines are two paths; their geometry is only rebuilt when a setting or the page size changes (not on every zoom). */
+const gridCols = $('#grid-cols'), gridBase = $('#grid-base');
+let gridDrawn = '';
+function drawGrids() {
+  const g = gridsOf(doc), z = view.z, sw = rnd(1 / z, 4), dash = rnd(5 / z, 3) + ' ' + rnd(4 / z, 3);
+  const key = JSON.stringify([g, doc.w, doc.h]);
+  if (key !== gridDrawn) {
+    gridDrawn = key;
+    setA(gridCols, 'd', g.columns.show ? columnGridPath(g.columns, doc.w, doc.h) : '');
+    setA(gridBase, 'd', g.baseline.show ? baselineGridPath(g.baseline, doc.w, doc.h) : '');
+  }
+  setA(gridCols, 'display', g.columns.show ? null : 'none');
+  setA(gridCols, 'stroke', g.columns.color); setA(gridCols, 'stroke-opacity', g.columns.opacity);
+  setA(gridCols, 'stroke-width', sw); setA(gridCols, 'stroke-dasharray', dash);
+  // lines closer together than a few screen pixels are only a smear, so they are left out while zoomed far out (like the pixel grid)
+  const tooTight = g.baseline.show && baselineRange(g.baseline, doc.h).step * z < 3;
+  setA(gridBase, 'display', g.baseline.show && !tooTight ? null : 'none');
+  setA(gridBase, 'stroke', g.baseline.color); setA(gridBase, 'stroke-opacity', g.baseline.opacity);
+  setA(gridBase, 'stroke-width', sw); setA(gridBase, 'stroke-dasharray', dash);
 }
 function applyView() {
   setA(world, 'transform', 'translate(' + rnd(view.x, 2) + ' ' + rnd(view.y, 2) + ') scale(' + rnd(view.z, 5) + ')');
@@ -3874,7 +4064,12 @@ let psn = null;   // the live perspective session (see the Perspective section)
 const pointers = new Map();
 const MIN = 2;
 const snapV = v => S.snap ? Math.round(v / S.grid) * S.grid : v;
-const snapPt = p => ({ x: snapV(p.x), y: snapV(p.y) });
+// The column and baseline grids (04j-grids.js) pull a point that comes within a few screen pixels of one of their lines onto it;
+// elsewhere the pixel grid decides, as before. Columns pull sideways (x) and baselines up and down (y).
+const guideTol = () => 8 / view.z;
+const snapX = v => { const g = nearGuide(doc, 'x', v, guideTol()); return g !== null ? g : snapV(v); };
+const snapY = v => { const g = nearGuide(doc, 'y', v, guideTol()); return g !== null ? g : snapV(v); };
+const snapPt = p => ({ x: snapX(p.x), y: snapY(p.y) });
 function toWorld(e) { const r = stage.getBoundingClientRect(); return { x: (e.clientX - r.left - view.x) / view.z, y: (e.clientY - r.top - view.y) / view.z }; }
 
 /* ---------- tools ----------
@@ -4040,7 +4235,13 @@ function updateMove(p, e) {
   let dx = p.x - drag.start.x, dy = p.y - drag.start.y;
   if (e.shiftKey && !drag.shift) { if (Math.abs(dx) > Math.abs(dy)) dy = 0; else dx = 0; }
   const a = drag.orig[0];
-  if (a && S.snap) { dx = snapV(a.x + dx) - a.x; dy = snapV(a.y + dy) - a.y; }
+  if (a) {
+    // A grid line wins when the object's near edge or far edge is close to one; otherwise the pixel grid moves its corner, as before
+    const o0 = byId(a.id), tol = guideTol();
+    const gx = o0 ? guideShift(doc, 'x', a.x + dx, a.x + dx + o0.w, tol) : null, gy = o0 ? guideShift(doc, 'y', a.y + dy, a.y + dy + o0.h, tol) : null;
+    if (gx !== null) dx += gx; else if (S.snap) dx = snapV(a.x + dx) - a.x;
+    if (gy !== null) dy += gy; else if (S.snap) dy = snapV(a.y + dy) - a.y;
+  }
   drag.orig.forEach(s => {
     const o = byId(s.id); if (!o) return;
     o.x = s.x + dx; o.y = s.y + dy;
@@ -4245,7 +4446,7 @@ function updateLineEnd(p, e) {
 function updateResize(p, e) {
   const o = byId(drag.id); if (!o) return;
   const o0 = drag.o0, hn = drag.h;
-  if (S.snap && !o0.rot) p = snapPt(p);
+  if ((S.snap || gridSnapOn(doc)) && !o0.rot) p = snapPt(p);
   const c0 = { x: o0.x + o0.w / 2, y: o0.y + o0.h / 2 };
   const q = rotPt(p.x, p.y, c0.x, c0.y, -o0.rot), ux = q.x - c0.x, uy = q.y - c0.y;
   const hx = hn.includes('e') ? 1 : hn.includes('w') ? 0 : 0.5, hy = hn.includes('s') ? 1 : hn.includes('n') ? 0 : 0.5;
@@ -6030,6 +6231,9 @@ function updateInspector() {
       const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
       mh.hidden = !miss.length;
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
+      const bgr = gridsOf(doc).baseline, tb = $('#tx-tobase');   // "Match baseline grid": says what it will set, and is off when the text already has it
+      tb.textContent = 'Match baseline grid (' + rnd(bgr.size, 2) + ' px \u00d7 ' + rnd(bgr.lh, 2) + ')';
+      tb.disabled = isLocked(o) || (o.size === bgr.size && o.lh === bgr.lh && !(Array.isArray(o.runs) && o.runs.length));
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       setNum($('#tx-pspace'), o.pspace > 0 ? o.pspace : 0);
@@ -6153,6 +6357,15 @@ onNum($('#tx-lh'), (o, v) => {
   if (o.kind !== 'text') return;
   if (te && te.id === o.id && teStyle({ lineHeight: v })) { teRefocus(); return 'live'; }
   applyWholeStyle(o, { lineHeight: v });
+});
+// Sets the text's size and line height to the baseline grid's (Page tab), so its lines are exactly one grid line apart. Like typing those two numbers
+// in Size and Lines for the whole text: any letters set apart in a size or line height of their own are brought back to it.
+$('#tx-tobase').title = 'Set this text to the size and line height of the baseline grid in the Page tab, so its lines are one grid line apart';
+$('#tx-tobase').addEventListener('click', () => {
+  const o = one(); if (!o || o.kind !== 'text' || isLocked(o)) return;
+  const b = gridsOf(doc).baseline;
+  applyWholeStyle(o, { size: b.size, lineHeight: b.lh });
+  refresh(o); commit();
 });
 onNum($('#tx-ls'), (o, v) => {
   if (o.kind !== 'text') return;
@@ -6855,6 +7068,7 @@ const PRESETS = [['800 \u00d7 600  Default', 800, 600], ['1080 \u00d7 1080  Squa
   PRESETS.forEach((p, i) => { const o = elt('option', '', p[0]); o.value = i; sel.appendChild(o); });
   const c = elt('option', '', 'Custom'); c.value = 'custom'; sel.appendChild(c);
 })();
+const transOf = opacity => Math.round((1 - opacity) * 100);   // the sliders show transparency; what is kept is opacity
 function updatePageTab() {
   setNum($('#pg-w'), doc.w); setNum($('#pg-h'), doc.h);
   const i = PRESETS.findIndex(p => p[1] === doc.w && p[2] === doc.h);
@@ -6864,6 +7078,16 @@ function updatePageTab() {
   if (document.activeElement !== $('#bg-hex')) $('#bg-hex').value = tr ? '' : toHex6(doc.bg);
   $('#bg-none').setAttribute('aria-pressed', tr ? 'true' : 'false');
   $('#grid-show').checked = S.showGrid; $('#grid-snap').checked = S.snap; setNum($('#grid-size'), S.grid);
+  const gr = gridsOf(doc), c = gr.columns, b = gr.baseline;
+  $('#cg-show').checked = c.show; $('#cg-snap').checked = c.snap; $('#cg-color').value = c.color;
+  setNum($('#cg-count'), c.count); setNum($('#cg-gutter'), c.gutter); setNum($('#cg-left'), c.left); setNum($('#cg-right'), c.right);
+  $('#bl-show').checked = b.show; $('#bl-snap').checked = b.snap; $('#bl-color').value = b.color;
+  setNum($('#bl-size'), b.size); setNum($('#bl-lh'), b.lh); setNum($('#bl-top'), b.top); setNum($('#bl-bottom'), b.bottom);
+  [['cg', c], ['bl', b]].forEach(([p, o]) => {
+    if (document.activeElement !== $('#' + p + '-trans')) $('#' + p + '-trans').value = transOf(o.opacity);
+    $('#' + p + '-trans-val').textContent = transOf(o.opacity) + '%';
+  });
+  $('#bl-info').textContent = 'Lines are ' + rnd(baselineRange(b, doc.h).step, 2) + ' px apart (font size × line height). Top and bottom are where the grid begins and ends.';
   if (!$('[data-pane="page"]').hidden) updatePhotoInfo();
 }
 $('#pg-preset').addEventListener('change', e => { if (e.target.value === 'custom') return; const p = PRESETS[+e.target.value]; doc.w = p[1]; doc.h = p[2]; commit(); fit(); });
@@ -6877,6 +7101,39 @@ $('#grid-show').addEventListener('change', e => { S.showGrid = e.target.checked;
 $('#grid-snap').addEventListener('change', e => { S.snap = e.target.checked; });
 $('#grid-size').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) S.grid = clamp(Math.round(v), 2, 200); updatePageTab(); drawArtboard(); });
 
+
+/* ---------- column and baseline grids (see 04j-grids.js) ----------
+   They are kept on the drawing (doc.grids), so every change is one undo step. The two sliders and the two color
+   fields change the picture while they are dragged and are recorded when they are let go, like the page color. */
+function editGrids(fn) { const g = gridsOf(doc); fn(g); doc.grids = sanitizeGrids(g); }
+function setGrids(fn) { editGrids(fn); commit(); }
+[['cg-show', 'columns', 'show'], ['cg-snap', 'columns', 'snap'], ['bl-show', 'baseline', 'show'], ['bl-snap', 'baseline', 'snap']].forEach(([id, grid, key]) =>
+  $('#' + id).addEventListener('change', e => setGrids(g => { g[grid][key] = e.target.checked; })));
+[['cg-count', 'columns', 'count'], ['cg-gutter', 'columns', 'gutter'], ['cg-left', 'columns', 'left'], ['cg-right', 'columns', 'right'],
+ ['bl-size', 'baseline', 'size'], ['bl-lh', 'baseline', 'lh'], ['bl-top', 'baseline', 'top'], ['bl-bottom', 'baseline', 'bottom']].forEach(([id, grid, key]) =>
+  $('#' + id).addEventListener('change', e => {
+    const v = parseFloat(e.target.value);
+    if (!isFinite(v)) { updatePageTab(); return; }
+    setGrids(g => { g[grid][key] = v; });
+    e.target.value = rnd(gridsOf(doc)[grid][key], 2);   // (the box may still have the cursor in it: show the value that was kept, which can differ from what was typed)
+  }));
+[['cg-trans', 'columns'], ['bl-trans', 'baseline']].forEach(([id, grid]) => {
+  $('#' + id).addEventListener('input', e => { editGrids(g => { g[grid].opacity = 1 - e.target.value / 100; }); $('#' + id + '-val').textContent = e.target.value + '%'; drawArtboard(); });
+  $('#' + id).addEventListener('change', () => commit());
+});
+[['cg-color', 'columns'], ['bl-color', 'baseline']].forEach(([id, grid]) => {
+  $('#' + id).addEventListener('input', e => { editGrids(g => { g[grid].color = e.target.value; }); drawArtboard(); });
+  $('#' + id).addEventListener('change', () => commit());
+});
+
+// Ctrl+' (Cmd+' on a Mac) shows or hides the grids that are on. It remembers which ones they were for next time (until the page is reloaded),
+// and with none on it shows the column grid, so the shortcut always does something you can see.
+let gridsWereOn = ['columns'];
+function toggleGrids() {
+  const g = gridsOf(doc), on = ['columns', 'baseline'].filter(k => g[k].show);
+  if (on.length) { gridsWereOn = on; setGrids(x => on.forEach(k => { x[k].show = false; })); }
+  else setGrids(x => gridsWereOn.forEach(k => { x[k].show = true; }));
+}
 /* =====================================================================
    Export (SVG, PNG, JPG, WebP)
    ===================================================================== */
@@ -6997,6 +7254,7 @@ function sanitizeDoc(d) {
   const col = (v, def) => (v === 'none' || (typeof v === 'string' && /^#[0-9a-f]{3,8}$/i.test(v))) ? v : def;
   out.w = num(d.w, 800, 16, 8000); out.h = num(d.h, 600, 16, 8000);
   out.bg = d.bg === 'transparent' ? 'transparent' : col(d.bg, '#ffffff');
+  if (d.grids && typeof d.grids === 'object') out.grids = sanitizeGrids(d.grids);   // column and baseline grids (see 04j-grids.js)
   let missingFont = false, missingPhoto = false;
   // Groups get new ids, like objects do; gmap turns a file's group id into the new group
   const gmap = new Map(), has = v => v !== null && v !== undefined && gmap.has(+v);
@@ -7676,6 +7934,7 @@ window.addEventListener('keydown', e => {
     else if (k === 'g') { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
     else if (k === 'a') { e.preventDefault(); selectAll(); }
     else if ((k === 'b' || k === 'i') && one() && one().kind === 'text') { e.preventDefault(); toggleStyle(k === 'b' ? 'bold' : 'italic', true); }   // bold and italic for the selected text (13b-font-picker.js)
+    else if (k === "'") { e.preventDefault(); toggleGrids(); }   // show or hide the column and baseline grids (15-page-tab.js)
     else if (k === 'c') { copySelected(); }
     else if (k === 'v') { pasteClipboard(); }
     return;
@@ -7704,7 +7963,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Fixed: clicking a text box now picks it anywhere in the box, not only on the letters (the click area had been sitting in the wrong place).';
+const WHATS_NEW = 'New: column and baseline grids in the Page tab. Choose the number of columns, gutters, margins, transparency and color (all as percentages of the page, so they stretch with it), set a baseline grid by font size and line height, snap to either, and match a text to the baseline grid with one button. Ctrl+\' shows or hides them. They are saved with the drawing and never exported.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
