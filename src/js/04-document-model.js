@@ -306,7 +306,7 @@ function buildText(o, obs) {
       add(c, L.hy.font.getPath('-', L.x + L.hy.x, L.base, L.hy.size, { kerning: true, letterSpacing: L.hy.ls }).toPathData(2));
     }
   });
-  const out = { d, w: lay.w, h: lay.h, hit: textInkRects(lay) };
+  const out = { d, w: lay.w, h: lay.h };
   if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
   return out;
 }

@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: a Para space setting adds room between paragraphs (after each line break), measured in ems so it grows with the text. It works on any text, with or without a fixed width.';
+const WHATS_NEW = 'Changed: a click anywhere in a text box now picks the text, in the empty room beside a short line too, not only on the letters.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

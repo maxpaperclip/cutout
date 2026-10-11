@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.31.0</title>
+<title>FriendShaped v1.32.0</title>
 <style>
 
 :root{
@@ -839,7 +839,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.31.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.32.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1418,7 +1418,7 @@ function buildText(o, obs) {
       add(c, L.hy.font.getPath('-', L.x + L.hy.x, L.base, L.hy.size, { kerning: true, letterSpacing: L.hy.ls }).toPathData(2));
     }
   });
-  const out = { d, w: lay.w, h: lay.h, hit: textInkRects(lay) };
+  const out = { d, w: lay.w, h: lay.h };
   if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
   return out;
 }
@@ -2058,7 +2058,7 @@ function dropAverage(data, w, h, px, py, n) {
 }
 const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16).padStart(2, '0')).join('');
 /* =====================================================================
-   Text layout with positions, and picking text by its box (no DOM; unit tested)
+   Text layout with positions (no DOM; unit tested)
    Text is drawn as outlines (buildText, in 04-document-model.js), so the outlines, the caret, the
    selection highlight and a click on the text all have to agree about where every letter is. They
    all come from textLayout() below: the one place that decides it. Nothing asks the browser to lay
@@ -2434,38 +2434,12 @@ function lineRange(text, index) {
   return [s, e < 0 ? text.length : e];
 }
 
-/* ---------- picking text by its box ---------- */
-// True when a page point {x, y} is inside an object's box (turned and mirrored with the object), padded by pad
+/* ---------- the box of a text ---------- */
+// True when a page point {x, y} is inside an object's box (turned and mirrored with the object), padded by pad. (A text is picked
+// anywhere in its box: see the invisible rectangle syncObjects draws over it. This is for a press while typing in place.)
 function boxContains(o, p, pad) {
   const q = worldToBox(o, p.x, p.y), e = pad || 0;
   return q[0] >= -e && q[0] <= o.w + e && q[1] >= -e && q[1] <= o.h + e;
-}
-// Where a text can be picked: one rectangle for each line, as wide as the line's text and as tall as the font (ascent to
-// descent), in the text's box coordinates. Between the letters and between the lines is the text; the empty room beside a short
-// line, a blank line, and the unused part of a text box are not, so a click there goes to whatever is behind.
-function textInkRects(lay) {
-  const out = [];
-  lay.lines.forEach(L => {
-    if (!L.text.trim()) return;
-    out.push({ x: rnd(L.x, 2), y: rnd(L.base - L.asc, 2), w: rnd(L.tw + L.hl + L.hr, 2), h: rnd(L.asc + L.desc, 2) });
-  });
-  if (!out.length) out.push({ x: 0, y: 0, w: rnd(lay.w, 2), h: rnd(lay.h, 2) });   // (a text with nothing but spaces, a new one being typed: all of its box, or it could not be picked)
-  return out;
-}
-// True when a page point is on a text: within pad (in the text's own units) of one of its lines
-function textInkContains(o, p, pad) {
-  const q = worldToBox(o, p.x, p.y), e = pad || 0;
-  return layoutText(o).hit.some(r => q[0] >= r.x - e && q[0] <= r.x + r.w + e && q[1] >= r.y - e && q[1] <= r.y + r.h + e);
-}
-// A selected text is easier to pick than one that is not: a hand's width around its lines counts, so it can be
-// dragged without aiming at the letters. It only wins over what is under it: `under` is what the click hit
-// (null for nothing), and anything drawn above the text still gets the click first.
-function textBoxAt(p, under) {
-  for (let i = doc.objects.length - 1; i > (under ? doc.objects.indexOf(under) : -1); i--) {
-    const o = doc.objects[i];
-    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && textInkContains(o, p, Math.max(o.size * 0.3, 4))) return o;
-  }
-  return null;
 }
 /* =====================================================================
    Text runs: a different color, size, font, spacing or line height for part of a text (no DOM; unit tested)
@@ -3783,8 +3757,8 @@ function syncObjects() {
     const kids = v.node.kids.slice();
     if (hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'))
       kids.push({ tag: v.spec.tag, a: Object.assign({}, v.spec.a, { class: 'obj-hit', 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }) });
-    // A text is picked on its lines (see textInkRects): an invisible box over each, a little taller and wider than it, so the gaps between letters and lines are not dead
-    if (o.kind === 'text') { const pad = o.size * 0.1; layoutText(o).hit.forEach(r => kids.push({ tag: 'rect', a: { x: rnd(r.x - pad, 2), y: rnd(r.y - pad, 2), width: rnd(r.w + 2 * pad, 2), height: rnd(r.h + 2 * pad, 2), class: 'text-hit' } })); }
+    // A text is picked anywhere in its box, not only on its letters: an invisible rectangle over the whole box
+    if (o.kind === 'text') kids.push({ tag: 'rect', a: { x: 0, y: 0, width: rnd(o.w, 2), height: rnd(o.h, 2), class: 'text-hit' } });
     patchKids(g, kids);
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
@@ -3991,7 +3965,6 @@ TOOLS.select = {
     const g = e.target.closest && e.target.closest('[data-id]');
     let o = g ? byId(+g.dataset.id) : null;
     if (o && (isLocked(o) || isHidden(o))) o = null;
-    o = textBoxAt(p, o) || o;   // a selected text is picked anywhere in its box, not just on its letters (see 04f-text-layout.js)
     const pl = paintLayerAt(p, o);   // paint above what was hit (see 09d-brush.js)
     if (pl) { beginMove(pl, p, e); return; }
     if (o) { beginMove(o, p, e); return; }
@@ -4002,7 +3975,6 @@ TOOLS.select = {
     const g = under.closest && under.closest('[data-id]');
     let o = g ? byId(+g.dataset.id) : null;
     if (o && (isLocked(o) || isHidden(o))) o = null;
-    o = textBoxAt(toWorld(e), o) || o;   // (the box of a selected text counts here too)
     if (!o || (te && te.id === o.id)) return;   // (the text being typed already took this: double-click picks a word, see teDown)
     // Double-click picks just this object, even inside a group; for text it also opens the editor,
     // and for a plain shape it shows its points for editing
@@ -7732,7 +7704,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: a Para space setting adds room between paragraphs (after each line break), measured in ems so it grows with the text. It works on any text, with or without a fixed width.';
+const WHATS_NEW = 'Changed: a click anywhere in a text box now picks the text, in the empty room beside a short line too, not only on the letters.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

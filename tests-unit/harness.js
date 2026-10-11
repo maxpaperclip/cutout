@@ -73,7 +73,7 @@ const EXPORT_NAMES = [
   'docJSON', 'rebuildOutlines',
   // 04f-text-layout.js
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
-  'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'textInkRects', 'textInkContains', 'buildText', 'isLocked', 'isHidden',
+  'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
   'breakLines', 'breakLinesEx', 'wrapCuts', 'wrapPlan', 'hangOf', 'hangFactor', 'HANG_MAX', 'isBreakSpace',
   // 04i-text-wrap.js
   'WRAP_GAP', 'wrapGapOf', 'canWrapAround', 'wrapLocalPolys', 'wrapObstacles', 'wrapBlocked', 'wrapFree', 'wrapSig', 'wrapSyncAll', 'wrapSigOf', 'takeLine', 'wrapSetup',
