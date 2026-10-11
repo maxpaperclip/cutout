@@ -1,5 +1,5 @@
 /* =====================================================================
-   Text layout with positions, and picking text by its box (no DOM; unit tested)
+   Text layout with positions (no DOM; unit tested)
    Text is drawn as outlines (buildText, in 04-document-model.js), so the outlines, the caret, the
    selection highlight and a click on the text all have to agree about where every letter is. They
    all come from textLayout() below: the one place that decides it. Nothing asks the browser to lay
@@ -375,36 +375,10 @@ function lineRange(text, index) {
   return [s, e < 0 ? text.length : e];
 }
 
-/* ---------- picking text by its box ---------- */
-// True when a page point {x, y} is inside an object's box (turned and mirrored with the object), padded by pad
+/* ---------- the box of a text ---------- */
+// True when a page point {x, y} is inside an object's box (turned and mirrored with the object), padded by pad. (A text is picked
+// anywhere in its box: see the invisible rectangle syncObjects draws over it. This is for a press while typing in place.)
 function boxContains(o, p, pad) {
   const q = worldToBox(o, p.x, p.y), e = pad || 0;
   return q[0] >= -e && q[0] <= o.w + e && q[1] >= -e && q[1] <= o.h + e;
-}
-// Where a text can be picked: one rectangle for each line, as wide as the line's text and as tall as the font (ascent to
-// descent), in the text's box coordinates. Between the letters and between the lines is the text; the empty room beside a short
-// line, a blank line, and the unused part of a text box are not, so a click there goes to whatever is behind.
-function textInkRects(lay) {
-  const out = [];
-  lay.lines.forEach(L => {
-    if (!L.text.trim()) return;
-    out.push({ x: rnd(L.x, 2), y: rnd(L.base - L.asc, 2), w: rnd(L.tw + L.hl + L.hr, 2), h: rnd(L.asc + L.desc, 2) });
-  });
-  if (!out.length) out.push({ x: 0, y: 0, w: rnd(lay.w, 2), h: rnd(lay.h, 2) });   // (a text with nothing but spaces, a new one being typed: all of its box, or it could not be picked)
-  return out;
-}
-// True when a page point is on a text: within pad (in the text's own units) of one of its lines
-function textInkContains(o, p, pad) {
-  const q = worldToBox(o, p.x, p.y), e = pad || 0;
-  return layoutText(o).hit.some(r => q[0] >= r.x - e && q[0] <= r.x + r.w + e && q[1] >= r.y - e && q[1] <= r.y + r.h + e);
-}
-// A selected text is easier to pick than one that is not: a hand's width around its lines counts, so it can be
-// dragged without aiming at the letters. It only wins over what is under it: `under` is what the click hit
-// (null for nothing), and anything drawn above the text still gets the click first.
-function textBoxAt(p, under) {
-  for (let i = doc.objects.length - 1; i > (under ? doc.objects.indexOf(under) : -1); i--) {
-    const o = doc.objects[i];
-    if (o.kind === 'text' && S.sel.has(o.id) && !isLocked(o) && !isHidden(o) && textInkContains(o, p, Math.max(o.size * 0.3, 4))) return o;
-  }
-  return null;
 }

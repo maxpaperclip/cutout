@@ -315,10 +315,9 @@ test('paragraph indent: the first line of every paragraph starts further in', as
     assert.ok(L.lines[0].sw >= 10);
     assert.equal(joined(L), 'aaaa bbbb');
   });
-  await t.test('the caret and the picking boxes follow the indent', () => {
-    const { m, lay, o } = setup({ text: 'aaa bbb', bw: 100, indent: 2 });
+  await t.test('the caret follows the indent', () => {
+    const { m, lay } = setup({ text: 'aaa bbb', bw: 100, indent: 2 });
     assert.equal(m.caretAt(lay(), 0).x, 20);
-    assert.equal(m.layoutText(o).hit[0].x, 20);
   });
   await t.test('a different indent is a different layout, and it is saved and opened', () => {
     const a = setup({ text: 'aaa', bw: 100, indent: 1 }), b = setup({ text: 'aaa', bw: 100, indent: 2 });
@@ -406,10 +405,8 @@ test('paragraph spacing: room between paragraphs', async (t) => {
     assert.equal(L.lines[1].top, 20 + 10);   // the first line is 20 tall, then the gap of 1 em of the text's size (10)
     assert.equal(L.h, 30 + 10);
   });
-  await t.test('the picking boxes and the drawing follow the gap', () => {
+  await t.test('the drawing follows the gap', () => {
     const { m, o, log } = setup({ text: 'aaa\nbbb', pspace: 1 });
-    const hit = m.layoutText(o).hit;
-    assert.equal(hit[1].y - hit[0].y, 20);
     log.length = 0; m.buildText(o);
     assert.equal(log[1].y - log[0].y, 20);
   });

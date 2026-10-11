@@ -97,7 +97,6 @@ TOOLS.select = {
     const g = e.target.closest && e.target.closest('[data-id]');
     let o = g ? byId(+g.dataset.id) : null;
     if (o && (isLocked(o) || isHidden(o))) o = null;
-    o = textBoxAt(p, o) || o;   // a selected text is picked anywhere in its box, not just on its letters (see 04f-text-layout.js)
     const pl = paintLayerAt(p, o);   // paint above what was hit (see 09d-brush.js)
     if (pl) { beginMove(pl, p, e); return; }
     if (o) { beginMove(o, p, e); return; }
@@ -108,7 +107,6 @@ TOOLS.select = {
     const g = under.closest && under.closest('[data-id]');
     let o = g ? byId(+g.dataset.id) : null;
     if (o && (isLocked(o) || isHidden(o))) o = null;
-    o = textBoxAt(toWorld(e), o) || o;   // (the box of a selected text counts here too)
     if (!o || (te && te.id === o.id)) return;   // (the text being typed already took this: double-click picks a word, see teDown)
     // Double-click picks just this object, even inside a group; for text it also opens the editor,
     // and for a plain shape it shows its points for editing
