@@ -56,6 +56,7 @@ window.addEventListener('keydown', e => {
     else if (k === 'g') { e.preventDefault(); e.shiftKey ? ungroupSelected() : groupSelected(); }
     else if (k === 'a') { e.preventDefault(); selectAll(); }
     else if ((k === 'b' || k === 'i') && one() && one().kind === 'text') { e.preventDefault(); toggleStyle(k === 'b' ? 'bold' : 'italic', true); }   // bold and italic for the selected text (13b-font-picker.js)
+    else if (k === "'") { e.preventDefault(); toggleGrids(); }   // show or hide the column and baseline grids (15-page-tab.js)
     else if (k === 'c') { copySelected(); }
     else if (k === 'v') { pasteClipboard(); }
     return;

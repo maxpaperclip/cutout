@@ -72,6 +72,9 @@ function updateInspector() {
       const miss = missingGlyphs(o), mh = $('#tx-missing');   // letters the font does not have would draw as nothing
       mh.hidden = !miss.length;
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
+      const bgr = gridsOf(doc).baseline, tb = $('#tx-tobase');   // "Match baseline grid": says what it will set, and is off when the text already has it
+      tb.textContent = 'Match baseline grid (' + rnd(bgr.size, 2) + ' px \u00d7 ' + rnd(bgr.lh, 2) + ')';
+      tb.disabled = isLocked(o) || (o.size === bgr.size && o.lh === bgr.lh && !(Array.isArray(o.runs) && o.runs.length));
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       setNum($('#tx-pspace'), o.pspace > 0 ? o.pspace : 0);
@@ -195,6 +198,15 @@ onNum($('#tx-lh'), (o, v) => {
   if (o.kind !== 'text') return;
   if (te && te.id === o.id && teStyle({ lineHeight: v })) { teRefocus(); return 'live'; }
   applyWholeStyle(o, { lineHeight: v });
+});
+// Sets the text's size and line height to the baseline grid's (Page tab), so its lines are exactly one grid line apart. Like typing those two numbers
+// in Size and Lines for the whole text: any letters set apart in a size or line height of their own are brought back to it.
+$('#tx-tobase').title = 'Set this text to the size and line height of the baseline grid in the Page tab, so its lines are one grid line apart';
+$('#tx-tobase').addEventListener('click', () => {
+  const o = one(); if (!o || o.kind !== 'text' || isLocked(o)) return;
+  const b = gridsOf(doc).baseline;
+  applyWholeStyle(o, { size: b.size, lineHeight: b.lh });
+  refresh(o); commit();
 });
 onNum($('#tx-ls'), (o, v) => {
   if (o.kind !== 'text') return;

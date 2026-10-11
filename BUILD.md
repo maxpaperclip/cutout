@@ -311,6 +311,13 @@ is what `sanitizeDoc` uses when a file is opened.
   showing. A grid line wins when a point (drawing, resizing) or the near or far edge of a moved object is within 8 screen
   pixels of it (`nearGuide`, `guideShift`; `snapX`, `snapY` and `updateMove` in `09-pointer-interaction.js`); anywhere else the
   pixel grid decides, as before. An object's own box is snapped, not the baseline of its text.
+- **Match baseline grid.** A button in the Design tab's Text section (`#tx-tobase`, `13-inspector.js`) sets the selected text's size and
+  line height to the baseline grid's with `applyWholeStyle`, so its lines are one grid line apart (a line is `size x lh` tall, which is
+  exactly the baseline's spacing). It is the same as typing the two numbers into Size and Lines for the whole text: letters that had a
+  size or line height of their own are brought back to it. Its label shows the two numbers, and it is off when the text already has them
+  (or is locked). The baseline's size (4 to 400 px) and line height (0.6 to 3) are limited to what a text can be, so a text can always match.
+- **Shortcut.** Ctrl+' (Cmd+' on a Mac) shows or hides the grids that are on (`toggleGrids`, `15-page-tab.js`). It remembers which they
+  were until the page is reloaded, and with none on it shows the column grid. Like the checkboxes, each use is one undo step.
 
 ## How in-place text editing works
 

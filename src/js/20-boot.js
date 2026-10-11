@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: column and baseline grids in the Page tab. Choose the number of columns, gutters, margins, transparency and color (all as percentages of the page, so they stretch with it), set a baseline grid by font size and line height, and snap to either. They are saved with the drawing and never exported.';
+const WHATS_NEW = 'New: column and baseline grids in the Page tab. Choose the number of columns, gutters, margins, transparency and color (all as percentages of the page, so they stretch with it), set a baseline grid by font size and line height, snap to either, and match a text to the baseline grid with one button. Ctrl+\' shows or hides them. They are saved with the drawing and never exported.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

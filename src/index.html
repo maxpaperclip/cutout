@@ -189,6 +189,7 @@
               <button data-align="justify" title="Justify: stretch the spaces so every line but the last fills the width of the text" aria-label="Justify"><span class="ico" data-icon="tjustify"></span></button>
             </div>
           </div>
+          <button class="btn line" id="tx-tobase">Match baseline grid</button>
           <label class="f"><span style="white-space:nowrap;width:68px">Para space</span><input type="number" id="tx-pspace" min="0" max="10" step="0.1" title="Extra room between paragraphs (after each line break), in ems: one em is the size of the text. 0 is none."></label>
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
@@ -411,7 +412,7 @@
       <section class="sec">
         <h3>Column grid</h3>
         <div class="stack">
-          <label class="inline"><input type="checkbox" id="cg-show"> Show column grid</label>
+          <label class="inline" title="Ctrl+' shows or hides the grids"><input type="checkbox" id="cg-show"> Show column grid</label>
           <label class="inline"><input type="checkbox" id="cg-snap"> Snap to columns</label>
           <div class="grid2">
             <label class="f"><span style="width:56px">Columns</span><input type="number" id="cg-count" min="1" max="24" step="1" aria-label="Number of columns"></label>
@@ -431,11 +432,11 @@
       <section class="sec">
         <h3>Baseline grid</h3>
         <div class="stack">
-          <label class="inline"><input type="checkbox" id="bl-show"> Show baseline grid</label>
+          <label class="inline" title="Ctrl+' shows or hides the grids"><input type="checkbox" id="bl-show"> Show baseline grid</label>
           <label class="inline"><input type="checkbox" id="bl-snap"> Snap to baselines</label>
           <div class="grid2">
-            <label class="f"><span style="width:56px">Font size</span><input type="number" id="bl-size" min="1" max="400" step="1" aria-label="Font size in pixels"></label>
-            <label class="f"><span style="width:56px">Line ht.</span><input type="number" id="bl-lh" min="0.5" max="5" step="0.05" aria-label="Line height, a multiple of the font size"></label>
+            <label class="f"><span style="width:56px">Font size</span><input type="number" id="bl-size" min="4" max="400" step="1" aria-label="Font size in pixels"></label>
+            <label class="f"><span style="width:56px">Line ht.</span><input type="number" id="bl-lh" min="0.6" max="3" step="0.05" aria-label="Line height, a multiple of the font size"></label>
             <label class="f"><span style="width:56px">Top %</span><input type="number" id="bl-top" min="0" max="45" step="0.5" aria-label="Where the grid begins, percent of the page height from the top"></label>
             <label class="f"><span style="width:56px">Bottom %</span><input type="number" id="bl-bottom" min="0" max="45" step="0.5" aria-label="Where the grid ends, percent of the page height from the bottom"></label>
           </div>
@@ -456,7 +457,7 @@
       </section>
       <section class="sec" style="border-bottom:0">
         <h3>Shortcuts</h3>
-        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · B pen · N pencil · T text · D perspective.<br>With the pen, click for corners and drag for curves; click the first point to close, or press Enter to finish. Double-click a shape (or press Enter) to edit its points.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.</p>
+        <p class="help" style="margin-top:0">V select · H pan · R rectangle · E ellipse · P polygon · S star · L line · B pen · N pencil · T text · D perspective.<br>With the pen, click for corners and drag for curves; click the first point to close, or press Enter to finish. Double-click a shape (or press Enter) to edit its points.<br>Ctrl+G groups the selection and Ctrl+Shift+G takes a group apart. Double-click a grouped object to pick just that object.<br>With the pencil, end where you started to make a filled shape. Esc stops drawing.<br>Shift while drawing keeps shapes square. Shift while turning snaps to 15°. Shift while tilting moves two corners together. Shift+H and Shift+V mirror. Arrow keys nudge. Delete removes.<br>Ctrl+' (Cmd+' on a Mac) shows or hides the column and baseline grids.</p>
       </section>
       <section class="sec" style="border-top:1px solid var(--line)">
         <h3>About</h3>

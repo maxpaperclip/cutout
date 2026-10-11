@@ -64,3 +64,12 @@ function setGrids(fn) { editGrids(fn); commit(); }
   $('#' + id).addEventListener('input', e => { editGrids(g => { g[grid].color = e.target.value; }); drawArtboard(); });
   $('#' + id).addEventListener('change', () => commit());
 });
+
+// Ctrl+' (Cmd+' on a Mac) shows or hides the grids that are on. It remembers which ones they were for next time (until the page is reloaded),
+// and with none on it shows the column grid, so the shortcut always does something you can see.
+let gridsWereOn = ['columns'];
+function toggleGrids() {
+  const g = gridsOf(doc), on = ['columns', 'baseline'].filter(k => g[k].show);
+  if (on.length) { gridsWereOn = on; setGrids(x => on.forEach(k => { x[k].show = false; })); }
+  else setGrids(x => gridsWereOn.forEach(k => { x[k].show = true; }));
+}

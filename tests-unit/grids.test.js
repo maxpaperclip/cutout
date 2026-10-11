@@ -30,9 +30,16 @@ test('grids: defaults and sanitizing', async (t) => {
     assert.equal(g.columns.left, 5, 'a non-number falls back to the default');
     assert.equal(g.columns.opacity, 1);
     assert.equal(g.columns.color, '#e5457a', 'a color that is not #rrggbb falls back');
-    assert.equal(g.baseline.size, 1);
-    assert.equal(g.baseline.lh, 5);
+    assert.equal(g.baseline.size, 4, 'no smaller than a text can be');
+    assert.equal(g.baseline.lh, 3, 'no looser than a text can be');
     assert.equal(g.baseline.top, 45);
+  });
+
+  await t.test('the baseline only takes sizes and line heights a text can be set to (4 to 400 px, 0.6 to 3), so "Match baseline grid" always matches', () => {
+    const m = loadAppModules();
+    const lo = m.sanitizeGrids({ baseline: { size: -5, lh: 0 } }).baseline, hi = m.sanitizeGrids({ baseline: { size: 1e9, lh: 1e9 } }).baseline;
+    assert.equal(lo.size, 4); assert.equal(lo.lh, 0.6);
+    assert.equal(hi.size, 400); assert.equal(hi.lh, 3);
   });
 
   await t.test('non-objects give the defaults', () => {
@@ -127,7 +134,7 @@ test('grids: baseline grid', async (t) => {
 
   await t.test('a tiny spacing never draws more than the line limit', () => {
     const m = loadAppModules();
-    const b = m.sanitizeGrids({ baseline: { size: 1, lh: 0.5, top: 0, bottom: 0 } }).baseline;
+    const b = m.sanitizeGrids({ baseline: { size: 4, lh: 0.6, top: 0, bottom: 0 } }).baseline;
     assert.ok(m.baselineYs(b, 8000).length <= m.GRID_MAX_LINES + 1);
   });
 

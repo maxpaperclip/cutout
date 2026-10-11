@@ -15,6 +15,7 @@
                color, opacity (0.1-1; the panel shows it as transparency)
      baseline: show, snap, size (px), lh (a multiple of the size), top, bottom (where the grid
                begins and ends, % of the height), color, opacity
+               (size and lh keep to the limits of a text's own size and line height, 4+ px and 0.6-3, so any text can be set to match)
    ===================================================================== */
 const GRID_DEFAULTS = {
   columns: { show: false, snap: false, count: 12, gutter: 2, left: 5, right: 5, color: '#e5457a', opacity: 0.5 },
@@ -45,7 +46,7 @@ function sanitizeGrids(raw) {
   cols.opacity = gridRound(cols.opacity, 2);
   const base = {
     show: !!b.show, snap: !!b.snap,
-    size: gridNum(b.size, D.baseline.size, 1, 400), lh: gridNum(b.lh, D.baseline.lh, 0.5, 5),
+    size: gridNum(b.size, D.baseline.size, 4, 400), lh: gridNum(b.lh, D.baseline.lh, 0.6, 3),
     top: gridNum(b.top, D.baseline.top, 0, 45), bottom: gridNum(b.bottom, D.baseline.bottom, 0, 45),
     color: hex(b.color, D.baseline.color), opacity: gridNum(b.opacity, D.baseline.opacity, 0.1, 1)
   };
