@@ -80,6 +80,10 @@
         <rect id="ab-bg" x="0" y="0" width="800" height="600" fill="#fff"/>
         <rect id="grid-rect" x="0" y="0" width="800" height="600" fill="url(#gridpat)" pointer-events="none"/>
         <g id="layer"></g>
+        <g id="grids" pointer-events="none" aria-hidden="true" style="user-select:none">
+          <path id="grid-cols" fill="none" stroke-linecap="butt" display="none"/>
+          <path id="grid-base" fill="none" stroke-linecap="butt" display="none"/>
+        </g>
         <path id="outside" class="outside" fill-rule="evenodd"/>
         <rect id="ab-frame" x="0" y="0" width="800" height="600" fill="none" stroke="#7b83b0" stroke-opacity=".5" stroke-width="1" vector-effect="non-scaling-stroke" pointer-events="none"/>
         <g id="overlay"></g>
@@ -397,12 +401,52 @@
         </div>
       </section>
       <section class="sec">
-        <h3>Grid</h3>
+        <h3>Pixel grid</h3>
         <div class="stack">
           <label class="inline"><input type="checkbox" id="grid-show"> Show grid</label>
           <label class="inline"><input type="checkbox" id="grid-snap"> Snap to grid</label>
           <label class="f"><span style="width:56px">Spacing</span><input type="number" id="grid-size" min="2" max="200" step="1"></label>
         </div>
+      </section>
+      <section class="sec">
+        <h3>Column grid</h3>
+        <div class="stack">
+          <label class="inline"><input type="checkbox" id="cg-show"> Show column grid</label>
+          <label class="inline"><input type="checkbox" id="cg-snap"> Snap to columns</label>
+          <div class="grid2">
+            <label class="f"><span style="width:56px">Columns</span><input type="number" id="cg-count" min="1" max="24" step="1" aria-label="Number of columns"></label>
+            <label class="f"><span style="width:56px">Gutter %</span><input type="number" id="cg-gutter" min="0" max="20" step="0.5" aria-label="Gutter between columns, percent of the page width"></label>
+            <label class="f"><span style="width:56px">Left %</span><input type="number" id="cg-left" min="0" max="45" step="0.5" aria-label="Left margin, percent of the page width"></label>
+            <label class="f"><span style="width:56px">Right %</span><input type="number" id="cg-right" min="0" max="45" step="0.5" aria-label="Right margin, percent of the page width"></label>
+          </div>
+          <div class="row">
+            <span class="lbl" style="width:78px">Transparency</span>
+            <input type="range" id="cg-trans" min="0" max="90" step="1" aria-label="Column grid transparency">
+            <output id="cg-trans-val" style="flex:none;width:34px;text-align:right;color:var(--ink-3);font-size:12px"></output>
+            <input type="color" id="cg-color" aria-label="Column grid line color">
+          </div>
+        </div>
+        <p class="help">Margins, gutters and columns are percentages of the page, so the grid stretches when the page size changes.</p>
+      </section>
+      <section class="sec">
+        <h3>Baseline grid</h3>
+        <div class="stack">
+          <label class="inline"><input type="checkbox" id="bl-show"> Show baseline grid</label>
+          <label class="inline"><input type="checkbox" id="bl-snap"> Snap to baselines</label>
+          <div class="grid2">
+            <label class="f"><span style="width:56px">Font size</span><input type="number" id="bl-size" min="1" max="400" step="1" aria-label="Font size in pixels"></label>
+            <label class="f"><span style="width:56px">Line ht.</span><input type="number" id="bl-lh" min="0.5" max="5" step="0.05" aria-label="Line height, a multiple of the font size"></label>
+            <label class="f"><span style="width:56px">Top %</span><input type="number" id="bl-top" min="0" max="45" step="0.5" aria-label="Where the grid begins, percent of the page height from the top"></label>
+            <label class="f"><span style="width:56px">Bottom %</span><input type="number" id="bl-bottom" min="0" max="45" step="0.5" aria-label="Where the grid ends, percent of the page height from the bottom"></label>
+          </div>
+          <div class="row">
+            <span class="lbl" style="width:78px">Transparency</span>
+            <input type="range" id="bl-trans" min="0" max="90" step="1" aria-label="Baseline grid transparency">
+            <output id="bl-trans-val" style="flex:none;width:34px;text-align:right;color:var(--ink-3);font-size:12px"></output>
+            <input type="color" id="bl-color" aria-label="Baseline grid line color">
+          </div>
+        </div>
+        <p class="help" id="bl-info"></p>
       </section>
       <section class="sec">
         <h3>Photos and saving</h3>
