@@ -44,7 +44,7 @@ function syncObjects() {
     if (hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'))
       kids.push({ tag: v.spec.tag, a: Object.assign({}, v.spec.a, { class: 'obj-hit', 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }) });
     // A text is picked anywhere in its box, not only on its letters: an invisible rectangle over the whole box
-    if (o.kind === 'text') kids.push({ tag: 'rect', a: { x: 0, y: 0, width: rnd(o.w, 2), height: rnd(o.h, 2), class: 'text-hit' } });
+    if (o.kind === 'text') kids.push({ tag: 'rect', a: { x: 0, y: 0, width: rnd(o.w, 2), height: rnd(o.h, 2), transform: objXf(o), class: 'text-hit' } });   // (placed like the letters are, so it turns and moves with them)
     patchKids(g, kids);
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
