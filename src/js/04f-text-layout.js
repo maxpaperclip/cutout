@@ -17,6 +17,7 @@
    - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
      The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
      into words (L.slots says where) because the spaces are no longer the width the font gave them.
+   - o.pspace (in ems; point text too): extra room before every paragraph but the first, on top of the line height.
    - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in; with
      o.noind1 the very first paragraph of the text is left out (as under a heading, in a book).
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
@@ -201,7 +202,8 @@ function textLayout(o, obs) {
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = bw || size * 0.4, acc = 0, ps = 0, rowIdx = 0, rowTop = 0, blank = 0;
+  let W = bw || size * 0.4, acc = 0, ps = 0, rowIdx = 0, rowTop = 0, blank = 0, yOff = 0;
+  const pgap = o.pspace > 0 ? Math.min(+o.pspace, 10) * size : 0;   // the room between one paragraph and the next (o.pspace, in ems)
   let wraps = bw ? (obs === undefined ? wrapObstacles(o) : obs) : [];
   // A row's slots are chosen for the tallest line it could hold: with letters of different sizes the height is not known until the line is made
   let hEst = lineH;
@@ -247,17 +249,18 @@ function textLayout(o, obs) {
   // Put the lines of one row where they go: all on one baseline, as high as the tallest
   const placeRow = row => {
     const h = Math.max(...row.map(L => L.h)), A = Math.max(...row.map(L => L.asc)), D = Math.max(...row.map(L => L.desc));
-    const top = runs ? rowTop : rowIdx * lineH;
+    const top = (runs ? rowTop : rowIdx * lineH) + yOff;
     row.forEach(L => { L.top = top; L.h = row.length > 1 ? h : L.h; L.asc = row.length > 1 ? A : L.asc; L.desc = row.length > 1 ? D : L.desc; L.row = rowIdx; L.i = lines.length; L.base = top + (L.h - (L.asc + L.desc)) / 2 + L.asc; lines.push(L); });
     if (runs) rowTop += h;
     rowIdx++;
   };
   const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
-  text.split('\n').forEach(para => {
+  text.split('\n').forEach((para, pi) => {
+    if (pi) yOff += pgap;   // (every line break starts a paragraph, an empty one too)
     const su = bw ? wrapSetup(o, runs, text, para, ps) : null;
     let a = 0;
     for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
-      const top = runs ? rowTop : rowIdx * lineH;
+      const top = (runs ? rowTop : rowIdx * lineH) + yOff;
       const free = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
       const row = [];
       if (!bw) row.push(makeLine(para, ps, true, null, 0, 0));
@@ -276,13 +279,13 @@ function textLayout(o, obs) {
     }
     ps += para.length + 1;   // (the line break counts as a character)
   });
-  acc = runs ? rowTop : rowIdx * lineH;
+  acc = (runs ? rowTop : rowIdx * lineH) + yOff;
   lines.forEach(L => {
     const sw = L.sw || W;
     L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
     if (!L.sw) L.sw = W;
   });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && lines.every((L, i) => L.row === i), area: !!bw };
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */

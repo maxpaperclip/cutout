@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.30.0</title>
+<title>FriendShaped v1.31.0</title>
 <style>
 
 :root{
@@ -531,6 +531,7 @@ input:disabled,select:disabled{opacity:.45}
               <button data-align="justify" title="Justify: stretch the spaces so every line but the last fills the width of the text" aria-label="Justify"><span class="ico" data-icon="tjustify"></span></button>
             </div>
           </div>
+          <label class="f"><span style="white-space:nowrap;width:68px">Para space</span><input type="number" id="tx-pspace" min="0" max="10" step="0.1" title="Extra room between paragraphs (after each line break), in ems: one em is the size of the text. 0 is none."></label>
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
           <label class="f" id="wrap-hangamt" hidden><span style="white-space:nowrap">Hang %</span><input type="number" id="tx-hangamt" min="5" max="150" step="5" title="How much of each mark hangs out, in percent of its width. 100 hangs it completely; less leaves part of it inside."></label>
@@ -838,7 +839,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.30.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.31.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1197,7 +1198,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph', 'indent', 'noind1'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph', 'indent', 'noind1', 'pspace'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -1455,7 +1456,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);
@@ -2075,6 +2076,7 @@ const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16
    - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
      The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
      into words (L.slots says where) because the spaces are no longer the width the font gave them.
+   - o.pspace (in ems; point text too): extra room before every paragraph but the first, on top of the line height.
    - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in; with
      o.noind1 the very first paragraph of the text is left out (as under a heading, in a book).
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
@@ -2259,7 +2261,8 @@ function textLayout(o, obs) {
   const font = fontOf(o.font), size = o.size, scale = size / font.unitsPerEm;
   const asc = font.ascender * scale, desc = -font.descender * scale;
   const lineH = size * o.lh, ls = o.ls || 0;
-  let W = bw || size * 0.4, acc = 0, ps = 0, rowIdx = 0, rowTop = 0, blank = 0;
+  let W = bw || size * 0.4, acc = 0, ps = 0, rowIdx = 0, rowTop = 0, blank = 0, yOff = 0;
+  const pgap = o.pspace > 0 ? Math.min(+o.pspace, 10) * size : 0;   // the room between one paragraph and the next (o.pspace, in ems)
   let wraps = bw ? (obs === undefined ? wrapObstacles(o) : obs) : [];
   // A row's slots are chosen for the tallest line it could hold: with letters of different sizes the height is not known until the line is made
   let hEst = lineH;
@@ -2305,17 +2308,18 @@ function textLayout(o, obs) {
   // Put the lines of one row where they go: all on one baseline, as high as the tallest
   const placeRow = row => {
     const h = Math.max(...row.map(L => L.h)), A = Math.max(...row.map(L => L.asc)), D = Math.max(...row.map(L => L.desc));
-    const top = runs ? rowTop : rowIdx * lineH;
+    const top = (runs ? rowTop : rowIdx * lineH) + yOff;
     row.forEach(L => { L.top = top; L.h = row.length > 1 ? h : L.h; L.asc = row.length > 1 ? A : L.asc; L.desc = row.length > 1 ? D : L.desc; L.row = rowIdx; L.i = lines.length; L.base = top + (L.h - (L.asc + L.desc)) / 2 + L.asc; lines.push(L); });
     if (runs) rowTop += h;
     rowIdx++;
   };
   const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
-  text.split('\n').forEach(para => {
+  text.split('\n').forEach((para, pi) => {
+    if (pi) yOff += pgap;   // (every line break starts a paragraph, an empty one too)
     const su = bw ? wrapSetup(o, runs, text, para, ps) : null;
     let a = 0;
     for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
-      const top = runs ? rowTop : rowIdx * lineH;
+      const top = (runs ? rowTop : rowIdx * lineH) + yOff;
       const free = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
       const row = [];
       if (!bw) row.push(makeLine(para, ps, true, null, 0, 0));
@@ -2334,13 +2338,13 @@ function textLayout(o, obs) {
     }
     ps += para.length + 1;   // (the line break counts as a character)
   });
-  acc = runs ? rowTop : rowIdx * lineH;
+  acc = (runs ? rowTop : rowIdx * lineH) + yOff;
   lines.forEach(L => {
     const sw = L.sw || W;
     L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
     if (!L.sw) L.sw = W;
   });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && lines.every((L, i) => L.row === i), area: !!bw };
+  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
@@ -6056,6 +6060,7 @@ function updateInspector() {
       if (miss.length) mh.textContent = 'This font has no letters for ' + miss.slice(0, 6).join(' ') + (miss.length > 6 ? ' \u2026' : '') + '. Try a font under International.';
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
+      setNum($('#tx-pspace'), o.pspace > 0 ? o.pspace : 0);
       $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
       $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);
@@ -6196,6 +6201,7 @@ $('#tx-fixed').addEventListener('change', e => {
   refresh(o); commit();
 });
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
+onNum($('#tx-pspace'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.pspace = clamp(rnd(v, 2), 0, 10); else delete o.pspace; });
 onNum($('#tx-indent'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.indent = clamp(rnd(v, 2), 0, 20); else delete o.indent; });
 $('#tx-noind1').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.noind1 = true; else delete o.noind1; refresh(o); commit(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
@@ -7068,6 +7074,7 @@ function sanitizeDoc(d) {
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
       if (Number.isFinite(+r.bw) && +r.bw > 0) o.bw = num(r.bw, 100, 1, 1e5);   // the width of a text wrapped to a box
       if (Number.isFinite(+r.indent) && +r.indent > 0) o.indent = num(r.indent, 0, 0, 20);   // how far in each paragraph's first line starts, in ems
+      if (Number.isFinite(+r.pspace) && +r.pspace > 0) o.pspace = num(r.pspace, 0, 0, 10);   // extra room between paragraphs, in ems
       if (r.noind1 === true) o.noind1 = true;   // the first paragraph is not indented
       if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin (all of their width)
       else if (typeof r.hang === 'number' && r.hang > 0) o.hang = num(r.hang, 1, 0.05, 1.5);   // (or just part of it)
@@ -7725,7 +7732,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: "Don\u2019t indent the first paragraph" leaves the first paragraph of a text flush left while the ones after it keep their indent.';
+const WHATS_NEW = 'New: a Para space setting adds room between paragraphs (after each line break), measured in ems so it grows with the text. It works on any text, with or without a fixed width.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
