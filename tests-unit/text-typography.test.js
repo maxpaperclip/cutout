@@ -16,7 +16,7 @@ function fakeFont(log) {
     unitsPerEm: 1000, ascender: 800, descender: -200,
     getAdvanceWidth: (text, size, opts) => forEachGlyph(text, 0, 0, size, opts, () => {}),
     forEachGlyph,
-    getPath: (text, x, y, size) => { if (log) log.push({ text, x: Math.round(x * 1000) / 1000 }); return { toPathData: () => 'M' + x + ' ' + y + 'L' + (x + 4) + ' ' + y + 'L' + (x + 4) + ' ' + (y - 5) + 'Z' }; },
+    getPath: (text, x, y, size) => { if (log) log.push({ text, x: Math.round(x * 1000) / 1000, y }); return { toPathData: () => 'M' + x + ' ' + y + 'L' + (x + 4) + ' ' + y + 'L' + (x + 4) + ' ' + (y - 5) + 'Z' }; },
   };
 }
 function setup(props) {
@@ -369,5 +369,78 @@ test('paragraph indent: leaving the first paragraph out', async (t) => {
     assert.equal(a.m.sanitizeDoc(JSON.parse(a.m.docJSON(a.m.doc))).objects[0].noind1, true);
     const d = a.m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, bw: 50, indent: 1, noind1: 'yes' }] });
     assert.equal(d.objects[0].noind1, undefined);
+  });
+});
+
+test('paragraph spacing: room between paragraphs', async (t) => {
+  await t.test('every line break adds the gap, an empty paragraph too; lines of one paragraph stay together', () => {
+    const L = setup({ text: 'aaa\nbbb\n\nccc', pspace: 1 }).lay();   // a line is 10 tall, the gap 1 em = 10
+    assert.deepEqual(plain(L.lines.map(l => l.top)), [0, 20, 40, 60]);
+    assert.equal(L.h, 70);
+    const W = setup({ text: 'aaa bbb ccc ddd\neee', bw: 40, pspace: 1 }).lay();   // wraps to 3 lines, then a new paragraph
+    assert.deepEqual(plain(W.lines.map(l => l.top)), [0, 10, 20, 40].slice(0, W.lines.length - 1).concat([W.lines[W.lines.length - 1].top]));
+    assert.equal(W.lines[1].top - W.lines[0].top, 10);
+    assert.equal(W.lines[W.lines.length - 1].top - W.lines[W.lines.length - 2].top, 20);
+  });
+  await t.test('it is in ems, so it grows with the text, and 0 or nothing changes nothing', () => {
+    assert.equal(setup({ text: 'a\nb', size: 20, pspace: 0.5 }).lay().lines[1].top, 20 + 10);
+    const none = setup({ text: 'a\nb' }).lay(), zero = setup({ text: 'a\nb', pspace: 0 }).lay(), neg = setup({ text: 'a\nb', pspace: -2 }).lay();
+    assert.equal(none.lines[1].top, 10); assert.equal(zero.lines[1].top, 10); assert.equal(neg.lines[1].top, 10);
+    assert.equal(none.flat, true); assert.equal(zero.flat, true);
+  });
+  await t.test('a text with a gap is not flat, and a click in the gap, the caret and the selection stay right', () => {
+    const { m, lay } = setup({ text: 'aaa\nbbb', pspace: 1 });
+    const L = lay();
+    assert.equal(L.flat, false);
+    assert.equal(m.indexAtPoint(L, 0, 15), 0);        // in the gap: the line above
+    assert.equal(m.indexAtPoint(L, 0, 25), 4);        // on the second line
+    assert.equal(m.caretAt(L, 4).y0, L.lines[1].base - L.lines[1].asc);
+    const r = plain(m.selectionRects(L, 0, 7));
+    assert.equal(r.length, 2);
+    assert.equal(r[1].y - r[0].y, 20);
+    assert.equal(m.verticalMove(L, 1, 1, null).index, 5);
+  });
+  await t.test('it works with letters of different sizes', () => {
+    const L = setup({ text: 'aaa\nbbb', pspace: 1, runs: [{ n: 4, s: 2 }, { n: 3 }] }).lay();
+    assert.equal(L.lines[0].h, 20);
+    assert.equal(L.lines[1].top, 20 + 10);   // the first line is 20 tall, then the gap of 1 em of the text's size (10)
+    assert.equal(L.h, 30 + 10);
+  });
+  await t.test('the picking boxes and the drawing follow the gap', () => {
+    const { m, o, log } = setup({ text: 'aaa\nbbb', pspace: 1 });
+    const hit = m.layoutText(o).hit;
+    assert.equal(hit[1].y - hit[0].y, 20);
+    log.length = 0; m.buildText(o);
+    assert.equal(log[1].y - log[0].y, 20);
+  });
+  await t.test('it works together with a shape the text wraps around', () => {
+    // the second paragraph is at y = 20 (a row of 10 and a gap of 10): a shape there is in its way, one at y 10..20 is only in the gap
+    const withRect = (props, r) => {
+      const x = setup(props);
+      x.m.doc.objects.push(x.m.newShape('rect', Object.assign({ wrap: true, wgap: 0 }, r)));
+      x.m.refresh(x.o);
+      return x.lay();
+    };
+    const base = { text: 'aaa\nbbb', bw: 100, pspace: 1 };
+    const inGap = withRect(base, { x: 40, y: 10, w: 20, h: 10 });
+    assert.equal(inGap.lines[1].sx, 0); assert.equal(inGap.lines[1].sw, 100);
+    const inRow = withRect(base, { x: 40, y: 22, w: 20, h: 6 });
+    assert.equal(inRow.lines.filter(l => l.top === 20).length, 1);   // (only 'bbb' fits on one side: the rest of the row is the shape's)
+    assert.ok(inRow.lines.find(l => l.top === 20).sw < 100);
+  });
+  await t.test('it is a different layout, saved, opened, and kept in range', () => {
+    const a = setup({ text: 'a\nb', pspace: 1 }), b = setup({ text: 'a\nb', pspace: 2 });
+    assert.notEqual(a.m.layoutText(a.o).d, b.m.layoutText(b.o).d);
+    a.m.doc.objects.length = 0; a.m.doc.objects.push(a.o);
+    assert.equal(a.m.sanitizeDoc(JSON.parse(a.m.docJSON(a.m.doc))).objects[0].pspace, 1);
+    const mk = v => ({ kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, pspace: v });
+    const d = a.m.sanitizeDoc({ w: 800, h: 600, objects: [mk(99), mk(-1), mk('x'), mk(0)] });
+    assert.equal(d.objects[0].pspace, 10); assert.equal(d.objects[1].pspace, undefined); assert.equal(d.objects[2].pspace, undefined); assert.equal(d.objects[3].pspace, undefined);
+  });
+  await t.test('break apart puts the letters where the gap puts them', () => {
+    const { m, o } = setup({ text: 'aaa\nbbb', pspace: 1 });
+    const r = m.breakApartText(o);
+    assert.equal(r.shapes.length, 6);
+    assert.ok(r.shapes[3].y - r.shapes[0].y > 15);
   });
 });
