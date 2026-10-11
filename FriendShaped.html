@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.32.0</title>
+<title>FriendShaped v1.32.1</title>
 <style>
 
 :root{
@@ -839,7 +839,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.32.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.32.1';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -3758,7 +3758,7 @@ function syncObjects() {
     if (hasPaint(o) && !hasPic(o) && !hasGrad(o) && (!o.fill || o.fill === 'none'))
       kids.push({ tag: v.spec.tag, a: Object.assign({}, v.spec.a, { class: 'obj-hit', 'stroke-width': rnd(Math.max(o.sw || 0, 16 / view.z), 3) }) });
     // A text is picked anywhere in its box, not only on its letters: an invisible rectangle over the whole box
-    if (o.kind === 'text') kids.push({ tag: 'rect', a: { x: 0, y: 0, width: rnd(o.w, 2), height: rnd(o.h, 2), class: 'text-hit' } });
+    if (o.kind === 'text') kids.push({ tag: 'rect', a: { x: 0, y: 0, width: rnd(o.w, 2), height: rnd(o.h, 2), transform: objXf(o), class: 'text-hit' } });   // (placed like the letters are, so it turns and moves with them)
     patchKids(g, kids);
   });
   els.forEach((g, id) => { if (!seen.has(id)) { g.remove(); els.delete(id); } });
@@ -7704,7 +7704,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Changed: a click anywhere in a text box now picks the text, in the empty room beside a short line too, not only on the letters.';
+const WHATS_NEW = 'Fixed: clicking a text box now picks it anywhere in the box, not only on the letters (the click area had been sitting in the wrong place).';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
