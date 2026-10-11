@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.29.0</title>
+<title>FriendShaped v1.30.0</title>
 <style>
 
 :root{
@@ -535,6 +535,7 @@ input:disabled,select:disabled{opacity:.45}
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
           <label class="f" id="wrap-hangamt" hidden><span style="white-space:nowrap">Hang %</span><input type="number" id="tx-hangamt" min="5" max="150" step="5" title="How much of each mark hangs out, in percent of its width. 100 hangs it completely; less leaves part of it inside."></label>
           <label class="f" id="wrap-indent"><span style="white-space:nowrap">Indent</span><input type="number" id="tx-indent" min="0" max="20" step="0.25" title="How far in the first line of each paragraph starts, in ems (one em is the size of the text). Needs a fixed width."></label>
+          <label class="inline" id="wrap-noind1" title="Leave the first paragraph of the text without an indent, as in a book where a chapter's first paragraph starts flush left"><input type="checkbox" id="tx-noind1"> Don't indent the first paragraph</label>
           <label class="inline" title="Break long words with a hyphen at the end of a line (English words, in a text with a fixed width)"><input type="checkbox" id="tx-hyph"> Hyphenate</label>
           <button class="btn line" id="tx-addfont">Add a font from your computer…</button>
           <button class="btn line" id="btn-breakapart" title="Turn each letter into its own shape, together in a new folder. Works on up to 100 letters. The text stops being editable (Undo brings it back).">Break apart into letters</button>
@@ -837,7 +838,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.29.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.30.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1196,7 +1197,7 @@ const blendOf = o => o.blend && o.blend !== 'normal' && BLEND_IDS.indexOf(o.blen
    STYLE_KEYS: how an object looks (kept when an object changes shape: Combine, Perspective, tilting back).
    KIND_PARAMS: the settings only one kind has; they go away when an object becomes a plain shape. */
 const STYLE_KEYS = ['fill', 'grad', 'stroke', 'sw', 'opacity', 'join', 'dash', 'cap', 'blend'];
-const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph', 'indent'] };
+const KIND_PARAMS = { rect: ['r'], polygon: ['sides', 'star', 'inner'], text: ['text', 'font', 'size', 'align', 'lh', 'ls', 'runs', 'parts', 'bw', 'hang', 'hyph', 'indent', 'noind1'] };
 // Copy the listed settings from one object to another, removing any the source doesn't have.
 // Gradients are copied, never shared, so editing one object's gradient can't change another's.
 function copyKeys(from, to, keys) {
@@ -1454,7 +1455,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.indent > 0 ? 'i' + o.indent : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);
@@ -2074,7 +2075,8 @@ const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16
    - o.align === 'justify': every line but the last of a paragraph has its spaces stretched until it is exactly as wide as the box.
      The stretched positions go into the line's metrics (L.m.xs), so the caret and clicks agree with the drawing, which is cut
      into words (L.slots says where) because the spaces are no longer the width the font gave them.
-   - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in.
+   - o.indent (in ems): the first line of every paragraph, that is after a line break and at the start, starts that far in; with
+     o.noind1 the very first paragraph of the text is left out (as under a heading, in a book).
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
@@ -2320,7 +2322,7 @@ function textLayout(o, obs) {
       else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
       else free.forEach(sl => {
         if (a >= para.length) return;
-        const ind = a === 0 ? indent : 0;   // (only the first line of the paragraph is indented)
+        const ind = a === 0 && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so)
         const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind);
         if (!c) return;
         row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
@@ -6056,7 +6058,8 @@ function updateInspector() {
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
-      $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);   // (a word is only broken to fit a width)
+      $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);
+      $('#tx-noind1').checked = !!o.noind1; $('#tx-noind1').disabled = !(o.bw > 0 && o.indent > 0);   // (a word is only broken to fit a width)
     }
     if (o.kind === 'polygon') {
       setNum($('#pg-sides'), o.sides); $('#pg-star').checked = !!o.star;
@@ -6194,6 +6197,7 @@ $('#tx-fixed').addEventListener('change', e => {
 });
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
 onNum($('#tx-indent'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.indent = clamp(rnd(v, 2), 0, 20); else delete o.indent; });
+$('#tx-noind1').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.noind1 = true; else delete o.noind1; refresh(o); commit(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
 // Text with a box flows around the selected shapes (see 04i-text-wrap.js); a folder's letters and shapes are all switched together
@@ -7064,6 +7068,7 @@ function sanitizeDoc(d) {
       o.lh = num(r.lh, 1.2, 0.6, 3); o.ls = num(r.ls, 0, -0.2, 2);
       if (Number.isFinite(+r.bw) && +r.bw > 0) o.bw = num(r.bw, 100, 1, 1e5);   // the width of a text wrapped to a box
       if (Number.isFinite(+r.indent) && +r.indent > 0) o.indent = num(r.indent, 0, 0, 20);   // how far in each paragraph's first line starts, in ems
+      if (r.noind1 === true) o.noind1 = true;   // the first paragraph is not indented
       if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin (all of their width)
       else if (typeof r.hang === 'number' && r.hang > 0) o.hang = num(r.hang, 1, 0.05, 1.5);   // (or just part of it)
       if (r.hyph === true) o.hyph = true;    // long words are broken with a hyphen
@@ -7720,7 +7725,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'New: an Indent setting for text with a fixed width indents the first line of every paragraph. Text is now picked on its lines, so a click in the empty room of a text box, or on a blank line, goes through to whatever is behind it.';
+const WHATS_NEW = 'New: "Don\u2019t indent the first paragraph" leaves the first paragraph of a text flush left while the ones after it keep their indent.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

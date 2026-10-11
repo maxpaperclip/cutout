@@ -335,3 +335,39 @@ test('paragraph indent: the first line of every paragraph starts further in', as
     assert.equal(h.lines.map(l => l.text).join(''), 'an extraordinary result of communication');
   });
 });
+
+test('paragraph indent: leaving the first paragraph out', async (t) => {
+  const base = { text: 'aaa bbb ccc ddd eee fff ggg hhh iii jjj kkk\nlll mmm nnn ooo ppp qqq', bw: 100, indent: 2 };
+  const firsts = L => L.lines.filter((l, i) => i === 0 || L.lines[i - 1].hard);
+  await t.test('only the very first line is flush; the paragraphs after it are indented', () => {
+    const L = setup(Object.assign({ noind1: true }, base)).lay(), f = firsts(L);
+    assert.equal(f.length, 2);
+    assert.equal(f[0].x, 0); assert.equal(f[0].sw, 100);
+    assert.equal(f[1].x, 20); assert.equal(f[1].sw, 80);
+  });
+  await t.test('the first line then has the whole width to fill', () => {
+    const text = 'aaa bbb ccc ddd eee';
+    assert.deepEqual(texts(setup({ text, bw: 100, indent: 2 }).lay()), ['aaa bbb ccc ddd ', 'eee']);
+    assert.deepEqual(texts(setup({ text, bw: 100, indent: 2, noind1: true }).lay()), [text]);
+  });
+  await t.test('it does nothing without an indent, and a text of one paragraph just has no indent at all', () => {
+    assert.equal(setup({ text: 'aaa bbb', bw: 100, noind1: true }).lay().lines[0].x, 0);
+    assert.equal(setup({ text: 'aaa bbb', bw: 100, indent: 2, noind1: true }).lay().lines[0].x, 0);
+  });
+  await t.test('an empty first paragraph still counts as the first', () => {
+    const L = setup({ text: '\naaa', bw: 100, indent: 2, noind1: true }).lay();
+    assert.equal(L.lines[1].x, 20);
+  });
+  await t.test('it works with justify and a shape at the left', () => {
+    const J = setup({ text: 'aaa bbb ccc ddd eee fff ggg hhh iii jjj', bw: 100, indent: 2, noind1: true, align: 'justify' }).lay();
+    assert.ok(Math.abs(J.lines[0].tw - 100) < 1e-9);
+  });
+  await t.test('it is a different layout, saved, and opened again', () => {
+    const a = setup({ text: 'aaa', bw: 100, indent: 1, noind1: true }), b = setup({ text: 'aaa', bw: 100, indent: 1 });
+    assert.notEqual(a.m.layoutText(a.o).d, b.m.layoutText(b.o).d);
+    a.m.doc.objects.length = 0; a.m.doc.objects.push(a.o);
+    assert.equal(a.m.sanitizeDoc(JSON.parse(a.m.docJSON(a.m.doc))).objects[0].noind1, true);
+    const d = a.m.sanitizeDoc({ w: 800, h: 600, objects: [{ kind: 'text', text: 'abc', size: 10, font: 'fake', x: 0, y: 0, bw: 50, indent: 1, noind1: 'yes' }] });
+    assert.equal(d.objects[0].noind1, undefined);
+  });
+});
