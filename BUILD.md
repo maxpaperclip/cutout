@@ -66,10 +66,10 @@ src/
     16-export.js
     17-projects.js
     18-photos.js
-    18b-svg-import.js   Imports SVG files as editable shapes (made safe first)
+    18b-svg-import.js   Imports SVG files as editable shapes (made safe first: only listed SVG elements and attributes are kept)
     19-ui-wiring.js
     20-boot.js
-build.js              The build script (plain Node, no required dependencies)
+build.js              The build script (plain Node; needs `npm ci` for the two libraries it builds in)
 scripts/copy-to-root.js   Copies a finished build to the repo root for release
 scripts/fetch-fonts.js    Downloads the library's Latin fonts and licenses from Fontsource (npm)
 scripts/subset-cjk.py     Cuts Noto Sans SC down to the common Chinese characters (needs fonttools)
@@ -161,6 +161,19 @@ it (opening a drawing waits at most a few seconds). If text is ever laid out bef
 stands in and the text is laid out again when the real one lands (`fontArrived`). A font that can't be fetched leaves the
 text as it was and says so once. Fonts a person adds from their computer ("Yours") are kept in this browser's IndexedDB
 (`meta` store, key `font:...`) and loaded before the drawing is restored (`loadUserFonts`, called from `restoreSession`).
+
+## Libraries and the Content Security Policy
+
+paper.js and opentype.js are built into the page from `node_modules` (pinned to exact versions in `package.json`), not
+loaded from a CDN, so FriendShaped never contacts another server and the single file works offline. To update one,
+`npm install --save-exact paper@x.y.z` (or `opentype.js@x.y.z`), rebuild, and run the tests.
+
+`build.js` also writes a Content Security Policy into the page's `<head>` (where `src/index.html` says `<!--CSP-->`):
+only the page's own four scripts may run (each allowed by its SHA-256 hash, recomputed on every build), the page may
+fetch only from where it was served (the fonts folder and `version.json`), and pictures may only be `data:` or
+`blob:` URLs. If a change needs something new (a web worker, a picture from a server...), change `cspFor()` in
+`build.js` rather than loosening the page; a `tests-unit/fonts.test.js` check fails if the policy and the scripts
+disagree. Don't add inline event handlers (`onclick=`) to `src/index.html`: the policy blocks them.
 
 ## Editing a section of the app
 

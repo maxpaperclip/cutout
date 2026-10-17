@@ -26,6 +26,7 @@
  *   node build.js --minify   also minify the JS with esbuild, if installed
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -124,19 +125,59 @@ function buildStyles(minify) {
   return css;
 }
 
-function buildPage({ html, css, appScript, fontDataScript }) {
-  const scripts = [
-    '<script src="https://cdn.jsdelivr.net/npm/paper@0.12.18/dist/paper-core.min.js"></script>',
-    '<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>',
-    `<script>${fontDataScript}</script>`,
-    `<script>${stampVersion(appScript, 'src/js')}</script>`,
-  ].join('\n');
+// The two libraries the app runs on are built into the page from node_modules (pinned to exact versions in
+// package.json and package-lock.json), not loaded from a CDN: nothing is fetched from anyone else's server, a
+// compromised CDN can't change the app, and the single file works with no internet at all.
+const LIBS = ['paper/dist/paper-core.min.js', 'opentype.js/dist/opentype.min.js'];
+function readLibs() {
+  return LIBS.map((rel) => {
+    let file;
+    try { file = require.resolve(rel); } catch (e) { throw new Error(`[build] ${rel} is missing; run \`npm ci\` first.`); }
+    return fs.readFileSync(file, 'utf8');
+  });
+}
+
+// Text inside <script>...</script> must not contain "</script" (it would end the script early) or "<!--" (which
+// changes how the browser looks for the end). Our own code and the libraries don't; fail loudly if that changes.
+function inlineScript(code, where) {
+  if (/<\/script|<!--/i.test(code)) throw new Error(`[build] ${where} contains "</script" or "<!--", which can't be put inside a <script> as is.`);
+  return code;
+}
+
+// The Content Security Policy: the page may only run its own scripts (each one named by its hash, so an injected
+// <script> or onclick= would not run), may only fetch from where it was served (the fonts folder and version.json
+// of the hosted build), and pictures may only come from data: and blob: URLs made in the page.
+function cspFor(scripts) {
+  const hashes = scripts.map((s) => `'sha256-${crypto.createHash('sha256').update(s, 'utf8').digest('base64')}'`).join(' ');
+  return [
+    "default-src 'none'",
+    `script-src ${hashes}`,
+    "style-src 'unsafe-inline'",   // the page sets style= on elements as it draws
+    'img-src data: blob:',
+    'font-src data: blob:',
+    "connect-src 'self'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "object-src 'none'",
+  ].join('; ');
+}
+
+function buildPage({ html, css, appScript, fontDataScript, libs }) {
+  const bodies = [
+    ...libs.map((code, i) => inlineScript(code, LIBS[i])),
+    inlineScript(fontDataScript, 'the font data'),
+    inlineScript(stampVersion(appScript, 'src/js'), 'src/js'),
+  ];
+  const scripts = bodies.map((b) => `<script>${b}</script>`).join('\n');
+  const csp = `<meta http-equiv="Content-Security-Policy" content="${cspFor(bodies)}">`;
+  if (!html.includes('<!--CSP-->')) throw new Error('[build] src/index.html no longer contains <!--CSP-->; the page would have no Content Security Policy.');
 
   // NOTE: replacement uses a function, not a string, because the app code
   // itself uses `$` and `$$` as function names — a literal-string
   // replacement would trigger JS's special "$$"/"$&" substitution
   // patterns and silently corrupt the output.
   return html
+    .replace('<!--CSP-->', () => csp)
     .replace('<!--STYLES-->', () => css)
     .replace('<!--SCRIPTS-->', () => scripts);
 }
@@ -147,6 +188,7 @@ function build({ minify = false, outDir = OUT_DIR } = {}) {
   const html = stampVersion(fs.readFileSync(path.join(SRC, 'index.html'), 'utf8'), 'src/index.html');
   const css = buildStyles(minify);
   const appScript = buildAppScript(minify);
+  const libs = readLibs();
   const { manifest, builds, faces } = readFontLists();
   const kb = (file) => (fs.statSync(file).size / 1024).toFixed(0);
 
@@ -154,7 +196,7 @@ function build({ minify = false, outDir = OUT_DIR } = {}) {
 
   // 1. The lite single file: only the lite fonts, nothing to fetch
   const liteFile = path.join(outDir, LITE_FILE);
-  fs.writeFileSync(liteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.lite, '', faces) }), 'utf8');
+  fs.writeFileSync(liteFile, buildPage({ html, css, appScript, libs, fontDataScript: buildFontData(manifest, builds.lite, '', faces) }), 'utf8');
 
   // 2. The hosted site: a small page, and every font as its own file for the page to fetch when it is needed
   const siteDir = path.join(outDir, SITE_DIR), siteFonts = path.join(siteDir, 'fonts');
@@ -165,7 +207,7 @@ function build({ minify = false, outDir = OUT_DIR } = {}) {
   // caching rules for hosts that read a _headers file (Netlify, Cloudflare Pages): the page and version.json are never reused without asking.
   fs.writeFileSync(path.join(siteDir, 'version.json'), JSON.stringify({ version: PKG.version }) + '\n', 'utf8');
   fs.writeFileSync(path.join(siteDir, '_headers'), '/\n  Cache-Control: no-cache\n/index.html\n  Cache-Control: no-cache\n/version.json\n  Cache-Control: no-store\n', 'utf8');
-  fs.writeFileSync(siteFile, buildPage({ html, css, appScript, fontDataScript: buildFontData(manifest, builds.core, 'fonts/', faces) }), 'utf8');
+  fs.writeFileSync(siteFile, buildPage({ html, css, appScript, libs, fontDataScript: buildFontData(manifest, builds.core, 'fonts/', faces) }), 'utf8');
   const keys = Object.keys(manifest);
   keys.forEach((k) => fs.copyFileSync(path.join(FONTS_SRC, path.basename(manifest[k])), path.join(siteFonts, path.basename(manifest[k]))));
   // The licenses travel with the fonts they cover

@@ -32,6 +32,13 @@ Every test calls `loadAppModules()` to get a **fresh** instance (its own
 `vm` context, its own `doc`/`S`/`images`, its own `paper` scope), so tests
 never leak state into one another.
 
+`svg-sanitize.test.js` is the one exception to "no DOM": the SVG import's
+cleaning step (`svgSafeParse` in `18b-svg-import.js`) reads files with
+`DOMParser`, so that test runs the real file with [jsdom](https://github.com/jsdom/jsdom)'s
+DOM (installed as `jsdom-for-tests`, because paper.js changes how it works in Node when it can find a package named `jsdom`). It feeds in hostile SVGs (scripts, HTML tucked inside the SVG, outside
+links, CSS-escaped `url()`s...) and checks that only listed SVG elements and
+attributes, and links inside the file, come out.
+
 ## Running
 
 ```bash

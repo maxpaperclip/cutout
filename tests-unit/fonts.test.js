@@ -268,8 +268,47 @@ test('build: the two outputs', async (t) => {
     assert.ok(fs.existsSync(path.join(out, 'site', 'fonts', 'CREDITS.md')));
   });
   await t.test('the two pages differ only in their fonts', () => {
-    const strip = html => html.replace(/window\.FONT_DATA=.*?window\.FONT_BASE="[^"]*";/s, '');
+    // (and so in the hash of the script holding them, in the Content Security Policy)
+    const strip = html => html.replace(/window\.FONT_DATA=.*?window\.FONT_BASE="[^"]*";/s, '').replace(/'sha256-[^']*'/g, '');
     assert.equal(strip(fs.readFileSync(path.join(out, 'FriendShaped.html'), 'utf8')), strip(fs.readFileSync(path.join(out, 'site', 'index.html'), 'utf8')));
   });
+  await t.test('both pages run only their own built-in scripts, and fetch nothing from other servers', () => {
+    const crypto = require('crypto');
+    ['FriendShaped.html', path.join('site', 'index.html')].forEach(f => {
+      const html = fs.readFileSync(path.join(out, f), 'utf8');
+      assert.ok(!/<script[^>]+src=/i.test(html), f + ' loads a script from a file or server');
+      assert.ok(!/(src|href)=["']?(https?:)?\/\//i.test(html), f + ' links to another server');
+      const csp = /<meta http-equiv="Content-Security-Policy" content="([^"]+)">/.exec(html);
+      assert.ok(csp, f + ' has a Content Security Policy');
+      assert.ok(html.indexOf(csp[0]) < html.indexOf('<script'), f + ': the policy comes before the first script');
+      const policy = Object.fromEntries(csp[1].split(';').map(d => d.trim().split(/\s+/)).map(([k, ...v]) => [k, v]));
+      assert.deepEqual(policy['default-src'], ["'none'"]);
+      assert.deepEqual(policy['connect-src'], ["'self'"]);
+      assert.deepEqual(policy['base-uri'], ["'none'"]);
+      const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(m => m[1]);
+      assert.equal(scripts.length, 4, f + ': paper.js, opentype.js, the fonts and the app');
+      assert.ok(scripts[0].length > 100000 && scripts[1].length > 100000, f + ': the libraries are built in');
+      const hashes = scripts.map(s => "'sha256-" + crypto.createHash('sha256').update(s, 'utf8').digest('base64') + "'");
+      assert.deepEqual(policy['script-src'], hashes, f + ': the policy allows exactly the page\'s own scripts');
+    });
+  });
   fs.rmSync(out, { recursive: true, force: true });
+});
+
+test('fonts: keys read from a file can only name real fonts', async (t) => {
+  const tricky = ['__proto__', 'constructor', 'toString', 'hasOwnProperty', 'valueOf'];
+  await t.test('names that every plain object has are not fonts', () => {
+    tricky.forEach(k => {
+      assert.equal(hosted.fonts[k], undefined, k);
+      assert.equal(hosted.FAMILIES[k], undefined, k);
+    });
+  });
+  await t.test('a drawing asking for them fetches nothing and changes no other object', async () => {
+    const rt = loadRuntime({ base: 'fonts/', builtIn: builds.core, fetchImpl: async () => ({ ok: false, status: 404 }) });
+    const raw = { objects: tricky.map(k => ({ kind: 'text', font: k, runs: [{ n: 1, f: k }] })) };
+    assert.deepEqual(plain(rt.rawFontKeys(raw)), []);
+    await rt.ensureFonts(tricky);
+    assert.deepEqual(rt.fetched, []);
+    assert.equal(vm.runInContext('({}).failedAt', rt.sandbox), undefined);
+  });
 });
