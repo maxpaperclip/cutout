@@ -72,6 +72,7 @@ src/
 build.js              The build script (plain Node; needs `npm ci` for the two libraries it builds in)
 scripts/copy-to-root.js   Copies a finished build to the repo root for release
 scripts/fetch-fonts.js    Downloads the library's Latin fonts and licenses from Fontsource (npm)
+scripts/verify-fonts.js   Checks every font and license is byte-identical to its Fontsource package (npm)
 scripts/subset-cjk.py     Cuts Noto Sans SC down to the common Chinese characters (needs fonttools)
 dist/                  Build output: FriendShaped.html and site/ (gitignored; `npm run release` copies them to the repo root)
 FriendShaped.html, site/     The committed release: the lite single file, and the hosted page with its fonts/ folder
@@ -132,8 +133,12 @@ nothing is ever faked. There are no variable fonts either, because opentype.js c
 2. Add `['key', 'Label', 'category']` to `FONT_DEFS` in `src/js/03-fonts-runtime.js`. Categories are `sans`,
    `serif`, `script`, `display`, `decorative` and `international`; the picker lists fonts in this order within
    each category. If the font's name is a poor sample of it (a Chinese font), add a line to `FONT_SAMPLES`.
-3. `npm test` (it checks that the list, the manifest, the files and the licenses all agree), then `npm run build`
-   and try the font in the picker.
+3. `npm test` (it checks that the list, the manifest, the files and the licenses all agree, and that every font file is
+   a clean WOFF whose every glyph draws: `tests-unit/font-files.test.js`), then `npm run build` and try the font in
+   the picker.
+4. `node scripts/verify-fonts.js` (needs internet) to confirm every font and license is byte-identical to the Fontsource
+   package in `CREDITS.md`. A font from elsewhere won't be covered by it: say where it came from in `CREDITS.md`, and
+   see `SECURITY-REVIEW.md` for the checks it should get instead.
 
 **Weights and italics come with the family.** `scripts/fetch-fonts.js` downloads every Latin weight and italic the
 Fontsource package has, one `.woff` each, named `<family>-<weight>` with an `i` after for italic (`lato-700i`), and writes
