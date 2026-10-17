@@ -41,8 +41,9 @@ const fontStyleName = (w, italic) => w === 400 ? (italic ? 'Italic' : 'Regular')
 const DEFAULT_FONT = 'inter-xb';
 const FONT_FACES = window.FONT_FACES || {};   // family key -> [[face key, weight, italic?], ...]
 const FONT_BASE = window.FONT_BASE || '';   // the fonts folder of the hosted build; '' in the single file, which has only its built-in fonts
-const fonts = {};     // face key -> { label, category, family, weight, italic, styleLabel, font (parsed the first time it is read), data (base64, built in) or buf (fetched or added by the person) }
-const FAMILIES = {};  // family key (its regular face) -> { id, label, category, faces: [face keys, lightest first, italics after upright] }
+// Both tables have no prototype, so a key read from a file such as "__proto__" or "constructor" is never mistaken for a font
+const fonts = Object.create(null);     // face key -> { label, category, family, weight, italic, styleLabel, font (parsed the first time it is read), data (base64, built in) or buf (fetched or added by the person) }
+const FAMILIES = Object.create(null);  // family key (its regular face) -> { id, label, category, faces: [face keys, lightest first, italics after upright] }
 function b64ToBuf(b64) {
   const bin = atob(b64), u = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);

@@ -4,8 +4,11 @@
    groups, gradients become FriendShaped gradients, text becomes FriendShaped text (in FriendShaped's default font)
    and embedded pictures become photos. Three steps:
      1. svgSafeParse(text): read the file and make it safe. Students may download SVGs from anywhere,
-        so scripts, event handlers, embedded web content, animation and anything that would fetch
-        from the internet are removed before anything else happens. <style> rules are copied onto
+        so only what FriendShaped can use is kept: a list of known SVG elements (SVG_ELEMENTS) and
+        attributes (SVG_ATTRS). Everything else goes, whatever it is: scripts, event handlers, HTML
+        elements tucked inside the SVG, filters, animation, and any link or url() that isn't to
+        something in the same file. This matters because paper.js briefly puts the file into the
+        page while it reads it, where anything left would be live. <style> rules are copied onto
         the shapes they apply to, because paper.js only reads colors written on the shapes.
      2. paper.js reads the cleaned SVG into its own items (with shapes expanded to paths).
      3. svgConvert(): walks those items and makes FriendShaped objects. This step uses only paper.js,
@@ -23,32 +26,57 @@ const SVG_PROPS = ['fill', 'fill-opacity', 'fill-rule', 'stroke', 'stroke-width'
   'stroke-dasharray', 'stroke-miterlimit', 'opacity', 'display', 'visibility', 'stop-color', 'stop-opacity', 'clip-rule',
   'font-size', 'font-family', 'font-weight', 'text-anchor', 'mix-blend-mode'];
 const SAFE_PICTURE = /^data:image\/(png|jpe?g|webp|gif);base64,/i;
+const SVG_NS = 'http://www.w3.org/2000/svg', XLINK_NS = 'http://www.w3.org/1999/xlink', XML_NS = 'http://www.w3.org/XML/1998/namespace';
+// The only elements kept, and only in the SVG namespace. <style> and <a> are kept just long enough to be dealt
+// with (their rules copied, their insides kept), and <image> until it becomes a marker (see below).
+const SVG_ELEMENTS = new Set(['svg', 'g', 'defs', 'symbol', 'use', 'switch', 'path', 'rect', 'circle', 'ellipse', 'line', 'polyline',
+  'polygon', 'text', 'tspan', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'image', 'style', 'a']);
+// The only attributes kept (with SVG_PROPS). Links (href) are checked on their own; class and style only matter
+// until their colors have been copied onto the shapes, then they go too.
+const SVG_ATTRS = new Set(['id', 'class', 'style', 'x', 'y', 'width', 'height', 'rx', 'ry', 'cx', 'cy', 'r', 'fx', 'fy', 'x1', 'y1', 'x2', 'y2',
+  'points', 'd', 'transform', 'viewBox', 'preserveAspectRatio', 'offset', 'gradientUnits', 'gradientTransform', 'spreadMethod',
+  'clipPathUnits', 'clip-path', 'vector-effect', 'stroke-dashoffset', 'font-style', 'letter-spacing', 'dx', 'dy']);
+const svgLocalRef = v => /^\s*#/.test(v);
+// Every url() that isn't to something in the same file becomes 'none'
+const svgCleanUrls = v => v.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (m, q, u) => svgLocalRef(u) ? m : 'none');
+// Keep only the attributes on the lists, and only links into the file itself (or an embedded picture's own data)
+function svgCleanAttrs(el, final) {
+  Array.from(el.attributes).forEach(a => {
+    const ns = a.namespaceURI, n = a.localName, v = a.value;
+    const drop = () => el.removeAttributeNS(ns, n);
+    if (n === 'href' && (ns === null || ns === XLINK_NS)) {
+      if (!svgLocalRef(v) && !(el.localName === 'image' && SAFE_PICTURE.test(v))) drop();
+      return;
+    }
+    if (ns === XML_NS && n === 'space') return;
+    if (ns !== null) return drop();   // anything in another namespace (a link under a made-up prefix, an HTML attribute...)
+    if ((!SVG_ATTRS.has(n) && SVG_PROPS.indexOf(n) < 0) || (final && (n === 'style' || n === 'class'))) return drop();
+    // A backslash is a CSS escape, which can spell url( so that it isn't recognized: nothing FriendShaped reads needs one
+    if (v.indexOf('\\') >= 0) return drop();
+    if (/url\(/i.test(v)) el.setAttribute(n, svgCleanUrls(v));
+  });
+}
+// Remove every element not on the list (with all it holds), and comments and processing instructions; keep what's inside links, not the link
+function svgCleanTree(el) {
+  Array.from(el.childNodes).forEach(c => {
+    if (c.nodeType === 3 || c.nodeType === 4) return;   // text
+    if (c.nodeType !== 1 || c.namespaceURI !== SVG_NS || !SVG_ELEMENTS.has(c.localName)) { c.remove(); return; }
+    svgCleanTree(c);
+    if (c.localName === 'a') { while (c.firstChild) el.insertBefore(c.firstChild, c); c.remove(); }
+  });
+}
 function svgSafeParse(text) {
   const parsed = new DOMParser().parseFromString(text, 'image/svg+xml');
   const svg = parsed.documentElement;
-  if (!svg || svg.localName !== 'svg' || parsed.getElementsByTagName('parsererror').length) throw new Error('That file is not a readable SVG drawing.');
-  // Remove anything that could run code, show web content, animate, or reach the internet
-  svg.querySelectorAll('script, foreignObject, iframe, object, embed, audio, video, canvas, animate, animateMotion, animateTransform, animateColor, set, discard, handler, listener')
-    .forEach(e => e.remove());
-  const localRef = v => /^\s*#/.test(v);
-  const cleanUrls = v => v.replace(/url\(\s*(['"]?)(.*?)\1\s*\)/gi, (m, q, u) => localRef(u) ? m : 'none');
-  svg.querySelectorAll('*').forEach(el => {
-    Array.from(el.attributes).forEach(a => {
-      const n = a.name.toLowerCase(), v = a.value;
-      if (n.startsWith('on')) el.removeAttribute(a.name);
-      else if (n === 'href' || n === 'xlink:href' || n === 'src') {
-        const picture = el.localName === 'image' && SAFE_PICTURE.test(v);
-        if (!localRef(v) && !picture) el.removeAttribute(a.name);
-      } else if (/url\(/i.test(v)) el.setAttribute(a.name, cleanUrls(v));
-    });
-  });
+  if (!svg || svg.localName !== 'svg' || svg.namespaceURI !== SVG_NS || parsed.getElementsByTagName('parsererror').length) throw new Error('That file is not a readable SVG drawing.');
+  svgCleanTree(svg);
+  [svg, ...svg.getElementsByTagName('*')].forEach(el => svgCleanAttrs(el, false));
   // paper.js only follows the older xlink:href form of links (to reused symbols, gradients that build on others...)
-  svg.querySelectorAll('[href]').forEach(el => { if (!el.hasAttribute('xlink:href')) el.setAttributeNS('http://www.w3.org/1999/xlink', 'xlink:href', el.getAttribute('href')); });
-  svg.querySelectorAll('a').forEach(a => { while (a.firstChild) a.parentNode.insertBefore(a.firstChild, a); a.remove(); });   // keep what's inside links, not the link
+  svg.querySelectorAll('[href]').forEach(el => { if (!el.hasAttributeNS(XLINK_NS, 'href')) el.setAttributeNS(XLINK_NS, 'xlink:href', el.getAttribute('href')); });
   // Copy <style> rules and style="" onto the shapes as plain attributes (later rules win, style="" wins over rules)
   const fromRules = new Map();
   svg.querySelectorAll('style').forEach(st => {
-    const css = cleanUrls((st.textContent || '').replace(/@import[^;]*;?/gi, ''));
+    const css = svgCleanUrls((st.textContent || '').replace(/@import[^;]*;?/gi, ''));
     st.remove();
     if (typeof CSSStyleSheet === 'undefined') return;
     let sheet;
@@ -71,14 +99,14 @@ function svgSafeParse(text) {
       const p = decl.slice(0, i).trim().toLowerCase(), v = decl.slice(i + 1).replace(/!important/i, '').trim();
       if (SVG_PROPS.indexOf(p) >= 0 && v) props[p] = v;
     });
-    Object.keys(props).forEach(p => el.setAttribute(p, cleanUrls(props[p])));
+    Object.keys(props).forEach(p => el.setAttribute(p, svgCleanUrls(props[p])));
   });
   svgExpandUses(parsed, svg);
   svgScaleOutlines(svg);
   // Swap each embedded picture for a marker path (see the top of this section)
   const pictures = [];
   svg.querySelectorAll('image').forEach(im => {
-    const href = im.getAttribute('href') || im.getAttribute('xlink:href') || '';
+    const href = im.getAttribute('href') || im.getAttributeNS(XLINK_NS, 'href') || '';
     const num = a => { const v = parseFloat(im.getAttribute(a)); return Number.isFinite(v) ? v : 0; };
     const x = num('x'), y = num('y'), w = num('width'), h = num('height');
     if (!SAFE_PICTURE.test(href) || w <= 0 || h <= 0) { im.remove(); return; }
@@ -90,6 +118,8 @@ function svgSafeParse(text) {
     pictures.push({ href, fit: (im.getAttribute('preserveAspectRatio') || '').trim() !== 'none' });
     im.replaceWith(mark);
   });
+  // Last look: the colors copied from <style> and style="" are checked like everything else, and class and style go
+  [svg, ...svg.getElementsByTagName('*')].forEach(el => svgCleanAttrs(el, true));
   return { svg, pictures };
 }
 

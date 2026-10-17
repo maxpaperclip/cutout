@@ -1,6 +1,6 @@
 {
   "name": "friendshaped",
-  "version": "1.33.0",
+  "version": "1.33.1",
   "private": true,
   "description": "In-browser vector and bitmap graphics editor for classroom use. Builds to a single self-contained HTML file.",
   "scripts": {
@@ -13,6 +13,8 @@
   },
   "devDependencies": {
     "esbuild": "^0.25.0",
-    "paper": "^0.12.18"
+    "jsdom-for-tests": "npm:jsdom@26.1.0",
+    "opentype.js": "1.3.4",
+    "paper": "0.12.18"
   }
 }
