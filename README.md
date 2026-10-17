@@ -28,3 +28,5 @@ npm run build   # produces dist/FriendShaped.html (single file) and dist/site/ (
 npm run release # builds, then copies both to the repo (FriendShaped.html and site/)
 npm run dev     # rebuilds automatically as you edit src/
 ```
+
+Security reviews, what they checked and how to repeat them, are recorded in [SECURITY-REVIEW.md](SECURITY-REVIEW.md).
