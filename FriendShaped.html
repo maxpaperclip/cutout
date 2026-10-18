@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-ceQ7LXZ14W+mK4XXTioqFkW3LZfmlCLRxLThmNzDwbc=' 'sha256-WORvM0uW8Ln3NkeGs61vfdbtSx0eK4H7m83Ni/vL14U='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-ceQ7LXZ14W+mK4XXTioqFkW3LZfmlCLRxLThmNzDwbc=' 'sha256-Nz0Uxa8+f9ZzIvB8F+ypEOMETFnE0GMH4NnIQiOiNDo='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.37.0</title>
+<title>FriendShaped v1.38.0</title>
 <style>
 
 :root{
@@ -545,8 +545,9 @@ input:disabled,select:disabled{opacity:.45}
           <label class="f"><span style="white-space:nowrap;width:68px">Para space</span><input type="number" id="tx-pspace" min="0" max="10" step="0.1" title="Extra room between paragraphs (after each line break), in ems: one em is the size of the text. 0 is none."></label>
           <div class="row" id="wrap-cols" hidden>
             <label class="f"><span style="white-space:nowrap">Cols</span><input type="number" id="tx-cols" min="1" max="6" step="1" title="Split the text into columns, balanced to the same height. Needs a fixed width."></label>
-            <label class="f"><span style="white-space:nowrap">Gutter</span><input type="number" id="tx-gut" min="0" max="400" step="1" title="The space between columns, in px. Starts as the size of the baseline grid."></label>
+            <label class="f"><span style="white-space:nowrap">Gutter</span><input type="number" id="tx-gut" min="0" max="400" step="1" title="The space between columns, in px. Typing one here switches off Match page gutter."></label>
           </div>
+          <label class="inline" id="wrap-gutmatch" hidden title="Keep the space between this text's columns the same as the gutter of the page columns (Page tab), also when that changes."><input type="checkbox" id="tx-gutmatch"> Match page gutter</label>
           <button class="btn line" id="tx-matchgrid" hidden>Match page columns</button>
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
@@ -939,7 +940,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.37.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.38.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1558,7 +1559,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.cols > 1 ? 'c' + o.cols + ',' + o.gut : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '') + (o.paras ? '\u0001' + JSON.stringify(o.paras) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.cols > 1 ? 'c' + o.cols + ',' + (o.gut !== undefined ? o.gut : 'p' + pageGutter()) : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '') + (o.paras ? '\u0001' + JSON.stringify(o.paras) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);
@@ -2423,9 +2424,9 @@ function textLayout(o, obs) {
   let hEst = lineH;
   if (runs) runs.forEach(r => { const st = runStyle(r); hEst = Math.max(hEst, size * (st.s !== undefined ? st.s : 1) * (st.h !== undefined ? st.h : o.lh)); });
   const minSlot = Math.min(bw, Math.max(size, 8));
-  // Columns (o.cols; o.gut, the space between them, in px like a page's own; area text only): the text flows down the first column, then the next. As many as fit (each at least cw0 wide).
+  // Columns (o.cols; o.gut, the space between them, in px; with none it is the page's column gutter, pageGutter(); area text only): the text flows down the first column, then the next. As many as fit (each at least cw0 wide).
   // With no height of its own the columns are balanced: the shortest height that holds the text (see below)
-  const wantCols = bw ? clamp(Math.floor(+o.cols) || 1, 1, 6) : 1, gut = wantCols > 1 ? clamp(o.gut !== undefined ? +o.gut || 0 : GRID_DEFAULTS.baseline.size, 0, 400) : 0, cw0 = Math.max(size * 2, 8);
+  const wantCols = bw ? clamp(Math.floor(+o.cols) || 1, 1, 6) : 1, gut = wantCols > 1 ? clamp(o.gut !== undefined ? +o.gut || 0 : pageGutter(), 0, 400) : 0, cw0 = Math.max(size * 2, 8);
   let ncols = wantCols;
   while (ncols > 1 && (bw - (ncols - 1) * gut) / ncols < cw0) ncols--;
   const cw = ncols > 1 ? (bw - (ncols - 1) * gut) / ncols : bw;
@@ -3424,15 +3425,20 @@ function columnEdges(c, w) {
 // One vertical line at each edge, the whole height of the page, as an SVG path
 function columnGridPath(c, w, h) { return columnEdges(c, w).map(x => 'M' + x + ' 0V' + gridRound(h, 3)).join(''); }
 
+// The gutter of the page's column grid in px, for a drawing of the page's width: what a text's columns are apart unless it has a gutter of its own
+function pageGutter() {
+  const w = typeof doc === 'object' && doc && doc.w > 0 ? doc.w : 800;
+  return gridRound(w * gridsOf(typeof doc === 'object' ? doc : null).columns.gutter / 100, 2);
+}
 // The columns, space between and box a text needs to sit exactly on the page's columns: the ones whose middle is under the text's box.
-// Gives { x, bw (the box from the left of the first to the right of the last), cols, gut (px) }, or { why } when it can't be done.
+// Gives { x, bw (the box from the left of the first to the right of the last), cols }, or { why } when it can't be done.
 function textColumnsFromGrid(o, c, w) {
   if (!(o.bw > 0)) return { why: 'Give this text a fixed width first.' };
   const hit = columnBoxes(c, w).filter(b => b.x + b.w / 2 >= o.x && b.x + b.w / 2 <= o.x + o.bw);
   if (!hit.length) return { why: 'There is no page column under this text. Move it over the page columns (Page tab) first.' };
   if (hit.length > 6) return { why: 'This text is over ' + hit.length + ' page columns, and a text can have up to 6. Make it narrower first.' };
   const a = hit[0], z = hit[hit.length - 1];
-  return { x: gridRound(a.x, 2), bw: gridRound(z.x + z.w - a.x, 2), cols: hit.length, gut: gridRound(w * c.gutter / 100, 2) };
+  return { x: gridRound(a.x, 2), bw: gridRound(z.x + z.w - a.x, 2), cols: hit.length };
 }
 
 /* ---------- baseline ---------- */
@@ -5605,7 +5611,7 @@ $('#drop-cancel').addEventListener('click', () => edFinish(null));
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
 let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
 // The controls that style the letters; a press on them leaves the text being edited
-const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette, #tx-dc-on, #tx-dc, #tx-dn, #tx-cols, #tx-gut, #tx-matchgrid';
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette, #tx-dc-on, #tx-dc, #tx-dn, #tx-cols, #tx-gut, #tx-gutmatch, #tx-matchgrid';
 const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
@@ -6626,9 +6632,10 @@ function updateInspector() {
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       setNum($('#tx-pspace'), o.pspace > 0 ? o.pspace : 0);
-      $('#wrap-cols').hidden = !(o.bw > 0); setNum($('#tx-cols'), o.cols > 1 ? o.cols : 1); setNum($('#tx-gut'), o.gut !== undefined ? o.gut : bgr.size);
+      $('#wrap-cols').hidden = !(o.bw > 0); setNum($('#tx-cols'), o.cols > 1 ? o.cols : 1); setNum($('#tx-gut'), o.gut !== undefined ? o.gut : pageGutter());
       $('#tx-matchgrid').hidden = !(o.bw > 0); $('#tx-matchgrid').disabled = isLocked(o);
       $('#tx-gut').disabled = !(o.cols > 1);
+      $('#wrap-gutmatch').hidden = !(o.bw > 0); $('#tx-gutmatch').checked = o.gut === undefined; $('#tx-gutmatch').disabled = !(o.cols > 1) || isLocked(o);
       $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
       $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);
@@ -6787,16 +6794,21 @@ $('#tx-fixed').addEventListener('change', e => {
 });
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
 onNum($('#tx-pspace'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.pspace = clamp(rnd(v, 2), 0, 10); else delete o.pspace; });
-onNum($('#tx-cols'), (o, v) => { if (o.kind !== 'text') return; const n = clamp(Math.round(v), 1, 6); if (n > 1) { o.cols = n; if (o.gut === undefined) o.gut = gridsOf(doc).baseline.size; } else delete o.cols; });
-onNum($('#tx-gut'), (o, v) => { if (o.kind !== 'text') return; o.gut = clamp(rnd(v, 2), 0, 400); });
+onNum($('#tx-cols'), (o, v) => { if (o.kind !== 'text') return; const n = clamp(Math.round(v), 1, 6); if (n > 1) o.cols = n; else delete o.cols; });
+onNum($('#tx-gut'), (o, v) => { if (o.kind !== 'text') return; o.gut = clamp(rnd(v, 2), 0, 400); });   // (a gutter of its own: no longer the page's)
+$('#tx-gutmatch').addEventListener('change', e => {
+  const o = one(); if (!o || o.kind !== 'text' || isLocked(o)) return;
+  if (e.target.checked) delete o.gut; else o.gut = pageGutter();   // (off keeps the gutter it has now)
+  refresh(o); render(); renderLayers(); if (te) drawOverlay(); settle(); updateInspector();
+});
 // Put the text on the page's columns: its box from the first to the last of the page columns it is over, with as many columns, and their gutter
-$('#tx-matchgrid').title = 'Fit this text to the page columns (Page tab) it is over: its box takes their width, and it gets as many columns, with the same gutter';
+$('#tx-matchgrid').title = 'Fit this text to the page columns (Page tab) it is over: its box takes their width, and it gets as many columns, with the page gutter';
 $('#tx-matchgrid').addEventListener('click', () => {
   const o = one(); if (!o || o.kind !== 'text' || isLocked(o)) return;
   if (o.rot) { toast('Turn this text back to 0\u00b0 first: the page columns are straight.'); return; }
   const r = textColumnsFromGrid(o, gridsOf(doc).columns, doc.w);
   if (r.why) { toast(r.why); return; }
-  o.x = r.x; o.bw = r.bw; o.gut = r.gut;
+  o.x = r.x; o.bw = r.bw; delete o.gut;
   if (r.cols > 1) o.cols = r.cols; else delete o.cols;
   refresh(o); render(); renderLayers(); if (te) drawOverlay(); settle(); updateInspector();
 });
@@ -7514,8 +7526,8 @@ function updatePageTab() {
   $('#bl-info').textContent = 'Lines are ' + rnd(baselineRange(b, doc.h).step, 2) + ' px apart (font size × line height). Top and bottom are where the grid begins and ends.';
   if (!$('[data-pane="page"]').hidden) updatePhotoInfo();
 }
-$('#pg-preset').addEventListener('change', e => { if (e.target.value === 'custom') return; const p = PRESETS[+e.target.value]; doc.w = p[1]; doc.h = p[2]; commit(); fit(); });
-$('#pg-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { doc.w = clamp(Math.round(v), 16, 8000); commit(); fit(); } else updatePageTab(); });
+$('#pg-preset').addEventListener('change', e => { if (e.target.value === 'custom') return; const p = PRESETS[+e.target.value]; doc.w = p[1]; doc.h = p[2]; refreshGridTexts(); commit(); fit(); });
+$('#pg-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { doc.w = clamp(Math.round(v), 16, 8000); refreshGridTexts(); commit(); fit(); } else updatePageTab(); });
 $('#pg-h').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { doc.h = clamp(Math.round(v), 16, 8000); commit(); fit(); } else updatePageTab(); });
 $('#bg-color').addEventListener('input', e => { doc.bg = e.target.value; drawArtboard(); });
 $('#bg-color').addEventListener('change', () => commit());
@@ -7530,7 +7542,9 @@ $('#grid-size').addEventListener('change', e => { const v = parseFloat(e.target.
    They are kept on the drawing (doc.grids), so every change is one undo step. The two sliders and the two color
    fields change the picture while they are dragged and are recorded when they are let go, like the page color. */
 function editGrids(fn) { const g = gridsOf(doc); fn(g); doc.grids = sanitizeGrids(g); }
-function setGrids(fn) { editGrids(fn); commit(); }
+// Texts whose columns follow the page's gutter are laid out again when the grid or the page width changes it
+function refreshGridTexts() { doc.objects.forEach(o => { if (o.kind === 'text' && o.cols > 1 && o.gut === undefined) refresh(o); }); }
+function setGrids(fn) { editGrids(fn); refreshGridTexts(); commit(); }
 [['cg-show', 'columns', 'show'], ['cg-snap', 'columns', 'snap'], ['bl-show', 'baseline', 'show'], ['bl-snap', 'baseline', 'snap']].forEach(([id, grid, key]) =>
   $('#' + id).addEventListener('change', e => setGrids(g => { g[grid][key] = e.target.checked; })));
 [['cg-count', 'columns', 'count'], ['cg-gutter', 'columns', 'gutter'], ['cg-left', 'columns', 'left'], ['cg-right', 'columns', 'right'],
@@ -8420,7 +8434,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Text columns now line up with the page: the gutter is in px and starts as the size of the baseline grid, and Match page columns fits a text to the page columns it is over. New texts start at the baseline grid size and line height.';
+const WHATS_NEW = 'Text columns follow the page: the new Match page gutter box (on by default) keeps the space between a text\'s columns the same as the page columns\' gutter, also when you change the page grid. Typing a gutter of its own switches it off.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

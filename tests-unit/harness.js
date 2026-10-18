@@ -81,7 +81,7 @@ const EXPORT_NAMES = [
   // 04i-text-wrap.js
   'WRAP_GAP', 'wrapGapOf', 'canWrapAround', 'wrapLocalPolys', 'wrapObstacles', 'wrapBlocked', 'wrapFree', 'wrapSig', 'wrapSyncAll', 'wrapSigOf', 'takeLine', 'wrapSetup',
   // 04j-grids.js
-  'GRID_DEFAULTS', 'GRID_MAX_LINES', 'sanitizeGrids', 'gridsOf', 'columnBoxes', 'textColumnsFromGrid', 'columnEdges', 'columnGridPath',
+  'GRID_DEFAULTS', 'GRID_MAX_LINES', 'sanitizeGrids', 'gridsOf', 'columnBoxes', 'pageGutter', 'textColumnsFromGrid', 'columnEdges', 'columnGridPath',
   'baselineStep', 'baselineRange', 'baselineYs', 'baselineGridPath', 'nearestBaseline', 'gridSnapOn', 'nearGuide', 'guideShift',
   // 04k-text-paragraphs.js
   'PARA_SPEC', 'PARA_KEYS', 'paraClean', 'paraStarts', 'paraCount', 'paraIndexAt', 'paraRange', 'normParas', 'paraSettingsAt', 'paraStyleAt',

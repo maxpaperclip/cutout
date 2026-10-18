@@ -29,8 +29,8 @@ function updatePageTab() {
   $('#bl-info').textContent = 'Lines are ' + rnd(baselineRange(b, doc.h).step, 2) + ' px apart (font size × line height). Top and bottom are where the grid begins and ends.';
   if (!$('[data-pane="page"]').hidden) updatePhotoInfo();
 }
-$('#pg-preset').addEventListener('change', e => { if (e.target.value === 'custom') return; const p = PRESETS[+e.target.value]; doc.w = p[1]; doc.h = p[2]; commit(); fit(); });
-$('#pg-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { doc.w = clamp(Math.round(v), 16, 8000); commit(); fit(); } else updatePageTab(); });
+$('#pg-preset').addEventListener('change', e => { if (e.target.value === 'custom') return; const p = PRESETS[+e.target.value]; doc.w = p[1]; doc.h = p[2]; refreshGridTexts(); commit(); fit(); });
+$('#pg-w').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { doc.w = clamp(Math.round(v), 16, 8000); refreshGridTexts(); commit(); fit(); } else updatePageTab(); });
 $('#pg-h').addEventListener('change', e => { const v = parseFloat(e.target.value); if (isFinite(v)) { doc.h = clamp(Math.round(v), 16, 8000); commit(); fit(); } else updatePageTab(); });
 $('#bg-color').addEventListener('input', e => { doc.bg = e.target.value; drawArtboard(); });
 $('#bg-color').addEventListener('change', () => commit());
@@ -45,7 +45,9 @@ $('#grid-size').addEventListener('change', e => { const v = parseFloat(e.target.
    They are kept on the drawing (doc.grids), so every change is one undo step. The two sliders and the two color
    fields change the picture while they are dragged and are recorded when they are let go, like the page color. */
 function editGrids(fn) { const g = gridsOf(doc); fn(g); doc.grids = sanitizeGrids(g); }
-function setGrids(fn) { editGrids(fn); commit(); }
+// Texts whose columns follow the page's gutter are laid out again when the grid or the page width changes it
+function refreshGridTexts() { doc.objects.forEach(o => { if (o.kind === 'text' && o.cols > 1 && o.gut === undefined) refresh(o); }); }
+function setGrids(fn) { editGrids(fn); refreshGridTexts(); commit(); }
 [['cg-show', 'columns', 'show'], ['cg-snap', 'columns', 'snap'], ['bl-show', 'baseline', 'show'], ['bl-snap', 'baseline', 'snap']].forEach(([id, grid, key]) =>
   $('#' + id).addEventListener('change', e => setGrids(g => { g[grid][key] = e.target.checked; })));
 [['cg-count', 'columns', 'count'], ['cg-gutter', 'columns', 'gutter'], ['cg-left', 'columns', 'left'], ['cg-right', 'columns', 'right'],

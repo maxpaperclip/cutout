@@ -194,8 +194,9 @@
           <label class="f"><span style="white-space:nowrap;width:68px">Para space</span><input type="number" id="tx-pspace" min="0" max="10" step="0.1" title="Extra room between paragraphs (after each line break), in ems: one em is the size of the text. 0 is none."></label>
           <div class="row" id="wrap-cols" hidden>
             <label class="f"><span style="white-space:nowrap">Cols</span><input type="number" id="tx-cols" min="1" max="6" step="1" title="Split the text into columns, balanced to the same height. Needs a fixed width."></label>
-            <label class="f"><span style="white-space:nowrap">Gutter</span><input type="number" id="tx-gut" min="0" max="400" step="1" title="The space between columns, in px. Starts as the size of the baseline grid."></label>
+            <label class="f"><span style="white-space:nowrap">Gutter</span><input type="number" id="tx-gut" min="0" max="400" step="1" title="The space between columns, in px. Typing one here switches off Match page gutter."></label>
           </div>
+          <label class="inline" id="wrap-gutmatch" hidden title="Keep the space between this text's columns the same as the gutter of the page columns (Page tab), also when that changes."><input type="checkbox" id="tx-gutmatch"> Match page gutter</label>
           <button class="btn line" id="tx-matchgrid" hidden>Match page columns</button>
           <label class="inline" title="Wrap the words to a fixed width. Drag the side handles to change the width."><input type="checkbox" id="tx-fixed"> Fixed width (wrap text)</label>
           <label class="inline" title="Hang opening quotes, closing quotes and hyphens a little into the margin, so the letters line up (optical margin alignment)"><input type="checkbox" id="tx-hang"> Hang quotes and hyphens</label>
