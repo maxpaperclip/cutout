@@ -345,7 +345,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.cols > 1 ? 'c' + o.cols + ',' + o.gut : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '') + (o.paras ? '\u0001' + JSON.stringify(o.paras) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.cols > 1 ? 'c' + o.cols + ',' + (o.gut !== undefined ? o.gut : 'p' + pageGutter()) : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '') + (o.paras ? '\u0001' + JSON.stringify(o.paras) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);

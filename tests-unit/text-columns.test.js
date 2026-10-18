@@ -128,9 +128,17 @@ test('a long text is laid out quickly', () => {
   assert.ok(Date.now() - t0 < 3000, 'took ' + (Date.now() - t0) + ' ms');
 });
 
-test('with no gutter of its own, the space between columns is the size of the baseline grid', () => {
-  const t = setup({ cols: 2 }, WORDS), lay = t.lay();
-  assert.equal(lay.gut, t.m.GRID_DEFAULTS.baseline.size);
+test('with no gutter of its own, the space between columns is the page grid\'s gutter, and follows it', () => {
+  const t = setup({ cols: 2 }, WORDS);
+  t.m.doc.w = 1000; t.m.doc.grids = { columns: { gutter: 2 } };
+  t.m.refresh(t.o);
+  assert.equal(t.m.pageGutter(), 20);
+  assert.equal(t.lay().gut, 20);
+  t.m.doc.grids = { columns: { gutter: 5 } };   // the grid changes: laid out afresh, not from the cache
+  t.m.refresh(t.o);
+  assert.equal(t.lay().gut, 50);
+  t.o.gut = 7; t.m.refresh(t.o);   // a gutter of its own is kept whatever the page does
+  assert.equal(t.lay().gut, 7);
 });
 
 // A page 1000 wide with 4 columns, 5% margins and 2% gutters: each column is (1000 - 100 - 60) / 4 = 210 wide, 20 apart
@@ -138,12 +146,13 @@ const PAGE = { count: 4, gutter: 2, left: 5, right: 5 };
 test('a text over page columns takes their box, their number and their gutter', () => {
   const m = loadAppModules();
   const r = m.textColumnsFromGrid({ x: 300, bw: 500 }, PAGE, 1000);   // the middles of columns 2 and 3 are under it (x 280-490 and 510-720: 385, 615)
-  assert.deepEqual(JSON.parse(JSON.stringify(r)), { x: 280, bw: 440, cols: 2, gut: 20 });
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), { x: 280, bw: 440, cols: 2 });
 });
 
 test('the box that results lays the text out in columns exactly as wide as the page columns', () => {
   const t = setup({ cols: 2, x: 300, bw: 500, size: 10 }, WORDS), r = t.m.textColumnsFromGrid(t.o, PAGE, 1000);
-  Object.assign(t.o, { x: r.x, bw: r.bw, gut: r.gut, cols: r.cols }); t.m.refresh(t.o);
+  t.m.doc.w = 1000; t.m.doc.grids = { columns: PAGE };
+  Object.assign(t.o, { x: r.x, bw: r.bw, cols: r.cols }); t.m.refresh(t.o);
   const lay = t.m.textLayout(t.o);
   assert.equal(lay.cw, 210);
   assert.equal(lay.gut, 20);

@@ -262,9 +262,9 @@ function textLayout(o, obs) {
   let hEst = lineH;
   if (runs) runs.forEach(r => { const st = runStyle(r); hEst = Math.max(hEst, size * (st.s !== undefined ? st.s : 1) * (st.h !== undefined ? st.h : o.lh)); });
   const minSlot = Math.min(bw, Math.max(size, 8));
-  // Columns (o.cols; o.gut, the space between them, in px like a page's own; area text only): the text flows down the first column, then the next. As many as fit (each at least cw0 wide).
+  // Columns (o.cols; o.gut, the space between them, in px; with none it is the page's column gutter, pageGutter(); area text only): the text flows down the first column, then the next. As many as fit (each at least cw0 wide).
   // With no height of its own the columns are balanced: the shortest height that holds the text (see below)
-  const wantCols = bw ? clamp(Math.floor(+o.cols) || 1, 1, 6) : 1, gut = wantCols > 1 ? clamp(o.gut !== undefined ? +o.gut || 0 : GRID_DEFAULTS.baseline.size, 0, 400) : 0, cw0 = Math.max(size * 2, 8);
+  const wantCols = bw ? clamp(Math.floor(+o.cols) || 1, 1, 6) : 1, gut = wantCols > 1 ? clamp(o.gut !== undefined ? +o.gut || 0 : pageGutter(), 0, 400) : 0, cw0 = Math.max(size * 2, 8);
   let ncols = wantCols;
   while (ncols > 1 && (bw - (ncols - 1) * gut) / ncols < cw0) ncols--;
   const cw = ncols > 1 ? (bw - (ncols - 1) * gut) / ncols : bw;
