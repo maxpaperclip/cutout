@@ -304,37 +304,43 @@ function textLayout(o, obs) {
       hard, tw, hl: hg.l, hr: hg.r, hy, slots, gap, row: 0, sx, sw,
       cend: hard ? start + t.length : start + te < start + t.length ? start + te : start + t.length };
   };
-  // The whole layout, with no column taller than Hlim (Infinity: no limit). over: the last column had to run past it
-  const pass = Hlim => {
-    const lines = [], caps = [], colBot = [0];
-    let ps = 0, rowIdx = 0, rowTop = 0, blank = 0, yOff = 0, wraps = wraps0, col = 0, colBase = 0, colRows = 0, over = false;
-    const flowY = () => (runs ? rowTop : rowIdx * lineH) + yOff;   // (how far down the text has come, all the columns end to end)
+  // One band of the text: the paragraphs from band.from to band.to, in nc columns (1: the whole width) with the top of the band at yBase, from
+  // character ps0 on, with no column taller than Hlim (Infinity: no limit). over: the last column had to run past it.
+  // Its lines and caps are numbered from 0 (the rows too); layoutBands moves them on.
+  const paraTexts = text.split('\n');
+  const pass = (band, nc, yBase, ps0, Hlim) => {
+    const lines = [], caps = [], colBot = [0], cwb = nc > 1 ? (bw - (nc - 1) * gut) / nc : bw;
+    let ps = ps0, rowIdx = 0, rowTop = 0, blank = 0, yOff = 0, wraps = wraps0, col = 0, colBase = 0, colRows = 0, over = false;
+    const flowY = () => (runs ? rowTop : rowIdx * lineH) + yOff;   // (how far down the band the text has come, all the columns end to end)
     const nextColumn = () => { col++; colBase = flowY(); colRows = 0; colBot[col] = 0; };
     // Put the lines of one row where they go: all on one baseline, as high as the tallest
     const placeRow = row => {
       const h = Math.max(...row.map(L => L.h)), A = Math.max(...row.map(L => L.asc)), D = Math.max(...row.map(L => L.desc));
-      const top = flowY() - colBase;
-      row.forEach(L => { L.top = top; L.h = row.length > 1 ? h : L.h; L.asc = row.length > 1 ? A : L.asc; L.desc = row.length > 1 ? D : L.desc; L.row = rowIdx; L.col = col; L.i = lines.length; L.base = top + (L.h - (L.asc + L.desc)) / 2 + L.asc; lines.push(L); });
-      colBot[col] = Math.max(colBot[col], top + h);
+      const lt = flowY() - colBase, top = yBase + lt;
+      row.forEach(L => { L.top = top; L.h = row.length > 1 ? h : L.h; L.asc = row.length > 1 ? A : L.asc; L.desc = row.length > 1 ? D : L.desc; L.row = rowIdx; L.col = band.span ? -1 : col; L.i = lines.length; L.base = top + (L.h - (L.asc + L.desc)) / 2 + L.asc; lines.push(L); });
+      colBot[col] = Math.max(colBot[col], lt + h);
       colRows++;
       if (runs) rowTop += h;
       rowIdx++;
     };
     const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; colRows++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
-    text.split('\n').forEach((para, pi) => {
-      if (pi) yOff += pgap;   // (every line break starts a paragraph, an empty one too)
+    for (let pi = band.from; pi <= band.to; pi++) {
+      const para = paraTexts[pi];
+      if (pi > band.from) yOff += pgap;   // (every line break starts a paragraph, an empty one too)
+      const pst = bw ? paraSettingsAt(o.paras, pi) : null;
+      if (pst && pst.brk && nc > 1 && col < nc - 1 && colRows > 0) nextColumn();   // (a paragraph that starts a column)
       // A drop cap (o.paras, see 04k-text-paragraphs.js; area text only): its letters leave the paragraph and are drawn on their own, and the
       // first N rows of the paragraph start after its width. The paragraph then is laid out from where its letters end: body, starting at bs.
-      const dcs = bw && para.length ? paraSettingsAt(o.paras, pi) : null, dcN = dcs && dcs.dc >= 2 ? dcs.dc : 0;
-      const cap = dcN ? dropCapSpec(o, runs, text, para, ps, dcN, dcs.dn || 1, cw, minSlot) : null;
-      if (cap && colRows > 0 && col < ncols - 1 && flowY() - colBase + dcN * lineH > Hlim + 0.01) nextColumn();   // (a drop cap is not split between columns)
+      const dcs = bw && para.length ? pst : null, dcN = dcs && dcs.dc >= 2 ? dcs.dc : 0;
+      const cap = dcN ? dropCapSpec(o, runs, text, para, ps, dcN, dcs.dn || 1, cwb, minSlot) : null;
+      if (cap && colRows > 0 && col < nc - 1 && flowY() - colBase + dcN * lineH > Hlim + 0.01) nextColumn();   // (a drop cap is not split between columns)
       const body = cap ? para.slice(cap.n) : para, bs = cap ? ps + cap.n : ps;
       const su = bw ? wrapSetup(o, runs, text, body, bs) : null;
       let a = 0, capRow = -1, capX = 0, capLine = -1;
       for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
-        const top = flowY() - colBase, cx = col * (cw + gut), a0 = a;
-        let free0 = !wraps.length ? [[cx, cx + cw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
-        if (ncols > 1 && wraps.length) free0 = free0.map(sl => [Math.max(sl[0], cx), Math.min(sl[1], cx + cw)]).filter(sl => sl[1] - sl[0] >= minSlot);
+        const lt = flowY() - colBase, top = yBase + lt, cx = col * (cwb + gut), a0 = a;
+        let free0 = !wraps.length ? [[cx, cx + cwb]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+        if (nc > 1 && wraps.length) free0 = free0.map(sl => [Math.max(sl[0], cx), Math.min(sl[1], cx + cwb)]).filter(sl => sl[1] - sl[0] >= minSlot);
         const inDrop = !!cap && (capRow < 0 || rowIdx < capRow + dcN);   // (the first row that has a line, and the rows below it as far as the cap goes)
         if (inDrop && capRow < 0 && free0.length) capX = free0[0][0];   // (the cap is at the left of the first stretch the text has)
         const free = inDrop ? free0.map((sl, k) => k ? sl : [sl[0] + cap.inset, sl[1]]).filter(sl => sl[1] - sl[0] >= minSlot) : free0;
@@ -344,15 +350,15 @@ function textLayout(o, obs) {
         else free.forEach(sl => {
           if (a >= body.length) return;
           const ind = a === 0 && !cap && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so; a drop cap is the indent)
-          const c = takeLine(su, a, sl[1] - sl[0] - ind, cw - ind - (inDrop ? cap.inset : 0));
+          const c = takeLine(su, a, sl[1] - sl[0] - ind, cwb - ind - (inDrop ? cap.inset : 0));
           if (!c) return;
           row.push(makeLine(body.slice(a, c.end), bs + a, c.end >= body.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
           a = c.end;
         });
         if (!row.length) { nextEmptyRow(); continue; }
-        if (ncols > 1 && top + Math.max(...row.map(L => L.h)) > Hlim + 0.01) {   // (this row does not fit under the limit: it starts the next column, unless it is the first in its column)
-          if (colRows > 0 && col < ncols - 1 && !(cap && capRow >= 0 && rowIdx < capRow + dcN)) { a = a0; nextColumn(); continue; }
-          if (colRows > 0 && col === ncols - 1) over = true;
+        if (nc > 1 && lt + Math.max(...row.map(L => L.h)) > Hlim + 0.01) {   // (this row does not fit under the limit: it starts the next column, unless it is the first in its column)
+          if (colRows > 0 && col < nc - 1 && !(cap && capRow >= 0 && rowIdx < capRow + dcN)) { a = a0; nextColumn(); continue; }
+          if (colRows > 0 && col === nc - 1) over = true;
         }
         if (cap && capRow < 0) { capRow = rowIdx; capLine = lines.length; }
         placeRow(row);
@@ -368,24 +374,40 @@ function textLayout(o, obs) {
         });
       }
       ps += para.length + 1;   // (the line break counts as a character)
-    });
-    return { lines, caps, over, acc: ncols > 1 ? Math.max(...colBot) : flowY() };
-  };
-  let r = pass(Infinity);
-  if (ncols > 1) {   // Balanced columns: the smallest height that does not push the text out of the last column (found by halving; the text is laid out afresh at each try)
-    let lo = Math.max(0, r.acc / ncols - lineH), hi = r.acc;
-    for (let it = 0; it < 12 && hi - lo > Math.max(0.5, lineH * 0.2); it++) {
-      const mid = (lo + hi) / 2, t = pass(mid);
-      if (t.over) lo = mid; else { hi = mid; r = t; }
     }
-  }
-  const { lines, caps } = r, acc = r.acc;
+    return { lines, caps, over, rows: rowIdx, ps, h: nc > 1 ? Math.max(...colBot) : flowY() };
+  };
+  // The text is bands, one under the other: the paragraphs that run in the columns, and each run of paragraphs that span all of them (para.span).
+  // A band of columns is balanced: the smallest height that does not push the text out of the last column (found by halving; the text is laid
+  // out afresh at each try)
+  const bands = [];
+  paraTexts.forEach((t, pi) => {
+    const sp = ncols > 1 && paraSettingsAt(o.paras, pi).span === 'all', last = bands[bands.length - 1];
+    if (last && last.span === sp) last.to = pi; else bands.push({ from: pi, to: pi, span: sp });
+  });
+  const lines = [], caps = [];
+  let yBase = 0, ps = 0, rowOff = 0, acc = 0;
+  bands.forEach(b => {
+    const nc = b.span ? 1 : ncols, y0 = yBase + (b.from > 0 ? pgap : 0);
+    let r = pass(b, nc, y0, ps, Infinity);
+    if (nc > 1) {
+      let lo = Math.max(0, r.h / nc - lineH), hi = r.h;
+      for (let it = 0; it < 12 && hi - lo > Math.max(0.5, lineH * 0.2); it++) {
+        const mid = (lo + hi) / 2, t = pass(b, nc, y0, ps, mid);
+        if (t.over) lo = mid; else { hi = mid; r = t; }
+      }
+    }
+    r.lines.forEach(L => { L.i += lines.length; L.row += rowOff; });
+    r.caps.forEach(c => { c.line += lines.length; });
+    r.lines.forEach(L => lines.push(L)); r.caps.forEach(c => caps.push(c));
+    rowOff += r.rows; ps = r.ps; yBase = y0 + r.h; acc = yBase;
+  });
   lines.forEach(L => {
     const sw = L.sw || W;
     L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
     if (!L.sw) L.sw = W;
   });
-  const colLines = ncols > 1 ? Array.from({ length: ncols }, (_, k) => lines.filter(L => L.col === k)) : null;
+  const colLines = ncols > 1 ? Array.from({ length: ncols }, (_, k) => lines.filter(L => L.col === k || L.col < 0)) : null;   // (the lines that span all the columns are in every one)
   return { font, size, asc, desc, lineH, ls, lines, caps, w: W, h: acc, flat: ncols === 1 && !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw,
     ncols, cw, gut, colLines };
 }
@@ -476,13 +498,22 @@ function lineHome(lay, L) {
 }
 // Up (dir -1) or Down (+1) from an index, keeping to goalX (the column the caret started from; null = where it is now).
 // Up from the first line goes to the start, Down from the last to the end.
+// The line above (dir -1) or below (+1) a line, or null. In columns it is the next one in the same column (a line that spans all of them is in
+// every column); at the end of a column, the next in reading order (the top of the next column)
+function adjacentLine(lay, L, dir) {
+  const walk = (list, k) => {
+    let j = k + dir;
+    while (j >= 0 && j < list.length && list[j].top === L.top && list[j].col === L.col) j += dir;   // (the lines beside this one, on the same row, are not above or below it)
+    return list[j] || null;
+  };
+  if (lay.colLines && L.col >= 0) { const list = lay.colLines[L.col], M = walk(list, list.indexOf(L)); if (M) return M; }
+  return walk(lay.lines, L.i);
+}
 function verticalMove(lay, index, dir, goalX) {
   const L = lineOfIndex(lay, index), gx = goalX === null || goalX === undefined ? caretAt(lay, index).x : goalX;
-  let j = L.i + dir;
-  while (j >= 0 && j < lay.lines.length && lay.lines[j].top === L.top && lay.lines[j].col === L.col) j += dir;   // (the lines beside this one, on the same row, are not above or below it)
-  if (j < 0) return { index: 0, goalX: gx };
-  if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
-  const M = lay.lines[j], shift = lay.ncols > 1 ? (M.col - L.col) * (lay.cw + lay.gut) : 0;   // (into another column: the same distance from its left edge)
+  const M = adjacentLine(lay, L, dir);
+  if (!M) return dir < 0 ? { index: 0, goalX: gx } : { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
+  const shift = lay.ncols > 1 && M.col >= 0 && L.col >= 0 ? (M.col - L.col) * (lay.cw + lay.gut) : 0;   // (into another column: the same distance from its left edge)
   return { index: indexAtPoint(lay, gx + shift, M.top + M.h / 2, true), goalX: gx + shift };   // (the lines, not the drop cap that is beside them, or Down would never leave it)
 }
 // The word at an index, for double-click: a run of letters and digits, of spaces, or of other marks, within one line

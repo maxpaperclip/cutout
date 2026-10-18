@@ -17,7 +17,7 @@
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
 let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
 // The controls that style the letters; a press on them leaves the text being edited
-const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette, #tx-dc-on, #tx-dc, #tx-dn, #tx-cols, #tx-gut, #tx-gutmatch, #tx-matchgrid';
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette, #tx-dc-on, #tx-dc, #tx-dn, #tx-span, #tx-brk, #tx-cols, #tx-gut, #tx-gutmatch, #tx-matchgrid';
 const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);

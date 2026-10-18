@@ -45,7 +45,7 @@ src/
     04h-hyphenation.js  hyphenPoints(word): where an English word may be broken (Liang's method; no DOM, unit tested)
     04i-text-wrap.js    Text wrapping around shapes: the outline of every shape with o.wrap, cut to a row, gives the stretches of a text box that are free (wrapObstacles, wrapFree; textLayout fills them in turn); wrapSyncAll lays texts out again when a shape moves (paper.js only, unit tested)
     04j-grids.js        Column grid and baseline grid (doc.grids): defaults, sanitizing, where the lines are, their SVG paths, and snapping to them (no DOM, unit tested)
-    04k-text-paragraphs.js  Settings of single paragraphs of a text (o.paras: drop caps so far): kept in step with typing, saved and opened, and the bars that show which paragraphs a selection touches (no DOM, unit tested)
+    04k-text-paragraphs.js  Settings of single paragraphs of a text (o.paras: drop caps, spanning columns, column breaks): kept in step with typing, saved and opened, and the bars that show which paragraphs a selection touches (no DOM, unit tested)
     05-svg-export.js
     06-boolean-ops.js   unite / subtract / intersect / exclude (paper.js)
     06b-break-apart.js  Break apart: a text becomes one plain shape per letter, in a new folder (no DOM, unit tested)

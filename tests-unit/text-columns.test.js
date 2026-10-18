@@ -165,3 +165,73 @@ test('matching the page columns says why it cannot', () => {
   assert.ok(m.textColumnsFromGrid({ x: 0, bw: 1000 }, { count: 8, gutter: 1, left: 0, right: 0 }, 1000).why, 'more than 6');
   assert.equal(m.textColumnsFromGrid({ x: 0, bw: 1000 }, { count: 1, gutter: 0, left: 5, right: 5 }, 1000).cols, 1);
 });
+
+/* ---------- paragraphs that span the columns, and that start one ---------- */
+const WORDS12 = Array.from({ length: 12 }, () => 'abcd').join(' ');   // (a 45 wide column holds 9 letters: 2 words to a line)
+const BANDS = WORDS12 + '\nHEADING\n' + WORDS12;
+
+test('a paragraph that spans runs the whole width, between columns that are balanced on their own', () => {
+  const t = setup({ cols: 2, gut: 10, paras: [{}, { span: 'all' }] }, BANDS), lay = t.lay();
+  const head = lay.lines.filter(L => L.start >= WORDS12.length + 1 && L.end <= WORDS12.length + 1 + 7);
+  assert.equal(head.length, 1);
+  assert.equal(head[0].col, -1);
+  assert.equal(head[0].sx, 0);
+  assert.equal(head[0].sw, 100);
+  const above = lay.lines.filter(L => L.top < head[0].top), below = lay.lines.filter(L => L.top > head[0].top);
+  assert.ok(above.length > 0 && below.length > 0);
+  assert.ok(above.every(L => L.col === 0 || L.col === 1) && below.every(L => L.col === 0 || L.col === 1));
+  [above, below].forEach(g => {
+    const n0 = g.filter(L => L.col === 0).length, n1 = g.filter(L => L.col === 1).length;
+    assert.ok(n0 > 0 && n1 > 0 && Math.abs(n0 - n1) <= 1, 'balanced: ' + n0 + ' and ' + n1);
+  });
+  assert.equal(below.filter(L => L.col === 0)[0].top, head[0].top + 10, 'the columns begin again under it');
+  assert.equal(lay.lines.map(L => L.text).join('').replace(/ /g, ''), BANDS.replace(/[ \n]/g, ''));
+});
+
+test('the lines are numbered in reading order whatever the bands', () => {
+  const lay = setup({ cols: 2, gut: 10, paras: [{}, { span: 'all' }] }, BANDS).lay();
+  lay.lines.forEach((L, i) => assert.equal(L.i, i));
+  for (let k = 1; k < lay.lines.length; k++) assert.ok(lay.lines[k].start >= lay.lines[k - 1].end - 1 || lay.lines[k].start >= lay.lines[k - 1].start);
+});
+
+test('with one column nothing spans', () => {
+  const a = setup({ paras: [{}, { span: 'all' }] }, BANDS).lay(), b = setup({}, BANDS).lay();
+  assert.equal(a.h, b.h);
+  assert.ok(a.lines.every(L => L.col === 0));
+});
+
+test('a click on a spanning line finds it at any width; Down from a column goes to it', () => {
+  const t = setup({ cols: 2, gut: 10, paras: [{}, { span: 'all' }] }, BANDS), lay = t.lay();
+  const head = lay.lines.find(L => L.col === -1);
+  [2, 50, 97].forEach(x => assert.equal(t.m.lineAtY(lay, head.top + 5, x), head));
+  const above0 = lay.lines.filter(L => L.col === 0 && L.top < head.top), last = above0[above0.length - 1];
+  assert.equal(t.m.lineOfIndex(lay, t.m.verticalMove(lay, last.start + 1, 1, null).index), head);
+  const up = t.m.verticalMove(lay, head.start + 1, -1, null);
+  assert.ok(t.m.lineOfIndex(lay, up.index).top < head.top);
+});
+
+test('a paragraph can start a column', () => {
+  const t = setup({ cols: 2, gut: 10, paras: [{}, { brk: true }] }, 'abcd\nefgh'), lay = t.lay();
+  assert.equal(lay.lines.length, 2);
+  assert.equal(lay.lines[0].col, 0);
+  assert.equal(lay.lines[1].col, 1);
+  assert.equal(lay.lines[1].top, 0);
+  assert.equal(lay.h, 10);
+});
+
+test('a break in the last column does nothing', () => {
+  const lay = setup({ cols: 2, gut: 10, paras: [{}, { brk: true }, { brk: true }] }, 'abcd\nefgh\nijkl').lay();
+  assert.deepEqual(Array.from(lay.lines.map(L => L.col)), [0, 1, 1]);
+  assert.deepEqual(Array.from(lay.lines.map(L => L.top)), [0, 0, 10]);
+});
+
+test('Enter keeps a spanning paragraph spanning but does not start another column', () => {
+  const m = loadAppModules();
+  const out = m.parasForEdit([{ span: 'all', brk: true }], 'ab', 'a\nb', 1);
+  assert.deepEqual(JSON.parse(JSON.stringify(out)), [{ span: 'all', brk: true }, { span: 'all' }]);
+});
+
+test('span and brk are kept when a drawing is saved and opened', () => {
+  const t = setup({ cols: 2, paras: [{}, { span: 'all' }, { brk: true }] }, 'a\nb\nc'), j = t.m.sanitizeDoc(JSON.parse(t.m.docJSON(t.m.doc)));
+  assert.deepEqual(JSON.parse(JSON.stringify(j.objects.find(x => x.kind === 'text').paras)), [{}, { span: 'all' }, { brk: true }]);
+});
