@@ -172,26 +172,26 @@ test('the bars beside the box: which height each touched paragraph takes', async
     const { m, o } = setup({ text: TEXT, bw: 50 });
     const lay = m.textLayout(o);
     assert.deepEqual(plain(m.paraBars(lay, o.text, 0, o.text.length)), [
-      { p: 0, y0: 0, y1: 10 }, { p: 1, y0: 10, y1: 30 }, { p: 2, y0: 30, y1: 40 }, { p: 3, y0: 40, y1: 50 }]);
+      { p: 0, y0: 0, y1: 10, col: 0 }, { p: 1, y0: 10, y1: 30, col: 0 }, { p: 2, y0: 30, y1: 40, col: 0 }, { p: 3, y0: 40, y1: 50, col: 0 }]);
   });
   await t.test('a caret has the bar of its own paragraph, and a paragraph cut into two lines is still one bar', () => {
     const { m, o } = setup({ text: TEXT, bw: 50 });
     const lay = m.textLayout(o);
-    assert.deepEqual(plain(m.paraBars(lay, o.text, 12, 12)), [{ p: 1, y0: 10, y1: 30 }]);
-    assert.deepEqual(plain(m.paraBars(lay, o.text, 9, 9)), [{ p: 1, y0: 10, y1: 30 }]);   // (on the second line of it)
+    assert.deepEqual(plain(m.paraBars(lay, o.text, 12, 12)), [{ p: 1, y0: 10, y1: 30, col: 0 }]);
+    assert.deepEqual(plain(m.paraBars(lay, o.text, 9, 9)), [{ p: 1, y0: 10, y1: 30, col: 0 }]);   // (on the second line of it)
   });
   await t.test('a selection reaching into two paragraphs gives two bars', () => {
     const { m, o } = setup({ text: TEXT, bw: 50 });
     const lay = m.textLayout(o);
-    assert.deepEqual(plain(m.paraBars(lay, o.text, 2, 6)), [{ p: 0, y0: 0, y1: 10 }, { p: 1, y0: 10, y1: 30 }]);
+    assert.deepEqual(plain(m.paraBars(lay, o.text, 2, 6)), [{ p: 0, y0: 0, y1: 10, col: 0 }, { p: 1, y0: 10, y1: 30, col: 0 }]);
   });
   await t.test('text with no box has them too', () => {
     const { m, o } = setup({ text: 'ab\ncd' });
-    assert.deepEqual(plain(m.paraBars(m.textLayout(o), o.text, 4, 4)), [{ p: 1, y0: 10, y1: 20 }]);
+    assert.deepEqual(plain(m.paraBars(m.textLayout(o), o.text, 4, 4)), [{ p: 1, y0: 10, y1: 20, col: 0 }]);
   });
   await t.test('the room between paragraphs is not in a bar', () => {
     const { m, o } = setup({ text: 'ab\ncd', pspace: 1 });   // (one em = 10 more between them)
     const bars = m.paraBars(m.textLayout(o), o.text, 0, 5);
-    assert.deepEqual(plain(bars), [{ p: 0, y0: 0, y1: 10 }, { p: 1, y0: 20, y1: 30 }]);
+    assert.deepEqual(plain(bars), [{ p: 0, y0: 0, y1: 10, col: 0 }, { p: 1, y0: 20, y1: 30, col: 0 }]);
   });
 });
