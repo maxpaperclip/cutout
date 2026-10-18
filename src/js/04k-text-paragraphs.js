@@ -136,15 +136,19 @@ function sanitizeParas(raw, text) {
 
 /* ---------- showing which paragraphs ---------- */
 // The stretch of height (box coordinates) each paragraph touched by a selection from a to b takes in a layout (textLayout):
-// [{ p (its number), y0, y1 }], from the top of its first line to the bottom of its last
+// [{ p (its number), y0, y1, col }], from the top of its first line to the bottom of its last (one for each column it is in)
 function paraBars(lay, text, a, b) {
   text = String(text);
   const r = paraRange(text, a, b), st = paraStarts(text), out = [];
   for (let p = r.first; p <= r.last; p++) {
     const s = st[p], e = p + 1 < st.length ? st[p + 1] - 1 : text.length;
-    let y0 = Infinity, y1 = -Infinity;
-    lay.lines.forEach(L => { if (L.start >= s && L.start <= e) { y0 = Math.min(y0, L.top); y1 = Math.max(y1, L.top + L.h); } });
-    if (y1 > y0) out.push({ p, y0, y1 });
+    const cs = new Map();   // (a paragraph that runs over into another column has a stretch in each)
+    lay.lines.forEach(L => {
+      if (L.start < s || L.start > e) return;
+      const c = cs.get(L.col || 0) || { y0: Infinity, y1: -Infinity };
+      c.y0 = Math.min(c.y0, L.top); c.y1 = Math.max(c.y1, L.top + L.h); cs.set(L.col || 0, c);
+    });
+    cs.forEach((c, col) => { if (c.y1 > c.y0) out.push({ p, y0: c.y0, y1: c.y1, col }); });
   }
   return out;
 }

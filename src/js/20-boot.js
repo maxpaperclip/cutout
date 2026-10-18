@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Drop caps: in a text with a fixed width, the new Paragraph part of the Design tab turns the first letter of a paragraph into a big capital that sits in the lines beside it. While you type it changes the paragraph the caret is in, or every paragraph your selection reaches into.';
+const WHATS_NEW = 'Text columns: a text with a fixed width can now be split into 2 to 6 columns (Cols and Gutter in the Design tab). The columns are balanced, so they end at the same height, and the box grows or shrinks to fit. Click, arrow keys and the paragraph bars all follow the text from one column to the next.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
