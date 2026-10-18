@@ -312,3 +312,42 @@ test('saving, opening and the rest of the editor', async (t) => {
     assert.equal(r.shapes.length, 20);
   });
 });
+
+test('a shape only makes room for the text behind it', async (t) => {
+  // setup() puts the text first and the shape after, so the shape is in front of the text
+  await t.test('a text behind the shape flows around it; a text in front of it does not', () => {
+    const { m, o, made, lay } = setup({}, [rectAt(40, 10, 20, 20)]);
+    assert.equal(lay().lines.filter(l => l.row === 1).length, 2);
+    const plainText = setup({}).lay();
+    // bring the text in front of the shape: it runs straight across, as if the shape was not there
+    m.doc.objects = [made[0], o];
+    m.refresh(o);
+    assert.equal(joined(lay()), WORDS);
+    assert.deepEqual(plain(lay().lines.map(l => [l.text, l.sx, l.sw])), plain(plainText.lines.map(l => [l.text, l.sx, l.sw])));
+    assert.equal(m.wrapObstacles(o).length, 0);
+  });
+  await t.test('two texts, one on each side of the same shape, each get their own answer', () => {
+    const { m, o, made } = setup({}, [rectAt(40, 10, 20, 20)]);
+    const above = m.newShape('text', { x: 0, y: 0, size: 10, lh: 1, font: 'fake', bw: 100, text: WORDS });
+    m.doc.objects.push(above);   // (after the shape: in front of it)
+    m.refresh(above);
+    assert.equal(m.wrapObstacles(o).length, 1);
+    assert.equal(m.wrapObstacles(above).length, 0);
+    assert.ok(m.textLayout(above).lines.every(l => l.sx === 0 && l.sw === 100));
+  });
+  await t.test('changing the stacking order lays the text out again', () => {
+    const { m, o, made } = setup({}, [rectAt(40, 10, 20, 20)]);
+    const wrapped = o.d;
+    m.doc.objects = [made[0], o];
+    assert.equal(m.wrapSyncAll(), true);
+    assert.notEqual(o.d, wrapped);
+    m.doc.objects = [o, made[0]];
+    assert.equal(m.wrapSyncAll(), true);
+    assert.equal(o.d, wrapped);
+  });
+  await t.test('a text that is not in the drawing yet (being made) is in front of everything', () => {
+    const { m } = setup({}, [rectAt(40, 10, 20, 20)]);
+    const fresh = m.newShape('text', { x: 0, y: 0, size: 10, lh: 1, font: 'fake', bw: 100, text: WORDS });
+    assert.equal(m.wrapObstacles(fresh).length, 0);
+  });
+});

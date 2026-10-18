@@ -185,7 +185,7 @@ onNum(F.r, (o, v) => { o.r = clamp(v, 0, Math.min(o.w, o.h) / 2); });
 
 // Text
 const txArea = $('#tx-text');
-txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; setTextValue(o, txArea.value); refresh(o); render(); renderLayers(); });
+txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; setTextValue(o, txArea.value, undefined, txArea.selectionEnd); refresh(o); render(); renderLayers(); });
 txArea.addEventListener('change', () => commit());
 txArea.addEventListener('keydown', e => { if (e.key === 'Escape') txArea.blur(); });
 onNum($('#tx-size'), (o, v) => {

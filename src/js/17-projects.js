@@ -65,6 +65,8 @@ function sanitizeDoc(d) {
       if (r.hyph === true) o.hyph = true;    // long words are broken with a hyphen
       const runs = sanitizeRuns(r.runs, o.text.length, k => !!fonts[k]);   // letters set apart from the rest
       if (runs) o.runs = runs;
+      const paras = sanitizeParas(r.paras, o.text);   // settings of single paragraphs (04k-text-paragraphs.js)
+      if (paras) o.paras = paras;
     }
     if (r.kind === 'path') {   // (a converted old line already has its outline)
       if (!r.nat || typeof r.nat.d !== 'string') return;

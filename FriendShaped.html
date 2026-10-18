@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-ceQ7LXZ14W+mK4XXTioqFkW3LZfmlCLRxLThmNzDwbc=' 'sha256-m/XAXqnjwaEAFDqMcm7xtqxLPqcLLrNZvBGXsv4/z6U='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-ceQ7LXZ14W+mK4XXTioqFkW3LZfmlCLRxLThmNzDwbc=' 'sha256-lLjyigjJHgADzAiC0BIXcwTnWXkUJy5790rTDTlatOQ='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.33.1</title>
+<title>FriendShaped v1.34.0</title>
 <style>
 
 :root{
@@ -28,6 +28,7 @@
   --danger:#d3283a;
   --shadow:rgba(21,25,54,.30);
   --handle:#ffffff;
+  --para:#e0750a;
   --ui:"Avenir Next","Segoe UI",ui-rounded,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
 }
 @media (prefers-color-scheme: dark){
@@ -48,6 +49,7 @@
     --danger:#ff7b88;
     --shadow:rgba(0,0,0,.6);
     --handle:#1a1d2b;
+    --para:#ffa24a;
   }
 }
 :root[data-theme="dark"]{
@@ -67,6 +69,7 @@
   --danger:#ff7b88;
   --shadow:rgba(0,0,0,.6);
   --handle:#1a1d2b;
+  --para:#ffa24a;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:border-box}
@@ -179,6 +182,8 @@ input:disabled,select:disabled{opacity:.45}
 .te-sel{fill:rgba(59,59,245,.3);stroke:none;pointer-events:none}
 .te-caret{stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;animation:te-blink 1.06s steps(1) infinite}
 .te-caret.off{opacity:0;animation:none}
+/* Beside the text box while typing: the paragraph(s) that the paragraph settings would change (a bar each, outside both sides) */
+.te-para{stroke:var(--para);stroke-width:3;stroke-linecap:butt;vector-effect:non-scaling-stroke;pointer-events:none}
 @keyframes te-blink{0%{opacity:1}50%{opacity:0}}
 @media (prefers-reduced-motion:reduce){.te-caret{animation:none}}
 .fontpick{position:relative}
@@ -562,7 +567,7 @@ input:disabled,select:disabled{opacity:.45}
       <section class="sec" id="sec-wrap" hidden>
         <h3>Text wrap</h3>
         <div class="stack">
-          <label class="inline" title="Text in a box (drag a box with the Text tool, or tick Fixed width) flows around this shape's outline instead of running under it"><input type="checkbox" id="sh-wrap"> Text wraps around this</label>
+          <label class="inline" title="Text in a box (drag a box with the Text tool, or tick Fixed width) that is behind this shape flows around its outline instead of running under it. Text in front of the shape ignores it, so the shape can leave white space for that text."><input type="checkbox" id="sh-wrap"> Text wraps around this</label>
           <label class="f" id="wrap-gap" hidden><span style="white-space:nowrap">Gap</span><input type="number" id="sh-wgap" min="0" max="200" step="1" title="How far the text keeps from the shape"></label>
         </div>
       </section>
@@ -917,7 +922,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.33.1';   // filled in by build.js from package.json
+const APP_VERSION = '1.34.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -2619,10 +2624,12 @@ function runsForEdit(runs, oldText, newText, pending) {
   if (pending) RUN_KEYS.forEach(k => { if (k in pending) { if (pending[k] === null || pending[k] === undefined) delete base[k]; else base[k] = pending[k]; } });
   return runsSplice(runs, oldText.length, a, b, ins, base);
 }
-// Give a text object its new text, keeping the styles of the letters that stayed (use this, not o.text = ...)
-function setTextValue(o, value, pending) {
+// Give a text object its new text, keeping the styles of the letters that stayed, and the settings of the paragraphs that did
+// (use this, not o.text = ...). caret: where the caret is after the edit, when known (see parasForEdit in 04k-text-paragraphs.js)
+function setTextValue(o, value, pending, caret) {
   const runs = runsForEdit(o.runs, String(o.text), value, pending);
   if (runs) o.runs = runs; else delete o.runs;
+  if (o.paras) { const paras = parasForEdit(o.paras, String(o.text), value, caret); if (paras) o.paras = paras; else delete o.paras; }
   o.text = value;
 }
 
@@ -3063,8 +3070,10 @@ function hyphenPoints(word) {
 }
 /* =====================================================================
    Text wrapping around shapes (no DOM except paper.js; unit tested)
-   A shape with o.wrap on (any kind but text) is something that a text with a box (area text, o.bw) flows around, whatever is
-   stacked above or below what. Each row of the text asks "where in this row is the text box free?" and fills those
+   A shape with o.wrap on (any kind but text) is something that a text with a box (area text, o.bw) flows around, when the
+   text is BELOW the shape in the stacking order. A text above the shape ignores it, so the shape can make white space that
+   another text sits on top of. (Bring the shape in front of a text, or send the text behind the shape, to make it wrap.)
+   Each row of the text asks "where in this row is the text box free?" and fills those
    stretches one after the other (textLayout, 04f-text-layout.js).
    The shape's real outline is used, not its box: a circle leaves the corners free, a star flows into its notches' sides. For
    a row, the outline is cut to the row's band of height; whatever of it is inside the band blocks everything from its leftmost
@@ -3108,11 +3117,13 @@ function wrapLocalPolys(o) {
 }
 
 // The shapes a text (with a box) flows around: [{ polys (in the text's box coordinates), pad, b: { x0, y0, x1, y1 } }]
+// Only shapes above the text in the stacking order (later in doc.objects) count. A text not in the drawing yet (being made) is
+// on top of everything, as a new object is, so nothing is in its way.
 function wrapObstacles(t) {
   if (!(t.bw > 0) || typeof doc === 'undefined' || !doc || !doc.objects) return [];
-  const out = [];
-  doc.objects.forEach(o => {
-    if (!o.wrap || !canWrapAround(o) || o.id === t.id || isHidden(o)) return;
+  const out = [], at = doc.objects.indexOf(t), top = at < 0 ? Infinity : at;
+  doc.objects.forEach((o, i) => {
+    if (i < top || !o.wrap || !canWrapAround(o) || o.id === t.id || isHidden(o)) return;
     const pad = wrapGapOf(o) + (o.stroke && o.stroke !== 'none' && !hasPixels(o) ? (o.sw || 0) / 2 : 0);
     const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
@@ -3310,6 +3321,155 @@ function guideShift(d, axis, lo, hi, tol) {
   if (a === null && b === null) return null;
   const da = a === null ? Infinity : a - lo, db = b === null ? Infinity : b - hi;
   return Math.abs(da) <= Math.abs(db) ? da : db;
+}
+/* =====================================================================
+   Text paragraphs: settings that belong to one paragraph of a text (no DOM; unit tested)
+   A paragraph is what lies between two line breaks (a text with no line break is one paragraph; an empty one counts).
+   Most of a text is set for all of it (o.align, o.size...) and a different look for some letters is o.runs (04g-text-runs.js).
+   Settings for one paragraph are o.paras: a list in reading order, one entry per paragraph, each { dc, dn, span } with only the
+   keys that are set (a paragraph with none is {}; entries missing at the end mean the same). A text with nothing set has no
+   o.paras at all, exactly as before.
+     dc    drop cap: the first letters are one big letter this many lines tall (2 to 8; missing = no drop cap)
+     dn    drop cap: how many letters of the paragraph it takes (1 to 3; missing = 1)
+     span  'all': the paragraph runs across all the columns of the text (missing = it stays in its column)
+   (The layout uses these from the drop cap and columns steps on; this file is only where they live, are kept in step with
+   editing, and are saved and opened.)
+   While a text is edited the paragraph controls change the paragraphs the selection touches (paraRange), and the paragraphs
+   are shown by a bar beside the box (paraBars). A text that is only selected, not being edited, is changed in its first paragraph.
+   ===================================================================== */
+const PARA_SPEC = {
+  dc: { min: 2, max: 8 },
+  dn: { min: 1, max: 3 },
+  span: { values: ['all'] }
+};
+const PARA_KEYS = Object.keys(PARA_SPEC);
+const paraHas = p => !!p && PARA_KEYS.some(k => p[k] !== undefined);
+const paraStyle = p => { const x = {}; PARA_KEYS.forEach(k => { if (p && p[k] !== undefined) x[k] = p[k]; }); return x; };
+
+// A value for a key as it may be kept, or undefined (not a number, not a listed word: not kept)
+function paraClean(key, v) {
+  const sp = PARA_SPEC[key];
+  if (!sp) return undefined;
+  if (sp.values) return sp.values.indexOf(v) >= 0 ? v : undefined;
+  return typeof v === 'number' && Number.isFinite(v) ? clamp(Math.round(v), sp.min, sp.max) : undefined;
+}
+
+/* ---------- where the paragraphs are ---------- */
+// The index where each paragraph starts: the first at 0, the next one just after each line break
+function paraStarts(text) {
+  text = String(text);
+  const out = [0];
+  for (let i = text.indexOf('\n'); i >= 0; i = text.indexOf('\n', i + 1)) out.push(i + 1);
+  return out;
+}
+const paraCount = text => paraStarts(text).length;
+// The paragraph an index is in (the line break that ends a paragraph is in it; the index just after it is in the next one)
+function paraIndexAt(text, index) {
+  const st = paraStarts(text);
+  let k = 0;
+  while (k + 1 < st.length && st[k + 1] <= index) k++;
+  return k;
+}
+// The first and last paragraph a selection from a to b touches. A selection that ends just where the next paragraph begins
+// does not reach into it.
+function paraRange(text, a, b) {
+  text = String(text);
+  if (a > b) { const t = a; a = b; b = t; }
+  a = clamp(a, 0, text.length); b = clamp(b, 0, text.length);
+  const first = paraIndexAt(text, a), st = paraStarts(text);
+  let last = paraIndexAt(text, b);
+  if (b > a && last > first && st[last] === b) last--;
+  return { first, last };
+}
+
+/* ---------- the list ---------- */
+// Tidy a list for a text of count paragraphs: only known keys, no more entries than paragraphs, none left over at the end that
+// set nothing. Gives undefined when nothing is set.
+function normParas(paras, count) {
+  const out = (Array.isArray(paras) ? paras : []).slice(0, count).map(paraStyle);
+  while (out.length && !paraHas(out[out.length - 1])) out.pop();
+  return out.length ? out : undefined;
+}
+// What is set for paragraph number k ({} when nothing is)
+const paraSettingsAt = (paras, k) => paraStyle(Array.isArray(paras) ? paras[k] : null);
+// The settings of the paragraph an index is in
+const paraStyleAt = (o, index) => paraSettingsAt(o.paras, paraIndexAt(o.text, index));
+
+// Set (or, given as null, clear) settings on the paragraphs a..b touches. attrs has the keys to change. Gives the new list.
+function parasApply(paras, text, a, b, attrs) {
+  const n = paraCount(text), r = paraRange(text, a, b), out = [];
+  for (let k = 0; k < n; k++) out.push(paraSettingsAt(paras, k));
+  for (let k = r.first; k <= r.last; k++) {
+    PARA_KEYS.forEach(key => {
+      if (!(key in attrs)) return;
+      const v = paraClean(key, attrs[key]);
+      if (attrs[key] === null || attrs[key] === undefined || v === undefined) delete out[k][key]; else out[k][key] = v;
+    });
+  }
+  return normParas(out, n);
+}
+// Set them on a text object: the paragraphs a..b touches. Gives true when something changed.
+function applyParaSettings(o, a, b, attrs) {
+  const before = JSON.stringify(o.paras || null), paras = parasApply(o.paras, o.text, a, b, attrs);
+  if (paras) o.paras = paras; else delete o.paras;
+  return JSON.stringify(o.paras || null) !== before;
+}
+
+// The list after the text changed from oldText to newText, however it changed. What changed is found by comparing the two
+// (as runsForEdit does for letters). The paragraphs that take part in it become one, which splits again at each line break typed:
+// all of them keep the settings of the first one (so Enter makes a paragraph like the one it was pressed in, and joining two
+// paragraphs by deleting the break between them keeps the first one's). Paragraphs before and after are not touched.
+// caret (optional): where the caret is after the edit. Two breaks in a row, or a break next to a letter, look the same however
+// they were typed, so the caret says where it really was (Enter at the end of a paragraph, not at the start of the next one).
+function parasForEdit(paras, oldText, newText, caret) {
+  oldText = String(oldText); newText = String(newText);
+  if (!Array.isArray(paras)) return undefined;
+  const oldN = paraCount(oldText);
+  if (oldText === newText) return normParas(paras, oldN);
+  const m = Math.min(oldText.length, newText.length);
+  let p = 0, s = 0;
+  while (p < m && oldText.charCodeAt(p) === newText.charCodeAt(p)) p++;
+  while (s < m - p && oldText.charCodeAt(oldText.length - 1 - s) === newText.charCodeAt(newText.length - 1 - s)) s++;
+  let a = p, b = oldText.length - s, ins = newText.length - s - p;
+  // A pure insertion or a pure deletion is exactly where the caret says, when that gives the new text
+  if (typeof caret === 'number' && (a === b) !== (ins === 0)) {
+    const a2 = a === b ? caret - ins : caret, b2 = a2 + (b - a);
+    if (a2 >= 0 && b2 <= oldText.length && oldText.slice(0, a2) + newText.slice(a2, a2 + ins) + oldText.slice(b2) === newText) { a = a2; b = b2; }
+  }
+  const at = paraIndexAt(oldText, a);
+  const removed = (oldText.slice(a, b).match(/\n/g) || []).length, added = (newText.slice(a, a + ins).match(/\n/g) || []).length;
+  const out = [];
+  for (let k = 0; k < at; k++) out.push(paraSettingsAt(paras, k));
+  for (let k = 0; k <= added; k++) out.push(paraSettingsAt(paras, at));
+  for (let k = at + removed + 1; k < oldN; k++) out.push(paraSettingsAt(paras, k));
+  return normParas(out, paraCount(newText));
+}
+
+// A list from a file or a paste, which might be anything: only what is understood is kept
+function sanitizeParas(raw, text) {
+  if (!Array.isArray(raw)) return undefined;
+  const n = paraCount(text);
+  const list = raw.slice(0, n).map(p => {
+    const x = {};
+    if (p && typeof p === 'object') PARA_KEYS.forEach(k => { const v = paraClean(k, p[k]); if (v !== undefined) x[k] = v; });
+    return x;
+  });
+  return normParas(list, n);
+}
+
+/* ---------- showing which paragraphs ---------- */
+// The stretch of height (box coordinates) each paragraph touched by a selection from a to b takes in a layout (textLayout):
+// [{ p (its number), y0, y1 }], from the top of its first line to the bottom of its last
+function paraBars(lay, text, a, b) {
+  text = String(text);
+  const r = paraRange(text, a, b), st = paraStarts(text), out = [];
+  for (let p = r.first; p <= r.last; p++) {
+    const s = st[p], e = p + 1 < st.length ? st[p + 1] - 1 : text.length;
+    let y0 = Infinity, y1 = -Infinity;
+    lay.lines.forEach(L => { if (L.start >= s && L.start <= e) { y0 = Math.min(y0, L.top); y1 = Math.max(y1, L.top + L.h); } });
+    if (y1 > y0) out.push({ p, y0, y1 });
+  }
+  return out;
 }
 /* =====================================================================
    SVG description of an object (shared by the editor and the exporter)
@@ -5309,6 +5469,11 @@ function teOverlay() {
   const lay = textLayout(o), s = teSel(), g = svgEl('g', { transform: objXf(o) });
   g.appendChild(svgEl('rect', { x: 0, y: 0, width: o.w, height: o.h, class: 'ov-line ov-dash' }));
   selectionRects(lay, s.a, s.b).forEach(r => g.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'te-sel' })));
+  // A bar beside each paragraph the selection touches, just outside both sides of the box: what the paragraph settings would change.
+  // (A little shorter at both ends, so the bars of two paragraphs in a row do not run into one.)
+  const barGap = 5 / view.z, barTrim = 2 / view.z;
+  paraBars(lay, o.text, s.a, s.b).forEach(bar => [-barGap, o.w + barGap].forEach(x =>
+    g.appendChild(svgEl('line', { x1: x, y1: bar.y0 + barTrim, x2: x, y2: Math.max(bar.y1 - barTrim, bar.y0 + barTrim), class: 'te-para' }))));
   const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected and the keyboard is here)
   g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b && document.activeElement === teEl ? 'te-caret' : 'te-caret off' }));
   ov.appendChild(g);
@@ -5401,7 +5566,7 @@ teEl.addEventListener('input', () => {
   const o = teObj();
   if (!o) return;
   te.goalX = null;
-  setTextValue(o, teEl.value, te.pending); te.pending = null;   // (letters typed take the style of their neighbours, or the one chosen at the caret)
+  setTextValue(o, teEl.value, te.pending, teEl.selectionEnd); te.pending = null;   // (letters typed take the style of their neighbours, or the one chosen at the caret)
   refresh(o);
   render(); renderLayers();
   $('#tx-text').value = o.text;
@@ -6378,7 +6543,7 @@ onNum(F.r, (o, v) => { o.r = clamp(v, 0, Math.min(o.w, o.h) / 2); });
 
 // Text
 const txArea = $('#tx-text');
-txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; setTextValue(o, txArea.value); refresh(o); render(); renderLayers(); });
+txArea.addEventListener('input', () => { const o = one(); if (!o || o.kind !== 'text') return; setTextValue(o, txArea.value, undefined, txArea.selectionEnd); refresh(o); render(); renderLayers(); });
 txArea.addEventListener('change', () => commit());
 txArea.addEventListener('keydown', e => { if (e.key === 'Escape') txArea.blur(); });
 onNum($('#tx-size'), (o, v) => {
@@ -7345,6 +7510,8 @@ function sanitizeDoc(d) {
       if (r.hyph === true) o.hyph = true;    // long words are broken with a hyphen
       const runs = sanitizeRuns(r.runs, o.text.length, k => !!fonts[k]);   // letters set apart from the rest
       if (runs) o.runs = runs;
+      const paras = sanitizeParas(r.paras, o.text);   // settings of single paragraphs (04k-text-paragraphs.js)
+      if (paras) o.paras = paras;
     }
     if (r.kind === 'path') {   // (a converted old line already has its outline)
       if (!r.nat || typeof r.nat.d !== 'string') return;
@@ -8027,7 +8194,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Safer SVG import: only the shapes, colors, text and pictures FriendShaped uses are kept from an SVG file, so a file can no longer open another website or contact one. FriendShaped now carries its drawing libraries inside the page, so it never contacts any other server and the single file works with no internet at all.';
+const WHATS_NEW = 'A shape that text wraps around now only moves text that is behind it, so text placed in front of the shape sits on the white space it leaves. While you type, an orange bar beside the text box shows which paragraphs your selection touches.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

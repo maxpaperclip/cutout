@@ -19,6 +19,7 @@
   --danger:#d3283a;
   --shadow:rgba(21,25,54,.30);
   --handle:#ffffff;
+  --para:#e0750a;
   --ui:"Avenir Next","Segoe UI",ui-rounded,system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
 }
 @media (prefers-color-scheme: dark){
@@ -39,6 +40,7 @@
     --danger:#ff7b88;
     --shadow:rgba(0,0,0,.6);
     --handle:#1a1d2b;
+    --para:#ffa24a;
   }
 }
 :root[data-theme="dark"]{
@@ -58,6 +60,7 @@
   --danger:#ff7b88;
   --shadow:rgba(0,0,0,.6);
   --handle:#1a1d2b;
+  --para:#ffa24a;
 }
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 *,*::before,*::after{box-sizing:border-box}
@@ -170,6 +173,8 @@ input:disabled,select:disabled{opacity:.45}
 .te-sel{fill:rgba(59,59,245,.3);stroke:none;pointer-events:none}
 .te-caret{stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke;pointer-events:none;animation:te-blink 1.06s steps(1) infinite}
 .te-caret.off{opacity:0;animation:none}
+/* Beside the text box while typing: the paragraph(s) that the paragraph settings would change (a bar each, outside both sides) */
+.te-para{stroke:var(--para);stroke-width:3;stroke-linecap:butt;vector-effect:non-scaling-stroke;pointer-events:none}
 @keyframes te-blink{0%{opacity:1}50%{opacity:0}}
 @media (prefers-reduced-motion:reduce){.te-caret{animation:none}}
 .fontpick{position:relative}

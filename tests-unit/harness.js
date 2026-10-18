@@ -43,6 +43,7 @@ const MODULE_FILES = [
   '04h-hyphenation.js',
   '04i-text-wrap.js',
   '04j-grids.js',
+  '04k-text-paragraphs.js',
   '05-svg-export.js',
   '06-boolean-ops.js',
   '06b-break-apart.js',
@@ -81,6 +82,9 @@ const EXPORT_NAMES = [
   // 04j-grids.js
   'GRID_DEFAULTS', 'GRID_MAX_LINES', 'sanitizeGrids', 'gridsOf', 'columnBoxes', 'columnEdges', 'columnGridPath',
   'baselineStep', 'baselineRange', 'baselineYs', 'baselineGridPath', 'nearestBaseline', 'gridSnapOn', 'nearGuide', 'guideShift',
+  // 04k-text-paragraphs.js
+  'PARA_SPEC', 'PARA_KEYS', 'paraClean', 'paraStarts', 'paraCount', 'paraIndexAt', 'paraRange', 'normParas', 'paraSettingsAt', 'paraStyleAt',
+  'parasApply', 'applyParaSettings', 'parasForEdit', 'sanitizeParas', 'paraBars',
   // 04h-hyphenation.js
   'hyphenPoints', 'HYPH_LEFT_MIN', 'HYPH_RIGHT_MIN', 'HYPH_WORD_MIN',
   // 04g-text-runs.js

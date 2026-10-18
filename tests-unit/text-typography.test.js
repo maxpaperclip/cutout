@@ -414,6 +414,7 @@ test('paragraph spacing: room between paragraphs', async (t) => {
     // the second paragraph is at y = 20 (a row of 10 and a gap of 10): a shape there is in its way, one at y 10..20 is only in the gap
     const withRect = (props, r) => {
       const x = setup(props);
+      x.m.doc.objects.push(x.o);   // (the text is in the drawing, and the shape in front of it: only a shape in front makes room, see 04i-text-wrap.js)
       x.m.doc.objects.push(x.m.newShape('rect', Object.assign({ wrap: true, wgap: 0 }, r)));
       x.m.refresh(x.o);
       return x.lay();

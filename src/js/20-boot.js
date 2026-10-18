@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Safer SVG import: only the shapes, colors, text and pictures FriendShaped uses are kept from an SVG file, so a file can no longer open another website or contact one. FriendShaped now carries its drawing libraries inside the page, so it never contacts any other server and the single file works with no internet at all.';
+const WHATS_NEW = 'A shape that text wraps around now only moves text that is behind it, so text placed in front of the shape sits on the white space it leaves. While you type, an orange bar beside the text box shows which paragraphs your selection touches.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
