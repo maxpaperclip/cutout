@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-E9RdwYtugHSWfsRt+Y4OSpMiWBeY/kKlarIEH+MPLbI=' 'sha256-NIDeQWxnXDvvNd/XHBZNNUuoL1hAa9yAm2ONVywKk+o='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-E9RdwYtugHSWfsRt+Y4OSpMiWBeY/kKlarIEH+MPLbI=' 'sha256-xb4RkxneyqAbbVK3v9Cn7mR82fezwzwoZqtsaJ3OyFk='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.39.0</title>
+<title>FriendShaped v1.40.0</title>
 <style>
 
 :root{
@@ -942,7 +942,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.39.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.40.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -3658,6 +3658,14 @@ function sanitizeParas(raw, text) {
 }
 
 /* ---------- showing which paragraphs ---------- */
+// Where the two bars of a bar from paraBars are drawn across (box coordinates), gap away from the text. With no columns, and for a paragraph that
+// spans them, that is beside the box. In columns each column has its own: beside its left and its right edge, in the gutter
+// (no further from the column than half of it), so a paragraph is followed from one column into the next. The box's own edges are used on the outside.
+function paraBarXs(lay, bar, gap, boxW) {
+  if (!(lay.ncols > 1) || bar.col < 0) return [-gap, boxW + gap];
+  const cx = bar.col * (lay.cw + lay.gut), g = Math.min(gap, lay.gut / 2);
+  return [bar.col === 0 ? -gap : cx - g, bar.col === lay.ncols - 1 ? boxW + gap : cx + lay.cw + g];
+}
 // The stretch of height (box coordinates) each paragraph touched by a selection from a to b takes in a layout (textLayout):
 // [{ p (its number), y0, y1, col }], from the top of its first line to the bottom of its last (one for each column it is in)
 function paraBars(lay, text, a, b) {
@@ -5678,9 +5686,9 @@ function teOverlay() {
   g.appendChild(svgEl('rect', { x: 0, y: 0, width: o.w, height: o.h, class: 'ov-line ov-dash' }));
   selectionRects(lay, s.a, s.b).forEach(r => g.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'te-sel' })));
   // A bar beside each paragraph the selection touches, just outside both sides of the box: what the paragraph settings would change.
-  // (A little shorter at both ends, so the bars of two paragraphs in a row do not run into one.)
+  // (A little shorter at both ends, so the bars of two paragraphs in a row do not run into one. In columns, each column has its own pair: see paraBarXs.)
   const barGap = 5 / view.z, barTrim = 2 / view.z;
-  paraBars(lay, o.text, s.a, s.b).forEach(bar => [-barGap, o.w + barGap].forEach(x =>
+  paraBars(lay, o.text, s.a, s.b).forEach(bar => paraBarXs(lay, bar, barGap, o.w).forEach(x =>
     g.appendChild(svgEl('line', { x1: x, y1: bar.y0 + barTrim, x2: x, y2: Math.max(bar.y1 - barTrim, bar.y0 + barTrim), class: 'te-para' }))));
   const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected and the keyboard is here)
   g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b && document.activeElement === teEl ? 'te-caret' : 'te-caret off' }));
@@ -8476,7 +8484,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Columns, continued: in a text with columns, a paragraph can now span all the columns (a heading, say), with the columns above and below it balanced on their own, or start at the top of the next column. Both are in the Paragraph part of the Design tab.';
+const WHATS_NEW = 'The paragraph bars follow the text through columns: each column has its own pair of bars, in the gutters beside it, showing which paragraphs the Paragraph settings will change.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

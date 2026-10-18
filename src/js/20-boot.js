@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Columns, continued: in a text with columns, a paragraph can now span all the columns (a heading, say), with the columns above and below it balanced on their own, or start at the top of the next column. Both are in the Paragraph part of the Design tab.';
+const WHATS_NEW = 'The paragraph bars follow the text through columns: each column has its own pair of bars, in the gutters beside it, showing which paragraphs the Paragraph settings will change.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

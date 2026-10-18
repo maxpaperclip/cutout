@@ -137,6 +137,14 @@ function sanitizeParas(raw, text) {
 }
 
 /* ---------- showing which paragraphs ---------- */
+// Where the two bars of a bar from paraBars are drawn across (box coordinates), gap away from the text. With no columns, and for a paragraph that
+// spans them, that is beside the box. In columns each column has its own: beside its left and its right edge, in the gutter
+// (no further from the column than half of it), so a paragraph is followed from one column into the next. The box's own edges are used on the outside.
+function paraBarXs(lay, bar, gap, boxW) {
+  if (!(lay.ncols > 1) || bar.col < 0) return [-gap, boxW + gap];
+  const cx = bar.col * (lay.cw + lay.gut), g = Math.min(gap, lay.gut / 2);
+  return [bar.col === 0 ? -gap : cx - g, bar.col === lay.ncols - 1 ? boxW + gap : cx + lay.cw + g];
+}
 // The stretch of height (box coordinates) each paragraph touched by a selection from a to b takes in a layout (textLayout):
 // [{ p (its number), y0, y1, col }], from the top of its first line to the bottom of its last (one for each column it is in)
 function paraBars(lay, text, a, b) {

@@ -85,7 +85,7 @@ const EXPORT_NAMES = [
   'baselineStep', 'baselineRange', 'baselineYs', 'baselineGridPath', 'nearestBaseline', 'gridSnapOn', 'nearGuide', 'guideShift',
   // 04k-text-paragraphs.js
   'PARA_SPEC', 'PARA_KEYS', 'paraClean', 'paraStarts', 'paraCount', 'paraIndexAt', 'paraRange', 'normParas', 'paraSettingsAt', 'paraStyleAt',
-  'parasApply', 'applyParaSettings', 'parasForEdit', 'sanitizeParas', 'paraBars',
+  'parasApply', 'applyParaSettings', 'parasForEdit', 'sanitizeParas', 'paraBars', 'paraBarXs',
   // 04h-hyphenation.js
   'hyphenPoints', 'HYPH_LEFT_MIN', 'HYPH_RIGHT_MIN', 'HYPH_WORD_MIN',
   // 04g-text-runs.js

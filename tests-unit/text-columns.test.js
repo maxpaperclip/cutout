@@ -235,3 +235,19 @@ test('span and brk are kept when a drawing is saved and opened', () => {
   const t = setup({ cols: 2, paras: [{}, { span: 'all' }, { brk: true }] }, 'a\nb\nc'), j = t.m.sanitizeDoc(JSON.parse(t.m.docJSON(t.m.doc)));
   assert.deepEqual(JSON.parse(JSON.stringify(j.objects.find(x => x.kind === 'text').paras)), [{}, { span: 'all' }, { brk: true }]);
 });
+
+test('the bars of a paragraph go beside each column it is in, in the gutters', () => {
+  const t = setup({ cols: 3, gut: 10, bw: 130 }, WORDS), lay = t.lay();   // columns 36.67 wide, at 0, 46.67 and 93.33
+  const gap = 5, bar = c => ({ col: c }), xs = c => Array.from(t.m.paraBarXs(lay, bar(c), gap, 130));
+  assert.deepEqual(xs(0), [-5, lay.cw + 5]);
+  assert.deepEqual(xs(1), [lay.cw + 10 - 5, 2 * lay.cw + 10 + 5]);
+  assert.deepEqual(xs(2), [2 * (lay.cw + 10) - 5, 135]);
+});
+
+test('bars keep to half the gutter, and a spanning paragraph or no columns have them beside the box', () => {
+  const tight = setup({ cols: 2, gut: 4 }, WORDS), lay = tight.lay(), m = tight.m;
+  assert.deepEqual(Array.from(m.paraBarXs(lay, { col: 1 }, 5, 100)), [lay.cw + 4 - 2, 105]);
+  assert.deepEqual(Array.from(m.paraBarXs(lay, { col: -1 }, 5, 100)), [-5, 105]);
+  const one = setup({}, WORDS);
+  assert.deepEqual(Array.from(one.m.paraBarXs(one.lay(), { col: 0 }, 5, 100)), [-5, 105]);
+});
