@@ -8,7 +8,8 @@
      dc    drop cap: the first letters are one big letter this many lines tall (2 to 8; missing = no drop cap)
      dn    drop cap: how many letters of the paragraph it takes (1 to 3; missing = 1)
      span  'all': the paragraph runs across all the columns of the text (missing = it stays in its column)
-   (textLayout, in 04f-text-layout.js, uses dc and dn. span is for text columns, which come later. This file is where the settings
+     brk   true: the paragraph starts a new column (missing = it follows the one before)
+   (textLayout, in 04f-text-layout.js, uses them all; span and brk are for text columns. This file is where the settings
    live, are kept in step with editing, and are saved and opened.)
    While a text is edited the paragraph controls change the paragraphs the selection touches (paraRange), and the paragraphs
    are shown by a bar beside the box (paraBars). A text that is only selected, not being edited, is changed in its first paragraph
@@ -17,7 +18,8 @@
 const PARA_SPEC = {
   dc: { min: 2, max: 8 },
   dn: { min: 1, max: 3 },
-  span: { values: ['all'] }
+  span: { values: ['all'] },
+  brk: { values: [true] }
 };
 const PARA_KEYS = Object.keys(PARA_SPEC);
 const paraHas = p => !!p && PARA_KEYS.some(k => p[k] !== undefined);
@@ -117,7 +119,7 @@ function parasForEdit(paras, oldText, newText, caret) {
   const removed = (oldText.slice(a, b).match(/\n/g) || []).length, added = (newText.slice(a, a + ins).match(/\n/g) || []).length;
   const out = [];
   for (let k = 0; k < at; k++) out.push(paraSettingsAt(paras, k));
-  for (let k = 0; k <= added; k++) out.push(paraSettingsAt(paras, at));
+  for (let k = 0; k <= added; k++) { const q = paraSettingsAt(paras, at); if (k) delete q.brk; out.push(q); }   // (Enter makes a paragraph like the one it was pressed in, but not one that starts a column too)
   for (let k = at + removed + 1; k < oldN; k++) out.push(paraSettingsAt(paras, k));
   return normParas(out, paraCount(newText));
 }

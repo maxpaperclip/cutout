@@ -2,7 +2,7 @@
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'Text columns follow the page: the new Match page gutter box (on by default) keeps the space between a text\'s columns the same as the page columns\' gutter, also when you change the page grid. Typing a gutter of its own switches it off.';
+const WHATS_NEW = 'Columns, continued: in a text with columns, a paragraph can now span all the columns (a heading, say), with the columns above and below it balanced on their own, or start at the top of the next column. Both are in the Paragraph part of the Design tab.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');

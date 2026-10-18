@@ -92,6 +92,11 @@ function updateInspector() {
       $('#tx-dc-on').checked = on && !mixed; $('#tx-dc-on').indeterminate = mixed; $('#tx-dc-on').disabled = !box || isLocked(o);
       $('#tx-dc').disabled = !box || !on || mixed || isLocked(o); $('#tx-dn').disabled = $('#tx-dc').disabled;
       setNum($('#tx-dc'), on && !mixed ? ps.dc : 3); setNum($('#tx-dn'), on && !mixed && ps.dn > 0 ? ps.dn : 1);
+      const cols = box && o.cols > 1;   // (these two are for columns)
+      [['span', 'all'], ['brk', true]].forEach(([k, v]) => {
+        const el = $('#tx-' + k), m = ps[k] === 'mixed';
+        el.checked = ps[k] === v; el.indeterminate = m; el.disabled = !cols || isLocked(o);
+      });
       $('#para-help').textContent = !box ? 'A drop cap needs a fixed width: tick Fixed width in the Text part.'
         : editing ? 'Changes the paragraph the caret is in, or all the paragraphs the selection reaches into. They are marked by the bars beside the text box.'
         : 'Changes the first paragraph. To change another, click in the text and put the caret in it.';
@@ -270,6 +275,8 @@ function paraChange(attrs) {
   updateInspector();
 }
 $('#tx-dc-on').addEventListener('change', e => paraChange(e.target.checked ? { dc: clamp(parseInt($('#tx-dc').value, 10) || 3, 2, 8) } : { dc: null, dn: null }));
+$('#tx-span').addEventListener('change', e => paraChange({ span: e.target.checked ? 'all' : null }));
+$('#tx-brk').addEventListener('change', e => paraChange({ brk: e.target.checked ? true : null }));
 $('#tx-dc').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (isFinite(v)) paraChange({ dc: clamp(v, 2, 8) }); else updateInspector(); });
 $('#tx-dn').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (isFinite(v)) paraChange({ dn: v <= 1 ? null : clamp(v, 1, 3) }); else updateInspector(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
