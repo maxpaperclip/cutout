@@ -49,9 +49,9 @@ function teOverlay() {
   g.appendChild(svgEl('rect', { x: 0, y: 0, width: o.w, height: o.h, class: 'ov-line ov-dash' }));
   selectionRects(lay, s.a, s.b).forEach(r => g.appendChild(svgEl('rect', { x: r.x, y: r.y, width: r.w, height: r.h, class: 'te-sel' })));
   // A bar beside each paragraph the selection touches, just outside both sides of the box: what the paragraph settings would change.
-  // (A little shorter at both ends, so the bars of two paragraphs in a row do not run into one.)
+  // (A little shorter at both ends, so the bars of two paragraphs in a row do not run into one. In columns, each column has its own pair: see paraBarXs.)
   const barGap = 5 / view.z, barTrim = 2 / view.z;
-  paraBars(lay, o.text, s.a, s.b).forEach(bar => [-barGap, o.w + barGap].forEach(x =>
+  paraBars(lay, o.text, s.a, s.b).forEach(bar => paraBarXs(lay, bar, barGap, o.w).forEach(x =>
     g.appendChild(svgEl('line', { x1: x, y1: bar.y0 + barTrim, x2: x, y2: Math.max(bar.y1 - barTrim, bar.y0 + barTrim), class: 'te-para' }))));
   const c = caretAt(lay, teEnds().focus);   // (always there, to say where the keyboard is; only shown when nothing is selected and the keyboard is here)
   g.appendChild(svgEl('line', { x1: c.x, y1: c.y0, x2: c.x, y2: c.y1, class: s.a === s.b && document.activeElement === teEl ? 'te-caret' : 'te-caret off' }));
