@@ -17,7 +17,7 @@
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
 let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
 // The controls that style the letters; a press on them leaves the text being edited
-const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette';
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette, #tx-dc-on, #tx-dc, #tx-dn';
 const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
@@ -58,7 +58,7 @@ function teOverlay() {
   ov.appendChild(g);
   tePlace();
   if (te.pending && (s.a !== s.b || s.a !== te.pendAt)) te.pending = null;   // a style chosen at the caret is for typing right there
-  const sig = JSON.stringify(teStyleShown(o));
+  const sig = JSON.stringify([teStyleShown(o), teParasShown(o)]);   // (the controls show the letters at the caret, and the paragraphs the selection touches)
   if (sig !== te.sig) { te.sig = sig; updateInspector(); }   // the controls show the letters at the caret
   return true;   // no handles while typing
 }
@@ -171,7 +171,7 @@ teEl.addEventListener('keydown', e => {
     const lay = textLayout(o);
     if (lay.area) {
       e.preventDefault();
-      const ends = teEnds(), L = lineOfIndex(lay, ends.focus), at = e.key === 'Home' ? L.start : L.cend;
+      const ends = teEnds(), L = lineOfIndex(lay, ends.focus), at = e.key === 'Home' ? lineHome(lay, L) : L.cend;
       te.goalX = null;
       teSetSel(e.shiftKey ? ends.anchor : at, at);
       return;
@@ -199,6 +199,28 @@ document.addEventListener('pointerdown', e => {
 document.addEventListener('keydown', e => {
   if (te && e.key === 'Escape' && document.activeElement !== teEl && !e.defaultPrevented && !(typeof fpIsOpen === 'function' && fpIsOpen())) { finishTextEdit(); stage.focus({ preventScroll: true }); }
 });
+
+/* ---------- the paragraph settings: which paragraphs, and what they are ---------- */
+// The stretch of text whose paragraphs the paragraph controls work on: the selection while typing in place, else (a text that is just
+// selected) its first paragraph
+const teParaSpan = o => te && te.id === o.id ? teSel() : { a: 0, b: 0 };
+// What the paragraphs in it are set to, as the controls should show: { dc, dn } with a key whose paragraphs differ set to 'mixed' (a key
+// that none of them have is left out)
+function teParasShown(o) {
+  const s = teParaSpan(o), r = paraRange(o.text, s.a, s.b), out = {};
+  PARA_KEYS.forEach(k => {
+    const vals = [];
+    for (let p = r.first; p <= r.last; p++) vals.push(paraSettingsAt(o.paras, p)[k]);
+    const first = vals[0];
+    if (vals.some(v => v !== first)) out[k] = 'mixed'; else if (first !== undefined) out[k] = first;
+  });
+  return out;
+}
+// Set paragraph settings ({ dc, dn }, any of them; null clears) on those paragraphs. Gives true when something changed.
+function teParaSet(o, attrs) {
+  const s = teParaSpan(o);
+  return applyParaSettings(o, s.a, s.b, attrs);
+}
 
 /* ---------- color, size and font of the selected letters ---------- */
 // What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font, spacing, lineHeight }

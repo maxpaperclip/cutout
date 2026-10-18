@@ -75,6 +75,7 @@ const EXPORT_NAMES = [
   'docJSON', 'rebuildOutlines',
   // 04f-text-layout.js
   'textLayout', 'lineMetrics', 'purgeLineMetrics', 'lineOfIndex', 'caretAt', 'selectionRects', 'indexAtPoint', 'verticalMove',
+  'capAt', 'capRatioOf', 'glyphLsb', 'capLength', 'dropCapSpec', 'lineHome',
   'wordRange', 'lineRange', 'boxContains', 'textBoxAt', 'buildText', 'isLocked', 'isHidden',
   'breakLines', 'breakLinesEx', 'wrapCuts', 'wrapPlan', 'hangOf', 'hangFactor', 'HANG_MAX', 'isBreakSpace',
   // 04i-text-wrap.js

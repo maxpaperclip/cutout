@@ -8,10 +8,11 @@
      dc    drop cap: the first letters are one big letter this many lines tall (2 to 8; missing = no drop cap)
      dn    drop cap: how many letters of the paragraph it takes (1 to 3; missing = 1)
      span  'all': the paragraph runs across all the columns of the text (missing = it stays in its column)
-   (The layout uses these from the drop cap and columns steps on; this file is only where they live, are kept in step with
-   editing, and are saved and opened.)
+   (textLayout, in 04f-text-layout.js, uses dc and dn. span is for text columns, which come later. This file is where the settings
+   live, are kept in step with editing, and are saved and opened.)
    While a text is edited the paragraph controls change the paragraphs the selection touches (paraRange), and the paragraphs
-   are shown by a bar beside the box (paraBars). A text that is only selected, not being edited, is changed in its first paragraph.
+   are shown by a bar beside the box (paraBars). A text that is only selected, not being edited, is changed in its first paragraph
+   (teParaSet, in 09f-text-edit.js).
    ===================================================================== */
 const PARA_SPEC = {
   dc: { min: 2, max: 8 },

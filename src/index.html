@@ -204,6 +204,18 @@
         <p class="help">Text is drawn as outlines, so it looks the same everywhere and can be combined with shapes.</p>
       </section>
 
+      <section class="sec" id="sec-para" hidden>
+        <h3>Paragraph</h3>
+        <div class="stack">
+          <label class="inline" title="Make the first letter of the paragraph a big capital that sits in the lines beside it. Needs a fixed width."><input type="checkbox" id="tx-dc-on"> Drop cap</label>
+          <div class="grid2">
+            <label class="f"><span>Lines</span><input type="number" id="tx-dc" min="2" max="8" step="1" title="How many lines tall the capital is"></label>
+            <label class="f"><span>Letters</span><input type="number" id="tx-dn" min="1" max="3" step="1" title="How many letters at the start of the paragraph the capital is made of"></label>
+          </div>
+        </div>
+        <p class="help" id="para-help"></p>
+      </section>
+
       <section class="sec" id="sec-poly" hidden>
         <h3>Polygon</h3>
         <div class="stack">

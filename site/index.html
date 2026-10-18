@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-E9RdwYtugHSWfsRt+Y4OSpMiWBeY/kKlarIEH+MPLbI=' 'sha256-lLjyigjJHgADzAiC0BIXcwTnWXkUJy5790rTDTlatOQ='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-Ooxz7N85Kaf+BflrgugUYZPqRJxcPoicX0/gGEow7ZY=' 'sha256-wPnHyoXhgHWogZ5f4t7m4dU1+aImn1MU82zOlKGDrbo=' 'sha256-E9RdwYtugHSWfsRt+Y4OSpMiWBeY/kKlarIEH+MPLbI=' 'sha256-nHSYFvxw5xoolqQySZ9jObS3H7MjrTFInkJdVcpcwlg='; style-src 'unsafe-inline'; img-src data: blob:; font-src data: blob:; connect-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
-<title>FriendShaped v1.34.0</title>
+<title>FriendShaped v1.35.0</title>
 <style>
 
 :root{
@@ -555,6 +555,18 @@ input:disabled,select:disabled{opacity:.45}
         <p class="help">Text is drawn as outlines, so it looks the same everywhere and can be combined with shapes.</p>
       </section>
 
+      <section class="sec" id="sec-para" hidden>
+        <h3>Paragraph</h3>
+        <div class="stack">
+          <label class="inline" title="Make the first letter of the paragraph a big capital that sits in the lines beside it. Needs a fixed width."><input type="checkbox" id="tx-dc-on"> Drop cap</label>
+          <div class="grid2">
+            <label class="f"><span>Lines</span><input type="number" id="tx-dc" min="2" max="8" step="1" title="How many lines tall the capital is"></label>
+            <label class="f"><span>Letters</span><input type="number" id="tx-dn" min="1" max="3" step="1" title="How many letters at the start of the paragraph the capital is made of"></label>
+          </div>
+        </div>
+        <p class="help" id="para-help"></p>
+      </section>
+
       <section class="sec" id="sec-poly" hidden>
         <h3>Polygon</h3>
         <div class="stack">
@@ -922,7 +934,7 @@ paper.setup(new paper.Size(16, 16));
    ===================================================================== */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
-const APP_VERSION = '1.34.0';   // filled in by build.js from package.json
+const APP_VERSION = '1.35.0';   // filled in by build.js from package.json
 const SVGNS = 'http://www.w3.org/2000/svg';
 const D2R = Math.PI / 180;
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -1502,6 +1514,7 @@ function buildText(o, obs) {
       add(c, L.hy.font.getPath('-', L.x + L.hy.x, L.base, L.hy.size, { kerning: true, letterSpacing: L.hy.ls }).toPathData(2));
     }
   });
+  (lay.caps || []).forEach(c => add(c.c, c.font.getPath(c.text, c.x, c.base, c.size, { kerning: true, letterSpacing: c.ls }).toPathData(2)));   // drop caps
   const out = { d, w: lay.w, h: lay.h };
   if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
   return out;
@@ -1540,7 +1553,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '') + (o.paras ? '\u0001' + JSON.stringify(o.paras) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);
@@ -2165,6 +2178,8 @@ const dropHex = c => '#' + [c.r, c.g, c.b].map(v => clamp(v, 0, 255).toString(16
      o.noind1 the very first paragraph of the text is left out (as under a heading, in a book).
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
+   - a drop cap (area text; o.paras, 04k-text-paragraphs.js): the first letters of a paragraph are one big capital N lines tall, drawn on its own
+     (lay.caps); the first N rows of the paragraph start after it. Its letters are in o.text like any other, but are in no line.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
      out into the margin so the letters line up (L.hl, L.hr = how far). true hangs them the whole of their width; a number is how much of
      it (0.5 = half; see hangFactor). Text with no box hangs too, but nothing wraps differently.
@@ -2200,6 +2215,51 @@ function lineMetrics(font, fontKey, size, ls, line) {
 // A face that was used before it arrived was measured in the default font (see fontArrived)
 function purgeLineMetrics(fontKey) {
   Array.from(lineMetricCache.keys()).forEach(k => { if (k.startsWith(fontKey + '|')) lineMetricCache.delete(k); });
+}
+
+/* ---------- drop caps ---------- */
+// How tall the capital letters of a face are, as a fraction of its size: from the face's own figure, or else measured on an H
+const capRatioCache = new WeakMap();
+function capRatioOf(font) {
+  let r = capRatioCache.get(font);
+  if (r) return r;
+  const os2 = font.tables && font.tables.os2;
+  if (os2 && os2.sCapHeight > 0) r = os2.sCapHeight / (font.unitsPerEm || 1000);
+  else {
+    try { const bb = font.charToGlyph('H').getBoundingBox(); if (bb && bb.y2 > 0) r = bb.y2 / (font.unitsPerEm || 1000); } catch (e) { /* no glyph to measure */ }
+  }
+  if (!(r > 0.2 && r < 1.2)) r = 0.7;
+  capRatioCache.set(font, r);
+  return r;
+}
+// How far a letter's ink starts from where it is drawn (its left side bearing), at a size: lined up with the margin, a big letter
+// would otherwise start a little in, and by a different amount for each letter
+function glyphLsb(font, ch, size) {
+  try { const bb = font.charToGlyph(ch).getBoundingBox(); if (bb && Number.isFinite(bb.x1) && bb.x2 > bb.x1) return bb.x1 * size / (font.unitsPerEm || 1000); } catch (e) { /* none */ }
+  return 0;
+}
+// How much of the start of a paragraph a drop cap of dn letters takes (a letter keeps its accents, and a pair of units stays whole)
+function capLength(para, dn) {
+  let i = 0;
+  for (let k = 0; k < dn && i < para.length; k++) {
+    i += para.codePointAt(i) > 0xFFFF ? 2 : 1;
+    while (i < para.length && /^\p{M}$/u.test(para[i])) i++;
+  }
+  return i;
+}
+// The drop cap of the paragraph that starts at index ps, N lines tall, made of dn letters: its letters, face and size, how far the
+// lines beside it are held in (inset), and how far apart the lines of the paragraph are (pitch). The size is worked out, not chosen:
+// the top of the capital is level with the tops of the capitals on the first line, and its baseline is the baseline of line N.
+function dropCapSpec(o, runs, text, para, ps, N, dn, bw, minSlot) {
+  const n = capLength(para, dn), ctext = para.slice(0, n), last = Math.max(text.length - 1, 0);
+  const cst = runs ? runStyleAt(runs, ps) : {}, bst = runs ? runStyleAt(runs, Math.min(ps + n, last)) : {};
+  const f = cst.f !== undefined ? cst.f : o.font, cfont = fontOf(f), bfont = fontOf(bst.f !== undefined ? bst.f : o.font);
+  const bsize = rnd(o.size * (bst.s !== undefined ? bst.s : 1), 3), pitch = bsize * (bst.h !== undefined ? bst.h : o.lh);
+  const ls = cst.l !== undefined ? cst.l : (o.ls || 0);
+  const size = rnd(((N - 1) * pitch + capRatioOf(bfont) * bsize) / capRatioOf(cfont), 3);
+  const m = lineMetrics(cfont, f, size, ls, ctext), lsb = glyphLsb(cfont, String.fromCodePoint(ctext.codePointAt(0)), size);
+  const inset = Math.min(Math.max(m.width - lsb, 0) + size * 0.08, Math.max(0, bw - minSlot));
+  return { n, text: ctext, f, font: cfont, size, ls, lsb, m, inset, pitch, c: cst.c, N };
 }
 
 /* ---------- the whole text ---------- */
@@ -2339,6 +2399,10 @@ const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, 
 //             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
 // lay.flat: no runs, and one line to a row, so every line is the same height and sits at i * lineH
 // lay.area: wrapped to a box (o.bw); lay.w is then that width
+// lay.caps: the drop caps ([{ p (its paragraph), i0, i1 (the letters it is made of: not in any line), text, font, size, ls, c (its color, if
+//           it has one of its own), x (where it is drawn from), ox (that, and where each letter starts), xs (where the caret goes: the
+//           first is the start of the ink), x0 (the start of the ink), w, base, top, bottom, line (the first line beside it) }]
+//           Its paragraph's lines start at i1. See dropCapSpec.
 // obs: the shapes the text wraps around (wrapObstacles, in 04i-text-wrap.js); left out, they are looked up
 function textLayout(o, obs) {
   const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null, bw = o.bw > 0 ? o.bw : 0;
@@ -2398,27 +2462,46 @@ function textLayout(o, obs) {
     rowIdx++;
   };
   const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
+  const caps = [];
   text.split('\n').forEach((para, pi) => {
     if (pi) yOff += pgap;   // (every line break starts a paragraph, an empty one too)
-    const su = bw ? wrapSetup(o, runs, text, para, ps) : null;
-    let a = 0;
+    // A drop cap (o.paras, see 04k-text-paragraphs.js; area text only): its letters leave the paragraph and are drawn on their own, and the
+    // first N rows of the paragraph start after its width. The paragraph then is laid out from where its letters end: body, starting at bs.
+    const dcs = bw && para.length ? paraSettingsAt(o.paras, pi) : null, dcN = dcs && dcs.dc >= 2 ? dcs.dc : 0;
+    const cap = dcN ? dropCapSpec(o, runs, text, para, ps, dcN, dcs.dn || 1, bw, minSlot) : null;
+    const body = cap ? para.slice(cap.n) : para, bs = cap ? ps + cap.n : ps;
+    const su = bw ? wrapSetup(o, runs, text, body, bs) : null;
+    let a = 0, capRow = -1, capX = 0, capLine = -1;
     for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
       const top = (runs ? rowTop : rowIdx * lineH) + yOff;
-      const free = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+      const free0 = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+      const inDrop = !!cap && (capRow < 0 || rowIdx < capRow + dcN);   // (the first row that has a line, and the rows below it as far as the cap goes)
+      if (inDrop && capRow < 0 && free0.length) capX = free0[0][0];   // (the cap is at the left of the first stretch the text has)
+      const free = inDrop ? free0.map((sl, k) => k ? sl : [sl[0] + cap.inset, sl[1]]).filter(sl => sl[1] - sl[0] >= minSlot) : free0;
       const row = [];
       if (!bw) row.push(makeLine(para, ps, true, null, 0, 0));
-      else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
+      else if (!body.length) { if (free.length) row.push(makeLine('', bs, true, null, free[0][0], free[0][1] - free[0][0])); }
       else free.forEach(sl => {
-        if (a >= para.length) return;
-        const ind = a === 0 && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so)
-        const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind);
+        if (a >= body.length) return;
+        const ind = a === 0 && !cap && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so; a drop cap is the indent)
+        const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind - (inDrop ? cap.inset : 0));
         if (!c) return;
-        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
+        row.push(makeLine(body.slice(a, c.end), bs + a, c.end >= body.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
         a = c.end;
       });
       if (!row.length) { nextEmptyRow(); continue; }
+      if (cap && capRow < 0) { capRow = rowIdx; capLine = lines.length; }
       placeRow(row);
-      if (!bw || a >= para.length) break;
+      if (!bw || a >= body.length) break;
+    }
+    if (cap) {
+      while (rowIdx < capRow + dcN) { if (runs) rowTop += hEst; rowIdx++; }   // (a paragraph shorter than its cap still leaves room for all of it)
+      const base = lines[capLine].base + (dcN - 1) * cap.pitch, dx = capX - cap.lsb;
+      caps.push({
+        p: pi, i0: ps, i1: ps + cap.n, text: cap.text, f: cap.f, font: cap.font, size: cap.size, ls: cap.ls, c: cap.c,
+        x: dx, base, w: cap.m.width, x0: capX, ox: cap.m.xs.map(v => dx + v), xs: cap.m.xs.map((v, k) => k ? dx + v : capX),   // (drawn from x; the caret sits at xs, which starts at the ink)
+        top: base - capRatioOf(cap.font) * cap.size, bottom: base, line: capLine
+      });
     }
     ps += para.length + 1;   // (the line break counts as a character)
   });
@@ -2428,7 +2511,7 @@ function textLayout(o, obs) {
     L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
     if (!L.sw) L.sw = W;
   });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw };
+  return { font, size, asc, desc, lineH, ls, lines, caps, w: W, h: acc, flat: !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
@@ -2451,14 +2534,18 @@ function lineAtY(lay, y, x) {
 }
 // The line an index is on (an index at the very end of a line is on that line, not the next; but where a line is wrapped, that index is
 // also the start of the next line, and is on the next one)
+const capAt = (lay, index) => lay.caps && lay.caps.find(c => index >= c.i0 && index < c.i1);   // the drop cap an index is one of the letters of, if any
 function lineOfIndex(lay, index) {
-  const ls = lay.lines;
+  const ls = lay.lines, cap = capAt(lay, index);
+  if (cap) return ls[cap.line];   // (a letter of a drop cap belongs to no line: the first one beside it stands in)
   let lo = 0, hi = ls.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].start <= index) lo = mid; else hi = mid - 1; }
   return ls[lo];
 }
 // Where the caret is drawn for an index: a vertical segment from the font's top to its bottom
 function caretAt(lay, index) {
+  const cap = capAt(lay, index);
+  if (cap) return { x: cap.xs[index - cap.i0], y0: cap.top, y1: cap.bottom, line: cap.line };   // (as tall as the letter)
   const L = lineOfIndex(lay, index), col = clamp(index - L.start, 0, L.text.length);
   return { x: L.x + L.m.xs[col], y0: L.base - L.asc, y1: L.base + L.desc, line: L.i };
 }
@@ -2466,6 +2553,10 @@ function caretAt(lay, index) {
 function selectionRects(lay, a, b) {
   if (a > b) { const t = a; a = b; b = t; }
   const out = [], brk = Math.max(lay.size * 0.25, 2);
+  (lay.caps || []).forEach(c => {   // (the letters of a drop cap)
+    const s = Math.max(a, c.i0), e = Math.min(b, c.i1);
+    if (s < e) out.push({ x: c.xs[s - c.i0], y: c.top, w: c.xs[e - c.i0] - c.xs[s - c.i0], h: c.bottom - c.top });
+  });
   lay.lines.forEach(L => {
     const s = Math.max(a, L.start), e = Math.min(b, L.end);
     if (s > e) return;
@@ -2475,7 +2566,14 @@ function selectionRects(lay, a, b) {
   return out;
 }
 // The index nearest a point (box coordinates): the line by height, then the closest gap between letters
-function indexAtPoint(lay, x, y) {
+function indexAtPoint(lay, x, y, skipCaps) {
+  for (const c of skipCaps ? [] : lay.caps || []) {   // a press on a drop cap, or beside it: the gap between its letters nearest, or before it
+    if (y < c.top || y > c.bottom || x > c.x + c.w) continue;
+    if (x <= c.x0) return c.i0;
+    let k = 0;
+    for (let j = 1; j < c.xs.length; j++) if (Math.abs(x - c.xs[j]) < Math.abs(x - c.xs[k])) k = j;
+    return c.i0 + k;
+  }
   const L = lineAtY(lay, y, x), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
   if (lx >= xs[n]) return L.cend;
@@ -2489,6 +2587,11 @@ function indexAtPoint(lay, x, y) {
   }
   return L.start + col;
 }
+// Where Home goes on a line: its start; on the first line beside a drop cap, in front of the cap
+function lineHome(lay, L) {
+  const c = lay.caps && lay.caps.find(k => k.line === L.i);
+  return c ? c.i0 : L.start;
+}
 // Up (dir -1) or Down (+1) from an index, keeping to goalX (the column the caret started from; null = where it is now).
 // Up from the first line goes to the start, Down from the last to the end.
 function verticalMove(lay, index, dir, goalX) {
@@ -2497,7 +2600,7 @@ function verticalMove(lay, index, dir, goalX) {
   while (j >= 0 && j < lay.lines.length && lay.lines[j].top === L.top) j += dir;   // (the lines beside this one, on the same row, are not above or below it)
   if (j < 0) return { index: 0, goalX: gx };
   if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
-  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2), goalX: gx };
+  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2, true), goalX: gx };   // (the lines, not the drop cap that is beside them, or Down would never leave it)
 }
 // The word at an index, for double-click: a run of letters and digits, of spaces, or of other marks, within one line
 function wordRange(text, index) {
@@ -3332,10 +3435,11 @@ function guideShift(d, axis, lo, hi, tol) {
      dc    drop cap: the first letters are one big letter this many lines tall (2 to 8; missing = no drop cap)
      dn    drop cap: how many letters of the paragraph it takes (1 to 3; missing = 1)
      span  'all': the paragraph runs across all the columns of the text (missing = it stays in its column)
-   (The layout uses these from the drop cap and columns steps on; this file is only where they live, are kept in step with
-   editing, and are saved and opened.)
+   (textLayout, in 04f-text-layout.js, uses dc and dn. span is for text columns, which come later. This file is where the settings
+   live, are kept in step with editing, and are saved and opened.)
    While a text is edited the paragraph controls change the paragraphs the selection touches (paraRange), and the paragraphs
-   are shown by a bar beside the box (paraBars). A text that is only selected, not being edited, is changed in its first paragraph.
+   are shown by a bar beside the box (paraBars). A text that is only selected, not being edited, is changed in its first paragraph
+   (teParaSet, in 09f-text-edit.js).
    ===================================================================== */
 const PARA_SPEC = {
   dc: { min: 2, max: 8 },
@@ -3830,6 +3934,9 @@ function breakApartText(o) {
     shapes.push(s);
   };
   lay.lines.forEach(L => {
+    (lay.caps || []).filter(c => c.line === L.i).forEach(c => {   // the letters of a drop cap come first, before the lines beside it
+      clusters.forEach(cl => { if (cl.i >= c.i0 && cl.i < c.i1) make(text.slice(cl.i, cl.i + cl.n), c.font, c.ox[cl.i - c.i0], c.base, c.size, c.ls, cl.i); });
+    });
     clusters.forEach(cl => {
       if (cl.i < L.start || cl.i >= L.end) return;
       const col = cl.i - L.start, seg = L.segs.find(g => col >= g.a && col < g.b);
@@ -5438,7 +5545,7 @@ $('#drop-cancel').addEventListener('click', () => edFinish(null));
 const TE_PAD = 8;                  // a press this close (screen pixels) outside the text's box still counts as on it
 let te = null;                     // the edit in progress: { id, isNew, before (the text as saved, to tell if anything changed), goalX, hold, keep, clicks, pending, pendAt, sig }
 // The controls that style the letters; a press on them leaves the text being edited
-const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette';
+const TE_KEEP = '#fontpick, #tx-style, #tx-bold, #tx-italic, #tx-size, #tx-lh, #tx-ls, #fill-color, #fill-hex, #fill-none, #palette, #tx-dc-on, #tx-dc, #tx-dn';
 const teKeeps = el => !!(el && el.closest && (el.closest(TE_KEEP) || (el.closest('label') && el.closest('label').control && el.closest('label').control.matches(TE_KEEP))));
 const teEl = $('#text-edit');
 const teObj = () => te && byId(te.id);
@@ -5479,7 +5586,7 @@ function teOverlay() {
   ov.appendChild(g);
   tePlace();
   if (te.pending && (s.a !== s.b || s.a !== te.pendAt)) te.pending = null;   // a style chosen at the caret is for typing right there
-  const sig = JSON.stringify(teStyleShown(o));
+  const sig = JSON.stringify([teStyleShown(o), teParasShown(o)]);   // (the controls show the letters at the caret, and the paragraphs the selection touches)
   if (sig !== te.sig) { te.sig = sig; updateInspector(); }   // the controls show the letters at the caret
   return true;   // no handles while typing
 }
@@ -5592,7 +5699,7 @@ teEl.addEventListener('keydown', e => {
     const lay = textLayout(o);
     if (lay.area) {
       e.preventDefault();
-      const ends = teEnds(), L = lineOfIndex(lay, ends.focus), at = e.key === 'Home' ? L.start : L.cend;
+      const ends = teEnds(), L = lineOfIndex(lay, ends.focus), at = e.key === 'Home' ? lineHome(lay, L) : L.cend;
       te.goalX = null;
       teSetSel(e.shiftKey ? ends.anchor : at, at);
       return;
@@ -5620,6 +5727,28 @@ document.addEventListener('pointerdown', e => {
 document.addEventListener('keydown', e => {
   if (te && e.key === 'Escape' && document.activeElement !== teEl && !e.defaultPrevented && !(typeof fpIsOpen === 'function' && fpIsOpen())) { finishTextEdit(); stage.focus({ preventScroll: true }); }
 });
+
+/* ---------- the paragraph settings: which paragraphs, and what they are ---------- */
+// The stretch of text whose paragraphs the paragraph controls work on: the selection while typing in place, else (a text that is just
+// selected) its first paragraph
+const teParaSpan = o => te && te.id === o.id ? teSel() : { a: 0, b: 0 };
+// What the paragraphs in it are set to, as the controls should show: { dc, dn } with a key whose paragraphs differ set to 'mixed' (a key
+// that none of them have is left out)
+function teParasShown(o) {
+  const s = teParaSpan(o), r = paraRange(o.text, s.a, s.b), out = {};
+  PARA_KEYS.forEach(k => {
+    const vals = [];
+    for (let p = r.first; p <= r.last; p++) vals.push(paraSettingsAt(o.paras, p)[k]);
+    const first = vals[0];
+    if (vals.some(v => v !== first)) out[k] = 'mixed'; else if (first !== undefined) out[k] = first;
+  });
+  return out;
+}
+// Set paragraph settings ({ dc, dn }, any of them; null clears) on those paragraphs. Gives true when something changed.
+function teParaSet(o, attrs) {
+  const s = teParaSpan(o);
+  return applyParaSettings(o, s.a, s.b, attrs);
+}
 
 /* ---------- color, size and font of the selected letters ---------- */
 // What the letters at the caret (or the start of the selection) look like, as the controls should show: { color, size, font, spacing, lineHeight }
@@ -6372,6 +6501,7 @@ function updateInspector() {
   const sel = selObjs(), o = one(), n = sel.length;
   show('#sec-geom', !!o);
   show('#sec-text', !!o && o.kind === 'text');
+  show('#sec-para', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
   const wrappable = sel.filter(canWrapAround);
   show('#sec-wrap', wrappable.length > 0);
@@ -6440,6 +6570,14 @@ function updateInspector() {
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
       $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);
       $('#tx-noind1').checked = !!o.noind1; $('#tx-noind1').disabled = !(o.bw > 0 && o.indent > 0);   // (a word is only broken to fit a width)
+      // The paragraph part: what the paragraphs the selection touches have (the first paragraph, when the text is only selected)
+      const ps = teParasShown(o), mixed = ps.dc === 'mixed', on = ps.dc !== undefined, box = o.bw > 0, editing = !!(te && te.id === o.id);
+      $('#tx-dc-on').checked = on && !mixed; $('#tx-dc-on').indeterminate = mixed; $('#tx-dc-on').disabled = !box || isLocked(o);
+      $('#tx-dc').disabled = !box || !on || mixed || isLocked(o); $('#tx-dn').disabled = $('#tx-dc').disabled;
+      setNum($('#tx-dc'), on && !mixed ? ps.dc : 3); setNum($('#tx-dn'), on && !mixed && ps.dn > 0 ? ps.dn : 1);
+      $('#para-help').textContent = !box ? 'A drop cap needs a fixed width: tick Fixed width in the Text part.'
+        : editing ? 'Changes the paragraph the caret is in, or all the paragraphs the selection reaches into. They are marked by the bars beside the text box.'
+        : 'Changes the first paragraph. To change another, click in the text and put the caret in it.';
     }
     if (o.kind === 'polygon') {
       setNum($('#pg-sides'), o.sides); $('#pg-star').checked = !!o.star;
@@ -6588,6 +6726,17 @@ $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kin
 onNum($('#tx-pspace'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.pspace = clamp(rnd(v, 2), 0, 10); else delete o.pspace; });
 onNum($('#tx-indent'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.indent = clamp(rnd(v, 2), 0, 20); else delete o.indent; });
 $('#tx-noind1').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.noind1 = true; else delete o.noind1; refresh(o); commit(); });
+// The Paragraph part (04k-text-paragraphs.js): while typing in place these change the paragraphs the selection touches, and the edit goes on;
+// a text that is only selected has its first paragraph changed (teParaSet, 09f-text-edit.js)
+function paraChange(attrs) {
+  const o = one();
+  if (!o || o.kind !== 'text' || isLocked(o) || !(o.bw > 0)) { updateInspector(); return; }
+  if (teParaSet(o, attrs)) { refresh(o); render(); renderLayers(); if (te) drawOverlay(); settle(); }
+  updateInspector();
+}
+$('#tx-dc-on').addEventListener('change', e => paraChange(e.target.checked ? { dc: clamp(parseInt($('#tx-dc').value, 10) || 3, 2, 8) } : { dc: null, dn: null }));
+$('#tx-dc').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (isFinite(v)) paraChange({ dc: clamp(v, 2, 8) }); else updateInspector(); });
+$('#tx-dn').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (isFinite(v)) paraChange({ dn: v <= 1 ? null : clamp(v, 1, 3) }); else updateInspector(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
 // Text with a box flows around the selected shapes (see 04i-text-wrap.js); a folder's letters and shapes are all switched together
@@ -8194,7 +8343,7 @@ document.addEventListener('gesturestart', e => e.preventDefault());
    Boot
    ===================================================================== */
 // What is new in this build, said once when a different version opens (and kept in About). Rewrite it for each release.
-const WHATS_NEW = 'A shape that text wraps around now only moves text that is behind it, so text placed in front of the shape sits on the white space it leaves. While you type, an orange bar beside the text box shows which paragraphs your selection touches.';
+const WHATS_NEW = 'Drop caps: in a text with a fixed width, the new Paragraph part of the Design tab turns the first letter of a paragraph into a big capital that sits in the lines beside it. While you type it changes the paragraph the caret is in, or every paragraph your selection reaches into.';
 const SEEN_KEY = 'friendshaped.seen';
 $('#font-credits-list').textContent = FONT_CATEGORIES.filter(c => c[0] !== 'user').map(([c, name]) => name + ': ' + Object.values(FAMILIES).filter(F => F.category === c).map(F => F.label).join(', ')).join('. ') + '.';
 setTool('select');
