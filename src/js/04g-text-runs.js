@@ -97,10 +97,12 @@ function runsForEdit(runs, oldText, newText, pending) {
   if (pending) RUN_KEYS.forEach(k => { if (k in pending) { if (pending[k] === null || pending[k] === undefined) delete base[k]; else base[k] = pending[k]; } });
   return runsSplice(runs, oldText.length, a, b, ins, base);
 }
-// Give a text object its new text, keeping the styles of the letters that stayed (use this, not o.text = ...)
-function setTextValue(o, value, pending) {
+// Give a text object its new text, keeping the styles of the letters that stayed, and the settings of the paragraphs that did
+// (use this, not o.text = ...). caret: where the caret is after the edit, when known (see parasForEdit in 04k-text-paragraphs.js)
+function setTextValue(o, value, pending, caret) {
   const runs = runsForEdit(o.runs, String(o.text), value, pending);
   if (runs) o.runs = runs; else delete o.runs;
+  if (o.paras) { const paras = parasForEdit(o.paras, String(o.text), value, caret); if (paras) o.paras = paras; else delete o.paras; }
   o.text = value;
 }
 

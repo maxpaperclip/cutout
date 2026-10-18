@@ -14,6 +14,7 @@
   "js/04h-hyphenation.js",
   "js/04i-text-wrap.js",
   "js/04j-grids.js",
+  "js/04k-text-paragraphs.js",
   "js/05-svg-export.js",
   "js/06-boolean-ops.js",
   "js/06b-break-apart.js",

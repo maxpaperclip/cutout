@@ -1,7 +1,9 @@
 /* =====================================================================
    Text wrapping around shapes (no DOM except paper.js; unit tested)
-   A shape with o.wrap on (any kind but text) is something that a text with a box (area text, o.bw) flows around, whatever is
-   stacked above or below what. Each row of the text asks "where in this row is the text box free?" and fills those
+   A shape with o.wrap on (any kind but text) is something that a text with a box (area text, o.bw) flows around, when the
+   text is BELOW the shape in the stacking order. A text above the shape ignores it, so the shape can make white space that
+   another text sits on top of. (Bring the shape in front of a text, or send the text behind the shape, to make it wrap.)
+   Each row of the text asks "where in this row is the text box free?" and fills those
    stretches one after the other (textLayout, 04f-text-layout.js).
    The shape's real outline is used, not its box: a circle leaves the corners free, a star flows into its notches' sides. For
    a row, the outline is cut to the row's band of height; whatever of it is inside the band blocks everything from its leftmost
@@ -45,11 +47,13 @@ function wrapLocalPolys(o) {
 }
 
 // The shapes a text (with a box) flows around: [{ polys (in the text's box coordinates), pad, b: { x0, y0, x1, y1 } }]
+// Only shapes above the text in the stacking order (later in doc.objects) count. A text not in the drawing yet (being made) is
+// on top of everything, as a new object is, so nothing is in its way.
 function wrapObstacles(t) {
   if (!(t.bw > 0) || typeof doc === 'undefined' || !doc || !doc.objects) return [];
-  const out = [];
-  doc.objects.forEach(o => {
-    if (!o.wrap || !canWrapAround(o) || o.id === t.id || isHidden(o)) return;
+  const out = [], at = doc.objects.indexOf(t), top = at < 0 ? Infinity : at;
+  doc.objects.forEach((o, i) => {
+    if (i < top || !o.wrap || !canWrapAround(o) || o.id === t.id || isHidden(o)) return;
     const pad = wrapGapOf(o) + (o.stroke && o.stroke !== 'none' && !hasPixels(o) ? (o.sw || 0) / 2 : 0);
     const cx = o.x + o.w / 2, cy = o.y + o.h / 2;
     let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
