@@ -33,7 +33,7 @@ test('one column is the same as no columns', () => {
 });
 
 test('the text is split between columns of the same height', () => {
-  const lay = setup({ cols: 2, gut: 1 }, WORDS).lay();
+  const lay = setup({ cols: 2, gut: 10 }, WORDS).lay();
   assert.equal(lay.ncols, 2);
   assert.equal(lay.cw, 45);   // (100 - 10) / 2
   const c0 = lay.lines.filter(L => L.col === 0), c1 = lay.lines.filter(L => L.col === 1);
@@ -47,7 +47,7 @@ test('the text is split between columns of the same height', () => {
 });
 
 test('the text keeps its order and every letter', () => {
-  const lay = setup({ cols: 3, gut: 0.5 }, WORDS).lay();
+  const lay = setup({ cols: 3, gut: 5 }, WORDS).lay();
   assert.equal(lay.ncols, 3);
   lay.lines.forEach((L, i) => { if (i) assert.equal(L.start, lay.lines[i - 1].end + (/\s/.test(WORDS[L.start - 1]) && L.start === lay.lines[i - 1].end ? 0 : 0)); });
   assert.equal(lay.lines.map(L => L.text).join(''), WORDS);
@@ -55,7 +55,7 @@ test('the text keeps its order and every letter', () => {
 });
 
 test('too many columns for the width make fewer', () => {
-  const lay = setup({ cols: 6, gut: 1, bw: 60 }, WORDS).lay();
+  const lay = setup({ cols: 6, gut: 10, bw: 60 }, WORDS).lay();
   assert.ok(lay.ncols < 6 && lay.ncols >= 1);
   assert.ok(lay.cw >= 20 - 1e-9);
 });
@@ -73,7 +73,7 @@ test('text that is not in a box has no columns', () => {
 });
 
 test('clicks find the line in the column they are in', () => {
-  const t = setup({ cols: 2, gut: 1 }, WORDS), lay = t.lay();
+  const t = setup({ cols: 2, gut: 10 }, WORDS), lay = t.lay();
   const first1 = lay.lines.find(L => L.col === 1);
   const i = t.m.indexAtPoint(lay, 55, 5);
   assert.equal(i, first1.start);
@@ -82,7 +82,7 @@ test('clicks find the line in the column they are in', () => {
 });
 
 test('Down from the bottom of a column goes to the top of the next, Up goes back', () => {
-  const t = setup({ cols: 2, gut: 1 }, WORDS), lay = t.lay();
+  const t = setup({ cols: 2, gut: 10 }, WORDS), lay = t.lay();
   const c0 = lay.lines.filter(L => L.col === 0), last = c0[c0.length - 1], first1 = lay.lines.find(L => L.col === 1);
   const d = t.m.verticalMove(lay, last.start + 2, 1, null);
   assert.equal(lay.lines[t.m.lineOfIndex(lay, d.index).i].col, 1);
@@ -92,17 +92,17 @@ test('Down from the bottom of a column goes to the top of the next, Up goes back
 });
 
 test('the bars for a paragraph are one for each column it is in', () => {
-  const t = setup({ cols: 2, gut: 1 }, WORDS), lay = t.lay();
+  const t = setup({ cols: 2, gut: 10 }, WORDS), lay = t.lay();
   const bars = t.m.paraBars(lay, WORDS, 0, 1);
   assert.equal(bars.length, 2);
   assert.deepEqual(Array.from(bars.map(b => b.col)).sort(), [0, 1]);
 });
 
 test('columns are kept when a drawing is saved and opened', () => {
-  const t = setup({ cols: 3, gut: 0.5 }, WORDS), j = t.m.sanitizeDoc(JSON.parse(t.m.docJSON(t.m.doc)));
+  const t = setup({ cols: 3, gut: 5 }, WORDS), j = t.m.sanitizeDoc(JSON.parse(t.m.docJSON(t.m.doc)));
   const r = j.objects.find(x => x.kind === 'text');
   assert.equal(r.cols, 3);
-  assert.equal(r.gut, 0.5);
+  assert.equal(r.gut, 5);
 });
 
 test('different columns are laid out afresh (the cache knows about them)', () => {
@@ -114,7 +114,7 @@ test('different columns are laid out afresh (the cache knows about them)', () =>
 });
 
 test('a drop cap is not split between columns', () => {
-  const t = setup({ cols: 2, gut: 1, paras: [null, { dc: 3 }] }, 'abcd\n' + WORDS), lay = t.lay();
+  const t = setup({ cols: 2, gut: 10, paras: [null, { dc: 3 }] }, 'abcd\n' + WORDS), lay = t.lay();
   const cap = lay.caps[0];
   assert.ok(cap);
   const beside = lay.lines.filter(L => L.col === lay.lines[cap.line].col);
@@ -126,4 +126,33 @@ test('a long text is laid out quickly', () => {
   const t = setup({ cols: 3 }, long), t0 = Date.now();
   t.lay();
   assert.ok(Date.now() - t0 < 3000, 'took ' + (Date.now() - t0) + ' ms');
+});
+
+test('with no gutter of its own, the space between columns is the size of the baseline grid', () => {
+  const t = setup({ cols: 2 }, WORDS), lay = t.lay();
+  assert.equal(lay.gut, t.m.GRID_DEFAULTS.baseline.size);
+});
+
+// A page 1000 wide with 4 columns, 5% margins and 2% gutters: each column is (1000 - 100 - 60) / 4 = 210 wide, 20 apart
+const PAGE = { count: 4, gutter: 2, left: 5, right: 5 };
+test('a text over page columns takes their box, their number and their gutter', () => {
+  const m = loadAppModules();
+  const r = m.textColumnsFromGrid({ x: 300, bw: 500 }, PAGE, 1000);   // the middles of columns 2 and 3 are under it (x 280-490 and 510-720: 385, 615)
+  assert.deepEqual(JSON.parse(JSON.stringify(r)), { x: 280, bw: 440, cols: 2, gut: 20 });
+});
+
+test('the box that results lays the text out in columns exactly as wide as the page columns', () => {
+  const t = setup({ cols: 2, x: 300, bw: 500, size: 10 }, WORDS), r = t.m.textColumnsFromGrid(t.o, PAGE, 1000);
+  Object.assign(t.o, { x: r.x, bw: r.bw, gut: r.gut, cols: r.cols }); t.m.refresh(t.o);
+  const lay = t.m.textLayout(t.o);
+  assert.equal(lay.cw, 210);
+  assert.equal(lay.gut, 20);
+});
+
+test('matching the page columns says why it cannot', () => {
+  const m = loadAppModules();
+  assert.ok(m.textColumnsFromGrid({ x: 0, bw: 0 }, PAGE, 1000).why);
+  assert.ok(m.textColumnsFromGrid({ x: 0, bw: 30 }, PAGE, 1000).why, 'no column middle under it');
+  assert.ok(m.textColumnsFromGrid({ x: 0, bw: 1000 }, { count: 8, gutter: 1, left: 0, right: 0 }, 1000).why, 'more than 6');
+  assert.equal(m.textColumnsFromGrid({ x: 0, bw: 1000 }, { count: 1, gutter: 0, left: 5, right: 5 }, 1000).cols, 1);
 });

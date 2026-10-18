@@ -59,7 +59,7 @@ function sanitizeDoc(d) {
       if (Number.isFinite(+r.bw) && +r.bw > 0) o.bw = num(r.bw, 100, 1, 1e5);   // the width of a text wrapped to a box
       if (Number.isFinite(+r.indent) && +r.indent > 0) o.indent = num(r.indent, 0, 0, 20);   // how far in each paragraph's first line starts, in ems
       if (Number.isFinite(+r.pspace) && +r.pspace > 0) o.pspace = num(r.pspace, 0, 0, 10);   // extra room between paragraphs, in ems
-      if (Number.isFinite(+r.cols) && +r.cols > 1) { o.cols = num(Math.floor(+r.cols), 2, 2, 6); if (Number.isFinite(+r.gut)) o.gut = num(r.gut, 1, 0, 5); }   // columns, and the space between them in ems
+      if (Number.isFinite(+r.cols) && +r.cols > 1) { o.cols = num(Math.floor(+r.cols), 2, 2, 6); if (Number.isFinite(+r.gut)) o.gut = num(r.gut, 16, 0, 400); }   // columns, and the space between them in px
       if (r.noind1 === true) o.noind1 = true;   // the first paragraph is not indented
       if (r.hang === true) o.hang = true;    // quotes and hyphens hang into the margin (all of their width)
       else if (typeof r.hang === 'number' && r.hang > 0) o.hang = num(r.hang, 1, 0.05, 1.5);   // (or just part of it)

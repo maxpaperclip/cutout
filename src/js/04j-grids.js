@@ -74,6 +74,17 @@ function columnEdges(c, w) {
 // One vertical line at each edge, the whole height of the page, as an SVG path
 function columnGridPath(c, w, h) { return columnEdges(c, w).map(x => 'M' + x + ' 0V' + gridRound(h, 3)).join(''); }
 
+// The columns, space between and box a text needs to sit exactly on the page's columns: the ones whose middle is under the text's box.
+// Gives { x, bw (the box from the left of the first to the right of the last), cols, gut (px) }, or { why } when it can't be done.
+function textColumnsFromGrid(o, c, w) {
+  if (!(o.bw > 0)) return { why: 'Give this text a fixed width first.' };
+  const hit = columnBoxes(c, w).filter(b => b.x + b.w / 2 >= o.x && b.x + b.w / 2 <= o.x + o.bw);
+  if (!hit.length) return { why: 'There is no page column under this text. Move it over the page columns (Page tab) first.' };
+  if (hit.length > 6) return { why: 'This text is over ' + hit.length + ' page columns, and a text can have up to 6. Make it narrower first.' };
+  const a = hit[0], z = hit[hit.length - 1];
+  return { x: gridRound(a.x, 2), bw: gridRound(z.x + z.w - a.x, 2), cols: hit.length, gut: gridRound(w * c.gutter / 100, 2) };
+}
+
 /* ---------- baseline ---------- */
 const baselineStep = b => b.size * b.lh;   // the distance between lines, in page units
 // Where the lines start (y0), where they stop (y1), and how far apart they are, for a page h tall
