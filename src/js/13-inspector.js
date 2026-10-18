@@ -14,6 +14,7 @@ function updateInspector() {
   const sel = selObjs(), o = one(), n = sel.length;
   show('#sec-geom', !!o);
   show('#sec-text', !!o && o.kind === 'text');
+  show('#sec-para', !!o && o.kind === 'text');
   show('#sec-poly', !!o && o.kind === 'polygon');
   const wrappable = sel.filter(canWrapAround);
   show('#sec-wrap', wrappable.length > 0);
@@ -82,6 +83,14 @@ function updateInspector() {
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
       $('#tx-hyph').disabled = !(o.bw > 0); $('#tx-indent').disabled = !(o.bw > 0); setNum($('#tx-indent'), o.indent > 0 ? o.indent : 0);
       $('#tx-noind1').checked = !!o.noind1; $('#tx-noind1').disabled = !(o.bw > 0 && o.indent > 0);   // (a word is only broken to fit a width)
+      // The paragraph part: what the paragraphs the selection touches have (the first paragraph, when the text is only selected)
+      const ps = teParasShown(o), mixed = ps.dc === 'mixed', on = ps.dc !== undefined, box = o.bw > 0, editing = !!(te && te.id === o.id);
+      $('#tx-dc-on').checked = on && !mixed; $('#tx-dc-on').indeterminate = mixed; $('#tx-dc-on').disabled = !box || isLocked(o);
+      $('#tx-dc').disabled = !box || !on || mixed || isLocked(o); $('#tx-dn').disabled = $('#tx-dc').disabled;
+      setNum($('#tx-dc'), on && !mixed ? ps.dc : 3); setNum($('#tx-dn'), on && !mixed && ps.dn > 0 ? ps.dn : 1);
+      $('#para-help').textContent = !box ? 'A drop cap needs a fixed width: tick Fixed width in the Text part.'
+        : editing ? 'Changes the paragraph the caret is in, or all the paragraphs the selection reaches into. They are marked by the bars beside the text box.'
+        : 'Changes the first paragraph. To change another, click in the text and put the caret in it.';
     }
     if (o.kind === 'polygon') {
       setNum($('#pg-sides'), o.sides); $('#pg-star').checked = !!o.star;
@@ -230,6 +239,17 @@ $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kin
 onNum($('#tx-pspace'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.pspace = clamp(rnd(v, 2), 0, 10); else delete o.pspace; });
 onNum($('#tx-indent'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.indent = clamp(rnd(v, 2), 0, 20); else delete o.indent; });
 $('#tx-noind1').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.noind1 = true; else delete o.noind1; refresh(o); commit(); });
+// The Paragraph part (04k-text-paragraphs.js): while typing in place these change the paragraphs the selection touches, and the edit goes on;
+// a text that is only selected has its first paragraph changed (teParaSet, 09f-text-edit.js)
+function paraChange(attrs) {
+  const o = one();
+  if (!o || o.kind !== 'text' || isLocked(o) || !(o.bw > 0)) { updateInspector(); return; }
+  if (teParaSet(o, attrs)) { refresh(o); render(); renderLayers(); if (te) drawOverlay(); settle(); }
+  updateInspector();
+}
+$('#tx-dc-on').addEventListener('change', e => paraChange(e.target.checked ? { dc: clamp(parseInt($('#tx-dc').value, 10) || 3, 2, 8) } : { dc: null, dn: null }));
+$('#tx-dc').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (isFinite(v)) paraChange({ dc: clamp(v, 2, 8) }); else updateInspector(); });
+$('#tx-dn').addEventListener('change', e => { const v = parseInt(e.target.value, 10); if (isFinite(v)) paraChange({ dn: v <= 1 ? null : clamp(v, 1, 3) }); else updateInspector(); });
 onNum($('#tx-hangamt'), (o, v) => { if (o.kind === 'text' && o.hang) o.hang = clamp(rnd(v / 100, 3), 0.05, HANG_MAX); });
 $('#tx-hyph').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hyph = true; else delete o.hyph; refresh(o); commit(); });
 // Text with a box flows around the selected shapes (see 04i-text-wrap.js); a folder's letters and shapes are all switched together

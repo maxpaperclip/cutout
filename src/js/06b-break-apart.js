@@ -77,6 +77,9 @@ function breakApartText(o) {
     shapes.push(s);
   };
   lay.lines.forEach(L => {
+    (lay.caps || []).filter(c => c.line === L.i).forEach(c => {   // the letters of a drop cap come first, before the lines beside it
+      clusters.forEach(cl => { if (cl.i >= c.i0 && cl.i < c.i1) make(text.slice(cl.i, cl.i + cl.n), c.font, c.ox[cl.i - c.i0], c.base, c.size, c.ls, cl.i); });
+    });
     clusters.forEach(cl => {
       if (cl.i < L.start || cl.i >= L.end) return;
       const col = cl.i - L.start, seg = L.segs.find(g => col >= g.a && col < g.b);

@@ -306,6 +306,7 @@ function buildText(o, obs) {
       add(c, L.hy.font.getPath('-', L.x + L.hy.x, L.base, L.hy.size, { kerning: true, letterSpacing: L.hy.ls }).toPathData(2));
     }
   });
+  (lay.caps || []).forEach(c => add(c.c, c.font.getPath(c.text, c.x, c.base, c.size, { kerning: true, letterSpacing: c.ls }).toPathData(2)));   // drop caps
   const out = { d, w: lay.w, h: lay.h };
   if (colored) out.parts = Array.from(by, ([c, pd]) => c === undefined ? { d: pd } : { d: pd, c });
   return out;
@@ -344,7 +345,7 @@ function scaledPathD(nat, w, h) {
 const textLayouts = new Map();
 function layoutText(o) {
   const obs = wrapObstacles(o), sig = wrapSig(obs);   // (the shapes the text flows around, if any)
-  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '');
+  const key = o.font + '|' + o.size + '|' + o.align + '|' + o.lh + '|' + (o.ls || 0) + '|' + (o.bw || 0) + '|' + (o.hang ? 'h' + o.hang : '') + (o.hyph ? 'y' : '') + (o.pspace > 0 ? 's' + o.pspace : '') + (o.indent > 0 ? 'i' + o.indent + (o.noind1 ? 'n' : '') : '') + '|' + sig + '|' + o.text + (o.runs ? '\u0000' + JSON.stringify(o.runs) : '') + (o.paras ? '\u0001' + JSON.stringify(o.paras) : '');
   let g = textLayouts.get(key);
   if (g) { textLayouts.delete(key); textLayouts.set(key, g); return g; }   // keep recently used ones
   g = buildText(o, obs);

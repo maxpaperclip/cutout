@@ -22,6 +22,8 @@
      o.noind1 the very first paragraph of the text is left out (as under a heading, in a book).
    - o.hyph: a word may be broken inside, after the letters hyphenPoints (04h-hyphenation.js) allows. The hyphen that ends such a line
      is not in o.text; it belongs to the layout (L.hy), is drawn by buildText and takes no part in editing.
+   - a drop cap (area text; o.paras, 04k-text-paragraphs.js): the first letters of a paragraph are one big capital N lines tall, drawn on its own
+     (lay.caps); the first N rows of the paragraph start after it. Its letters are in o.text like any other, but are in no line.
    - o.hang (optical margin alignment): an opening quote at the start of a line, and a closing quote or a hyphen at the end of one, hang
      out into the margin so the letters line up (L.hl, L.hr = how far). true hangs them the whole of their width; a number is how much of
      it (0.5 = half; see hangFactor). Text with no box hangs too, but nothing wraps differently.
@@ -57,6 +59,51 @@ function lineMetrics(font, fontKey, size, ls, line) {
 // A face that was used before it arrived was measured in the default font (see fontArrived)
 function purgeLineMetrics(fontKey) {
   Array.from(lineMetricCache.keys()).forEach(k => { if (k.startsWith(fontKey + '|')) lineMetricCache.delete(k); });
+}
+
+/* ---------- drop caps ---------- */
+// How tall the capital letters of a face are, as a fraction of its size: from the face's own figure, or else measured on an H
+const capRatioCache = new WeakMap();
+function capRatioOf(font) {
+  let r = capRatioCache.get(font);
+  if (r) return r;
+  const os2 = font.tables && font.tables.os2;
+  if (os2 && os2.sCapHeight > 0) r = os2.sCapHeight / (font.unitsPerEm || 1000);
+  else {
+    try { const bb = font.charToGlyph('H').getBoundingBox(); if (bb && bb.y2 > 0) r = bb.y2 / (font.unitsPerEm || 1000); } catch (e) { /* no glyph to measure */ }
+  }
+  if (!(r > 0.2 && r < 1.2)) r = 0.7;
+  capRatioCache.set(font, r);
+  return r;
+}
+// How far a letter's ink starts from where it is drawn (its left side bearing), at a size: lined up with the margin, a big letter
+// would otherwise start a little in, and by a different amount for each letter
+function glyphLsb(font, ch, size) {
+  try { const bb = font.charToGlyph(ch).getBoundingBox(); if (bb && Number.isFinite(bb.x1) && bb.x2 > bb.x1) return bb.x1 * size / (font.unitsPerEm || 1000); } catch (e) { /* none */ }
+  return 0;
+}
+// How much of the start of a paragraph a drop cap of dn letters takes (a letter keeps its accents, and a pair of units stays whole)
+function capLength(para, dn) {
+  let i = 0;
+  for (let k = 0; k < dn && i < para.length; k++) {
+    i += para.codePointAt(i) > 0xFFFF ? 2 : 1;
+    while (i < para.length && /^\p{M}$/u.test(para[i])) i++;
+  }
+  return i;
+}
+// The drop cap of the paragraph that starts at index ps, N lines tall, made of dn letters: its letters, face and size, how far the
+// lines beside it are held in (inset), and how far apart the lines of the paragraph are (pitch). The size is worked out, not chosen:
+// the top of the capital is level with the tops of the capitals on the first line, and its baseline is the baseline of line N.
+function dropCapSpec(o, runs, text, para, ps, N, dn, bw, minSlot) {
+  const n = capLength(para, dn), ctext = para.slice(0, n), last = Math.max(text.length - 1, 0);
+  const cst = runs ? runStyleAt(runs, ps) : {}, bst = runs ? runStyleAt(runs, Math.min(ps + n, last)) : {};
+  const f = cst.f !== undefined ? cst.f : o.font, cfont = fontOf(f), bfont = fontOf(bst.f !== undefined ? bst.f : o.font);
+  const bsize = rnd(o.size * (bst.s !== undefined ? bst.s : 1), 3), pitch = bsize * (bst.h !== undefined ? bst.h : o.lh);
+  const ls = cst.l !== undefined ? cst.l : (o.ls || 0);
+  const size = rnd(((N - 1) * pitch + capRatioOf(bfont) * bsize) / capRatioOf(cfont), 3);
+  const m = lineMetrics(cfont, f, size, ls, ctext), lsb = glyphLsb(cfont, String.fromCodePoint(ctext.codePointAt(0)), size);
+  const inset = Math.min(Math.max(m.width - lsb, 0) + size * 0.08, Math.max(0, bw - minSlot));
+  return { n, text: ctext, f, font: cfont, size, ls, lsb, m, inset, pitch, c: cst.c, N };
 }
 
 /* ---------- the whole text ---------- */
@@ -196,6 +243,10 @@ const wrapCuts = (o, runs, text, para, ps, bw) => wrapPlan(o, runs, text, para, 
 //             segs: [{ a, b (characters of the line), f (face), font, size, ls (letter spacing), x (from the line's left edge) }] }
 // lay.flat: no runs, and one line to a row, so every line is the same height and sits at i * lineH
 // lay.area: wrapped to a box (o.bw); lay.w is then that width
+// lay.caps: the drop caps ([{ p (its paragraph), i0, i1 (the letters it is made of: not in any line), text, font, size, ls, c (its color, if
+//           it has one of its own), x (where it is drawn from), ox (that, and where each letter starts), xs (where the caret goes: the
+//           first is the start of the ink), x0 (the start of the ink), w, base, top, bottom, line (the first line beside it) }]
+//           Its paragraph's lines start at i1. See dropCapSpec.
 // obs: the shapes the text wraps around (wrapObstacles, in 04i-text-wrap.js); left out, they are looked up
 function textLayout(o, obs) {
   const text = String(o.text), runs = Array.isArray(o.runs) && o.runs.length ? o.runs : null, bw = o.bw > 0 ? o.bw : 0;
@@ -255,27 +306,46 @@ function textLayout(o, obs) {
     rowIdx++;
   };
   const nextEmptyRow = () => { if (runs) rowTop += hEst; rowIdx++; if (++blank > 4000) wraps = []; };   // (a row with no room in it: leave it empty; the cap only guards against shapes that never end)
+  const caps = [];
   text.split('\n').forEach((para, pi) => {
     if (pi) yOff += pgap;   // (every line break starts a paragraph, an empty one too)
-    const su = bw ? wrapSetup(o, runs, text, para, ps) : null;
-    let a = 0;
+    // A drop cap (o.paras, see 04k-text-paragraphs.js; area text only): its letters leave the paragraph and are drawn on their own, and the
+    // first N rows of the paragraph start after its width. The paragraph then is laid out from where its letters end: body, starting at bs.
+    const dcs = bw && para.length ? paraSettingsAt(o.paras, pi) : null, dcN = dcs && dcs.dc >= 2 ? dcs.dc : 0;
+    const cap = dcN ? dropCapSpec(o, runs, text, para, ps, dcN, dcs.dn || 1, bw, minSlot) : null;
+    const body = cap ? para.slice(cap.n) : para, bs = cap ? ps + cap.n : ps;
+    const su = bw ? wrapSetup(o, runs, text, body, bs) : null;
+    let a = 0, capRow = -1, capX = 0, capLine = -1;
     for (;;) {   // one row at a time until the paragraph is used up (an empty paragraph is one empty line)
       const top = (runs ? rowTop : rowIdx * lineH) + yOff;
-      const free = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+      const free0 = !wraps.length ? [[0, bw]] : wrapFree(wraps, bw, top, top + hEst, minSlot);
+      const inDrop = !!cap && (capRow < 0 || rowIdx < capRow + dcN);   // (the first row that has a line, and the rows below it as far as the cap goes)
+      if (inDrop && capRow < 0 && free0.length) capX = free0[0][0];   // (the cap is at the left of the first stretch the text has)
+      const free = inDrop ? free0.map((sl, k) => k ? sl : [sl[0] + cap.inset, sl[1]]).filter(sl => sl[1] - sl[0] >= minSlot) : free0;
       const row = [];
       if (!bw) row.push(makeLine(para, ps, true, null, 0, 0));
-      else if (!para.length) { if (free.length) row.push(makeLine('', ps, true, null, free[0][0], free[0][1] - free[0][0])); }
+      else if (!body.length) { if (free.length) row.push(makeLine('', bs, true, null, free[0][0], free[0][1] - free[0][0])); }
       else free.forEach(sl => {
-        if (a >= para.length) return;
-        const ind = a === 0 && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so)
-        const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind);
+        if (a >= body.length) return;
+        const ind = a === 0 && !cap && !(o.noind1 && ps === 0) ? indent : 0;   // (only the first line of the paragraph is indented, and not the very first one when o.noind1 says so; a drop cap is the indent)
+        const c = takeLine(su, a, sl[1] - sl[0] - ind, bw - ind - (inDrop ? cap.inset : 0));
         if (!c) return;
-        row.push(makeLine(para.slice(a, c.end), ps + a, c.end >= para.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
+        row.push(makeLine(body.slice(a, c.end), bs + a, c.end >= body.length, c.hy, sl[0] + ind, sl[1] - sl[0] - ind));
         a = c.end;
       });
       if (!row.length) { nextEmptyRow(); continue; }
+      if (cap && capRow < 0) { capRow = rowIdx; capLine = lines.length; }
       placeRow(row);
-      if (!bw || a >= para.length) break;
+      if (!bw || a >= body.length) break;
+    }
+    if (cap) {
+      while (rowIdx < capRow + dcN) { if (runs) rowTop += hEst; rowIdx++; }   // (a paragraph shorter than its cap still leaves room for all of it)
+      const base = lines[capLine].base + (dcN - 1) * cap.pitch, dx = capX - cap.lsb;
+      caps.push({
+        p: pi, i0: ps, i1: ps + cap.n, text: cap.text, f: cap.f, font: cap.font, size: cap.size, ls: cap.ls, c: cap.c,
+        x: dx, base, w: cap.m.width, x0: capX, ox: cap.m.xs.map(v => dx + v), xs: cap.m.xs.map((v, k) => k ? dx + v : capX),   // (drawn from x; the caret sits at xs, which starts at the ink)
+        top: base - capRatioOf(cap.font) * cap.size, bottom: base, line: capLine
+      });
     }
     ps += para.length + 1;   // (the line break counts as a character)
   });
@@ -285,7 +355,7 @@ function textLayout(o, obs) {
     L.x = L.sx + (o.align === 'center' ? (sw - L.tw) / 2 : o.align === 'right' ? sw - L.tw : 0) - L.hl;
     if (!L.sw) L.sw = W;
   });
-  return { font, size, asc, desc, lineH, ls, lines, w: W, h: acc, flat: !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw };
+  return { font, size, asc, desc, lineH, ls, lines, caps, w: W, h: acc, flat: !runs && !pgap && lines.every((L, i) => L.row === i), area: !!bw };
 }
 
 /* ---------- caret, selection, and clicks ---------- */
@@ -308,14 +378,18 @@ function lineAtY(lay, y, x) {
 }
 // The line an index is on (an index at the very end of a line is on that line, not the next; but where a line is wrapped, that index is
 // also the start of the next line, and is on the next one)
+const capAt = (lay, index) => lay.caps && lay.caps.find(c => index >= c.i0 && index < c.i1);   // the drop cap an index is one of the letters of, if any
 function lineOfIndex(lay, index) {
-  const ls = lay.lines;
+  const ls = lay.lines, cap = capAt(lay, index);
+  if (cap) return ls[cap.line];   // (a letter of a drop cap belongs to no line: the first one beside it stands in)
   let lo = 0, hi = ls.length - 1;
   while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (ls[mid].start <= index) lo = mid; else hi = mid - 1; }
   return ls[lo];
 }
 // Where the caret is drawn for an index: a vertical segment from the font's top to its bottom
 function caretAt(lay, index) {
+  const cap = capAt(lay, index);
+  if (cap) return { x: cap.xs[index - cap.i0], y0: cap.top, y1: cap.bottom, line: cap.line };   // (as tall as the letter)
   const L = lineOfIndex(lay, index), col = clamp(index - L.start, 0, L.text.length);
   return { x: L.x + L.m.xs[col], y0: L.base - L.asc, y1: L.base + L.desc, line: L.i };
 }
@@ -323,6 +397,10 @@ function caretAt(lay, index) {
 function selectionRects(lay, a, b) {
   if (a > b) { const t = a; a = b; b = t; }
   const out = [], brk = Math.max(lay.size * 0.25, 2);
+  (lay.caps || []).forEach(c => {   // (the letters of a drop cap)
+    const s = Math.max(a, c.i0), e = Math.min(b, c.i1);
+    if (s < e) out.push({ x: c.xs[s - c.i0], y: c.top, w: c.xs[e - c.i0] - c.xs[s - c.i0], h: c.bottom - c.top });
+  });
   lay.lines.forEach(L => {
     const s = Math.max(a, L.start), e = Math.min(b, L.end);
     if (s > e) return;
@@ -332,7 +410,14 @@ function selectionRects(lay, a, b) {
   return out;
 }
 // The index nearest a point (box coordinates): the line by height, then the closest gap between letters
-function indexAtPoint(lay, x, y) {
+function indexAtPoint(lay, x, y, skipCaps) {
+  for (const c of skipCaps ? [] : lay.caps || []) {   // a press on a drop cap, or beside it: the gap between its letters nearest, or before it
+    if (y < c.top || y > c.bottom || x > c.x + c.w) continue;
+    if (x <= c.x0) return c.i0;
+    let k = 0;
+    for (let j = 1; j < c.xs.length; j++) if (Math.abs(x - c.xs[j]) < Math.abs(x - c.xs[k])) k = j;
+    return c.i0 + k;
+  }
   const L = lineAtY(lay, y, x), xs = L.m.xs, n = L.text.length, lx = x - L.x;
   if (lx <= xs[0]) return L.start;
   if (lx >= xs[n]) return L.cend;
@@ -346,6 +431,11 @@ function indexAtPoint(lay, x, y) {
   }
   return L.start + col;
 }
+// Where Home goes on a line: its start; on the first line beside a drop cap, in front of the cap
+function lineHome(lay, L) {
+  const c = lay.caps && lay.caps.find(k => k.line === L.i);
+  return c ? c.i0 : L.start;
+}
 // Up (dir -1) or Down (+1) from an index, keeping to goalX (the column the caret started from; null = where it is now).
 // Up from the first line goes to the start, Down from the last to the end.
 function verticalMove(lay, index, dir, goalX) {
@@ -354,7 +444,7 @@ function verticalMove(lay, index, dir, goalX) {
   while (j >= 0 && j < lay.lines.length && lay.lines[j].top === L.top) j += dir;   // (the lines beside this one, on the same row, are not above or below it)
   if (j < 0) return { index: 0, goalX: gx };
   if (j >= lay.lines.length) return { index: lay.lines[lay.lines.length - 1].end, goalX: gx };
-  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2), goalX: gx };
+  return { index: indexAtPoint(lay, gx, lay.lines[j].top + lay.lines[j].h / 2, true), goalX: gx };   // (the lines, not the drop cap that is beside them, or Down would never leave it)
 }
 // The word at an index, for double-click: a run of letters and digits, of spaces, or of other marks, within one line
 function wordRange(text, index) {
