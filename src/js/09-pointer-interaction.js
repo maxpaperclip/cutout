@@ -317,7 +317,8 @@ function constrainAngle(a, b) {
 }
 function createText(p, bw) {
   const sp = snapPt(p);
-  const o = newShape('text', bw > 0 ? { x: sp.x, y: sp.y, bw: Math.max(rnd(bw, 2), 1) } : { x: sp.x, y: sp.y });   // (with a width, the text wraps in a box that wide)
+  const g = gridsOf(doc).baseline, base = { x: sp.x, y: sp.y, size: g.size, lh: g.lh };   // (a new text starts as the baseline grid's size and line height)
+  const o = newShape('text', bw > 0 ? Object.assign(base, { bw: Math.max(rnd(bw, 2), 1) }) : base);   // (with a width, the text wraps in a box that wide)
   doc.objects.push(o); S.sel = new Set([o.id]);
   setTool('select'); startTextEdit(o, true);   // joins the history when the typing ends
 }

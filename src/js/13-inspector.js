@@ -79,7 +79,8 @@ function updateInspector() {
       setNum($('#tx-size'), ts ? ts.size : o.size); setNum($('#tx-lh'), ts ? ts.lineHeight : o.lh); setNum($('#tx-ls'), (ts ? ts.spacing : o.ls || 0) * 100);
       $$('[data-align]').forEach(b => b.setAttribute('aria-pressed', b.dataset.align === o.align ? 'true' : 'false'));
       setNum($('#tx-pspace'), o.pspace > 0 ? o.pspace : 0);
-      $('#wrap-cols').hidden = !(o.bw > 0); setNum($('#tx-cols'), o.cols > 1 ? o.cols : 1); setNum($('#tx-gut'), o.gut !== undefined ? o.gut : 1);
+      $('#wrap-cols').hidden = !(o.bw > 0); setNum($('#tx-cols'), o.cols > 1 ? o.cols : 1); setNum($('#tx-gut'), o.gut !== undefined ? o.gut : bgr.size);
+      $('#tx-matchgrid').hidden = !(o.bw > 0); $('#tx-matchgrid').disabled = isLocked(o);
       $('#tx-gut').disabled = !(o.cols > 1);
       $('#tx-fixed').checked = o.bw > 0; $('#tx-hang').checked = !!o.hang; $('#tx-hyph').checked = !!o.hyph;
       $('#wrap-hangamt').hidden = !o.hang; setNum($('#tx-hangamt'), Math.round(hangFactor(o) * 100));
@@ -239,8 +240,19 @@ $('#tx-fixed').addEventListener('change', e => {
 });
 $('#tx-hang').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.hang = true; else delete o.hang; refresh(o); commit(); updateInspector(); });
 onNum($('#tx-pspace'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.pspace = clamp(rnd(v, 2), 0, 10); else delete o.pspace; });
-onNum($('#tx-cols'), (o, v) => { if (o.kind !== 'text') return; const n = clamp(Math.round(v), 1, 6); if (n > 1) o.cols = n; else delete o.cols; });
-onNum($('#tx-gut'), (o, v) => { if (o.kind !== 'text') return; o.gut = clamp(rnd(v, 2), 0, 5); });
+onNum($('#tx-cols'), (o, v) => { if (o.kind !== 'text') return; const n = clamp(Math.round(v), 1, 6); if (n > 1) { o.cols = n; if (o.gut === undefined) o.gut = gridsOf(doc).baseline.size; } else delete o.cols; });
+onNum($('#tx-gut'), (o, v) => { if (o.kind !== 'text') return; o.gut = clamp(rnd(v, 2), 0, 400); });
+// Put the text on the page's columns: its box from the first to the last of the page columns it is over, with as many columns, and their gutter
+$('#tx-matchgrid').title = 'Fit this text to the page columns (Page tab) it is over: its box takes their width, and it gets as many columns, with the same gutter';
+$('#tx-matchgrid').addEventListener('click', () => {
+  const o = one(); if (!o || o.kind !== 'text' || isLocked(o)) return;
+  if (o.rot) { toast('Turn this text back to 0\u00b0 first: the page columns are straight.'); return; }
+  const r = textColumnsFromGrid(o, gridsOf(doc).columns, doc.w);
+  if (r.why) { toast(r.why); return; }
+  o.x = r.x; o.bw = r.bw; o.gut = r.gut;
+  if (r.cols > 1) o.cols = r.cols; else delete o.cols;
+  refresh(o); render(); renderLayers(); if (te) drawOverlay(); settle(); updateInspector();
+});
 onNum($('#tx-indent'), (o, v) => { if (o.kind !== 'text') return; if (v > 0) o.indent = clamp(rnd(v, 2), 0, 20); else delete o.indent; });
 $('#tx-noind1').addEventListener('change', e => { const o = one(); if (!o || o.kind !== 'text') return; if (e.target.checked) o.noind1 = true; else delete o.noind1; refresh(o); commit(); });
 // The Paragraph part (04k-text-paragraphs.js): while typing in place these change the paragraphs the selection touches, and the edit goes on;
